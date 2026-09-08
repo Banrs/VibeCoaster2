@@ -1,6 +1,6 @@
-# Windows recovery delivery: 0.7.3-review.4
+# Windows recovery delivery: 0.7.3-review.5
 
-[Download the Windows ZIP](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.4).
+[Download the Windows ZIP](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.5).
 Extract it completely, then open **Play VibeCoaster.cmd** or **VibeCoaster.exe**.
 The launcher uses a 1600×900 window with a 60fps cap. The EXE keeps normal saved
 settings; fresh profiles now also default to 60fps. Unreal Editor and Blender are
@@ -20,10 +20,12 @@ acceptance. It is not an intensity-record claim.
 
 The pre-crash review.2 package survived intact: all 50 packaged files and all
 211 files in its active source snapshot matched their saved SHA256 hashes.
-The review.3 change adds a 60fps default, removes unused Android file-server
-settings, supplies a verified player ZIP/launcher corrects source tracking
-for historical test fixtures and fixes concurrent-save temporary-file ownership. Geometry, simulation, force limits and COASTER5
-save identity remain **0.7.2-pacing.2**.
+The recovery adds a 60fps default, removes unused Android file-server settings,
+supplies a verified player ZIP/launcher, restores historical test fixtures and
+fixes concurrent-save temporary-file ownership. Review.5 also corrects track-brace
+distance evaluation in optimized Windows builds. Canonical geometry, simulation,
+force limits and COASTER5 save identity remain **0.7.2-pacing.2**; loaded saves
+undergo full validation with the corrected clearance check.
 
 The previous simulation optimization, batched train rendering, cached HUD geometry
 and save-cancellation fix remain intact. The wider review reproduced and fixed a two-writer save race: each save now
@@ -35,7 +37,9 @@ verified recovery archive captured all uncommitted browser work.
 Build and startup results for this delivery are recorded in the GitHub release
 notes. No performance benchmarks were run during recovery because Cities:
 Skylines 2 was open. Previous review.2 timing results are historical, not new
-measurements of review.3. Large local raw evidence and engine/build caches are
+measurements of this recovery. The review.4 draft was withheld after Windows CI
+exposed the clearance failure; its package and failed evidence remain preserved.
+Large local raw evidence and engine/build caches are
 excluded from source control.
 
 ## Verified checks
@@ -45,6 +49,8 @@ excluded from source control.
   brief startup check. A fresh profile reported `t.MaxFPS = 60`.
 - The concurrent-save regression failed the old implementation and passed all 28
   checks after the fix. Eight additional targeted native suites passed.
+- The corrected track-brace distance suite passes 140 checks in optimized Windows
+  Precise and Strict modes, including an independent analytic regression.
 - All 161 pre-existing/distribution Python tests passed; six additional real-CLI
   argument tests passed after rejecting malformed numeric input. CLI save roundtrip
   and independent convergence evidence are recorded in the local recovery report.

@@ -1,6 +1,6 @@
 # Build the native game and numerical tools
 
-Application: 0.7.3-review.4. Geometry/save identity: 0.7.2-pacing.2 / COASTER5.
+Application: 0.7.3-review.5. Geometry/save identity: 0.7.2-pacing.2 / COASTER5.
 Windows UE5.8.2 builds and packages successfully. Mac/Metal still needs a Mac.
 
 ## Current source build
@@ -19,11 +19,12 @@ The separate convergence CLI is built but does not run a matrix automatically.
 
 For UE build/cook/package, follow [Unreal setup](../unreal/README.md). Imported
 runtime art is committed; Blender is not required. The editor bootstrap creates
-the map and seven base materials. Build into a fresh timestamped package:
+the map and seven base materials. Compilation is limited to two parallel actions
+to bound memory use. Build into a fresh timestamped package:
 
 ```powershell
 & .\native\unreal\scripts\package.ps1 -UnrealRoot 'D:\Games\Epic Games\UE_5.8'
-python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.7.3-review.4
+python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.7.3-review.5
 ```
 
 The distribution helper requires Python 3.11+, verifies copied runtime files and

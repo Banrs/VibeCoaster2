@@ -58,7 +58,8 @@ function Invoke-HiddenEditor([string[]]$Arguments, [string]$LogName) {
 }
 
 Write-Host 'Building the actual Unreal editor target...'
-& $Build 'VibeCoasterEditor' 'Win64' 'Development' $Project '-WaitMutex' '-NoHotReloadFromIDE' "-Log=$RunLogs/UnrealBuildTool.log" 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'EditorBuild.log')
+# Bound compiler memory while other applications are open.
+& $Build 'VibeCoasterEditor' 'Win64' 'Development' $Project '-WaitMutex' '-NoHotReloadFromIDE' '-MaxParallelActions=2' "-Log=$RunLogs/UnrealBuildTool.log" 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'EditorBuild.log')
 if ($LASTEXITCODE -ne 0) { throw "Unreal editor build failed ($LASTEXITCODE)." }
 
 Write-Host 'Creating the minimal cooked map and materials through Unreal editor APIs...'
@@ -82,11 +83,10 @@ if ($PrepareOnly) { Write-Host "Prepared Unreal project: $Project"; return }
 $RunArchive = Join-Path $OutputDirectory ('run-' + $RunId)
 if (Test-Path -LiteralPath $RunArchive) { throw 'Packaging archive must be fresh.' }
 Write-Host 'Building, cooking, staging, and packaging the native Win64 game...'
-& $UAT 'BuildCookRun' "-project=$Project" '-noP4' '-platform=Win64' "-clientconfig=$Configuration" '-build' '-cook' '-map=/Game/Maps/Ride' '-stage' '-pak' '-iostore' '-archive' "-archivedirectory=$RunArchive" '-prereqs' '-utf8output' 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'Package.log')
+& $UAT 'BuildCookRun' "-project=$Project" '-noP4' '-platform=Win64' "-clientconfig=$Configuration" '-build' '-ubtargs=-MaxParallelActions=2' '-cook' '-map=/Game/Maps/Ride' '-stage' '-pak' '-iostore' '-archive' "-archivedirectory=$RunArchive" '-prereqs' '-utf8output' 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'Package.log')
 if ($LASTEXITCODE -ne 0) { throw "Unreal packaging failed ($LASTEXITCODE)." }
 $Executables = Get-ChildItem -LiteralPath $RunArchive -Filter 'VibeCoaster.exe' -File -Recurse
 if (-not $Executables) { throw 'BuildCookRun returned success but no packaged VibeCoaster.exe was found.' }
 $Executables | ForEach-Object { Write-Host "Packaged executable: $($_.FullName)" }
 Write-Host 'Packaging does not verify rendering. Complete README manual acceptance checks on the target GPU.'
-
 

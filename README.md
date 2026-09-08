@@ -4,7 +4,7 @@ One active game: a single-player Unreal Engine 5 coaster game with an independen
 C++ numerical core, under [`native/`](native/). The earlier TypeScript/browser
 implementation has been retired; it is not a dependency of this game.
 
-[Download the Windows preview](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.4) · [Controls and delivery status](native/DELIVERY.md) · [Build from source](native/tools/BUILDING.md)
+[Download the Windows preview](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.5) · [Controls and delivery status](native/DELIVERY.md) · [Build from source](native/tools/BUILDING.md)
 
 Extract the complete Windows ZIP and open **Play VibeCoaster.cmd** or
 **VibeCoaster.exe**. No Unreal Editor or Blender installation is needed to play.

@@ -41,7 +41,13 @@ inline double segmentWebDistanceSquared(Vec3 a,Vec3 b,const StationBox& box) {
     double best=std::min(distance(0),distance(1));
     for(size_t i=1;i<count;++i){const double lo=breaks[i-1],hi=breaks[i],mid=(lo+hi)*.5;double A=0,B=0;
         best=std::min({best,distance(lo),distance(hi)});
-        for(int k=0;k<3;++k){const double p=aa[k]+mid*dd[k];if(std::abs(p)>hh[k]){const double offset=aa[k]-(p>0?hh[k]:-hh[k]);A+=dd[k]*dd[k];B+=dd[k]*offset;}}
+        for(int k=0;k<3;++k){
+            const double p=aa[k]+mid*dd[k];
+            // Keep each face's offset explicit. MSVC /O2 /fp:precise can
+            // miscompile aa-(p>0?h:-h), reversing a zero-origin face offset.
+            if(p>hh[k]){A+=dd[k]*dd[k];B+=dd[k]*(aa[k]-hh[k]);}
+            else if(p< -hh[k]){A+=dd[k]*dd[k];B+=dd[k]*(aa[k]+hh[k]);}
+        }
         if(A>0)best=std::min(best,distance(std::clamp(-B/A,lo,hi)));
     }
     return best;

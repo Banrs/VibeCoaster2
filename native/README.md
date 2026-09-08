@@ -1,6 +1,6 @@
 # VibeCoaster native game
 
-**Windows preview: 0.7.3-review.4.** [Download and play](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.4) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
+**Windows preview: 0.7.3-review.5.** [Download and play](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.5) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
 
 Extract the entire Windows ZIP, then open **Play VibeCoaster.cmd** or
 **VibeCoaster.exe**. Unreal Editor, Blender and a compiler are not required to

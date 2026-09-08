@@ -1,6 +1,6 @@
 # Native numerical model - 0.7.2-pacing.2 / COASTER5
 
-Application 0.7.3-review.4 additionally fixes concurrent save writers by exclusively creating a unique same-directory temporary file for each operation. Atomic replacement, exact payload bytes and numerical/save identity are unchanged. Each writer commits its own payload; cancellation removes only its own temporary. [Current delivery](../DELIVERY.md).
+Application 0.7.3-review.5 fixes concurrent save writers with exclusively owned temporary files and corrects track-brace distance evaluation in optimized Windows builds. Canonical geometry, force limits, payload bytes and numerical/save identity are unchanged. Existing saves undergo full geometry and physics revalidation, including the corrected clearance check. Each writer commits its own payload; cancellation removes only its own temporary. [Current delivery](../DELIVERY.md).
 
 Application 0.7.3-review.2 passed focused Windows build, packaged ride/save and performance verification; see [review evidence](../artifacts/review-v073-20260908/REPORT.md). Geometry and persistence remain exactly 0.7.2-pacing.2 / COASTER5, retaining p2 save compatibility. This numerical revision uses SI metres/seconds/newtons/watts and right-handed XY ground, Z up. The previous geometry.2 validation is frozen separately. Windows UE compilation and packaging now work; each organic revision still needs its own numerical, packaged ride and performance evidence.
 
