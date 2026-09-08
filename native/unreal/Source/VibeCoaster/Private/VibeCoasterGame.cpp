@@ -10,7 +10,16 @@
 #include "InputCoreTypes.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
+#include <charconv>
 #include <limits>
+
+static bool ReadSeed(const FString& Text, uint64& Value)
+{
+    FTCHARToUTF8 Utf8(*Text, Text.Len());
+    const char* End = Utf8.Get() + Utf8.Length();
+    const auto Parsed = std::from_chars(Utf8.Get(), End, Value);
+    return Parsed.ec == std::errc{} && Parsed.ptr == End;
+}
 
 #if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
 void FCoasterRuntimeVerificationDeleter::operator()(FCoasterRuntimeVerification* Pointer) const { delete Pointer; }
@@ -52,15 +61,7 @@ void AVibeCoasterController::ChangeRow(int32 Direction)
     case 0:
     {
         uint64 Value = 0;
-        bool Valid = !SeedText.IsEmpty();
-        for (TCHAR C : SeedText)
-        {
-            const uint64 Digit = static_cast<uint64>(C - TCHAR('0'));
-            if (C < TCHAR('0') || C > TCHAR('9') || Value > (std::numeric_limits<uint64>::max() - Digit) / 10)
-            { Valid = false; break; }
-            Value = Value * 10 + Digit;
-        }
-        if (!Valid) Value = Settings.seed;
+        if (!ReadSeed(SeedText, Value)) Value = Settings.seed;
         if (Direction > 0 && Value < std::numeric_limits<uint64>::max()) ++Value;
         if (Direction < 0 && Value > 0) --Value;
         SeedText = FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(Value));
@@ -80,13 +81,8 @@ void AVibeCoasterController::RequestGeneration()
     InputError.Empty();
     if (SeedText.IsEmpty()) { InputError = TEXT("Enter a seed (0 to 18446744073709551615)."); return; }
     uint64 Value = 0;
-    for (TCHAR C : SeedText)
-    {
-        const uint64 Digit = static_cast<uint64>(C - TCHAR('0'));
-        if (C < TCHAR('0') || C > TCHAR('9') || Value > (std::numeric_limits<uint64>::max() - Digit) / 10)
-        { InputError = TEXT("Seed is outside unsigned 64-bit range."); return; }
-        Value = Value * 10 + Digit;
-    }
+    if (!ReadSeed(SeedText, Value))
+    { InputError = TEXT("Seed is outside unsigned 64-bit range."); return; }
     Settings.seed = Value;
     if (Settings.targets.requireIntensity && (!std::isfinite(Settings.targets.referenceExposure) || Settings.targets.referenceId.empty()))
     {

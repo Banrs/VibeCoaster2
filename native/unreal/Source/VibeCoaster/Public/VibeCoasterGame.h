@@ -31,6 +31,7 @@ public:
     FString RowText(int32 Row) const;
 private:
     friend class FCoasterRuntimeVerification;
+    friend class FCoasterSeedInputContract;
 #if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
     TUniquePtr<FCoasterRuntimeVerification, FCoasterRuntimeVerificationDeleter> Verification;
 #endif
