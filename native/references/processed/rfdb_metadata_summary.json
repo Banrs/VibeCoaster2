@@ -1,0 +1,385 @@
+{
+  "raw_trace_probes": [
+    {
+      "bytes": 5,
+      "fetch_error": "",
+      "http_status": 200,
+      "note": "Single probe only; no retry, no bypass. Provide your own calibrated CSV via reference_forces importer; never treat peaks as traces.",
+      "probe_outcome": "observed-false",
+      "provenance_file": "raw/getRec-6839.provenance.json",
+      "raw_accessible_without_login": false,
+      "raw_file": "raw/getRec-6839.response.json",
+      "raw_preserved": false,
+      "raw_status": "observed-false (unauthenticated probe returned literal 'false'; login requirement reported by site docs but NOT verified by this tool from this response alone)",
+      "recording_id": 6839,
+      "retrieved_utc": "2026-09-06T13:15:04Z",
+      "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+      "source_url": "https://rideforcesdb.com/getRec?id=6839"
+    },
+    {
+      "bytes": 5,
+      "fetch_error": "",
+      "http_status": 200,
+      "note": "Single probe only; no retry, no bypass. Provide your own calibrated CSV via reference_forces importer; never treat peaks as traces.",
+      "probe_outcome": "observed-false",
+      "provenance_file": "raw/getRec-2096.provenance.json",
+      "raw_accessible_without_login": false,
+      "raw_file": "raw/getRec-2096.response.json",
+      "raw_preserved": false,
+      "raw_status": "observed-false (unauthenticated probe returned literal 'false'; login requirement reported by site docs but NOT verified by this tool from this response alone)",
+      "recording_id": 2096,
+      "retrieved_utc": "2026-09-06T13:15:04Z",
+      "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+      "source_url": "https://rideforcesdb.com/getRec?id=2096"
+    }
+  ],
+  "raw_trace_status": "observed-false on unauthenticated probes (literal 'false'); site docs report login-gated traces but this tool does NOT verify that requirement from 'false' alone.",
+  "retrieved_utc": "2026-09-06T13:15:04Z",
+  "rides": [
+    {
+      "fetch_error": "",
+      "http_status": 200,
+      "label": "Pantherian (ex-Intimidator 305)",
+      "location": "Kings Dominion",
+      "num_recordings": 19,
+      "peaks_disclaimer": "maxy/miny/maxc are INSTANTANEOUS peaks from RFDB metadata. They do NOT yield a ten-second exposure integral S. S requires a calibrated time trace.",
+      "probe_outcome": "verified-metadata",
+      "raw_file": "raw/rideInfo-6839.json",
+      "recording_peaks": [
+        {
+          "advanced": 0,
+          "author": "Nuthead77",
+          "maxc": 4.8259,
+          "maxy": 4.8233,
+          "miny": -1.028,
+          "quality": 10,
+          "recording_id": 2096,
+          "seat": null
+        },
+        {
+          "advanced": 0,
+          "author": "Nuthead77",
+          "maxc": 4.7198,
+          "maxy": 4.6793,
+          "miny": -1.0214,
+          "quality": 10,
+          "recording_id": 792,
+          "seat": "Row 16"
+        },
+        {
+          "advanced": 0,
+          "author": "e",
+          "maxc": 4.5819,
+          "maxy": 4.5768,
+          "miny": -0.8784,
+          "quality": 10,
+          "recording_id": 1622,
+          "seat": "Row 1"
+        },
+        {
+          "advanced": 0,
+          "author": "e",
+          "maxc": 4.8411,
+          "maxy": 4.836,
+          "miny": -1.059,
+          "quality": 10,
+          "recording_id": 1623,
+          "seat": "Row 16"
+        },
+        {
+          "advanced": 0,
+          "author": "e",
+          "maxc": 4.7924,
+          "maxy": 4.7366,
+          "miny": -0.8926,
+          "quality": 10,
+          "recording_id": 1624,
+          "seat": "Row 2"
+        },
+        {
+          "advanced": 0,
+          "author": "Nuthead77",
+          "maxc": 4.5416,
+          "maxy": 4.5352,
+          "miny": -1.0433,
+          "quality": 10,
+          "recording_id": 2369,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": "Nuthead77",
+          "maxc": 4.4986,
+          "maxy": 4.4896,
+          "miny": -0.9835,
+          "quality": 10,
+          "recording_id": 2095,
+          "seat": null
+        },
+        {
+          "advanced": 0,
+          "author": "Nuthead77",
+          "maxc": 4.5517,
+          "maxy": 4.5488,
+          "miny": -0.982,
+          "quality": 10,
+          "recording_id": 2368,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": "Nuthead77",
+          "maxc": 4.4411,
+          "maxy": 4.4375,
+          "miny": -1.0111,
+          "quality": 10,
+          "recording_id": 2094,
+          "seat": null
+        },
+        {
+          "advanced": 0,
+          "author": "KaiToz",
+          "maxc": 4.5226,
+          "maxy": 4.5157,
+          "miny": -0.8781,
+          "quality": 10,
+          "recording_id": 4478,
+          "seat": "Row 12, Left seat, Blue train"
+        },
+        {
+          "advanced": 1,
+          "author": "notdoctorq",
+          "maxc": 4.5537,
+          "maxy": 4.5346,
+          "miny": -0.9543,
+          "quality": 10,
+          "recording_id": 4188,
+          "seat": "Row 1, Seat 2, Blue train"
+        },
+        {
+          "advanced": 1,
+          "author": "notdoctorq",
+          "maxc": 4.4146,
+          "maxy": 4.3952,
+          "miny": -0.9895,
+          "quality": 10,
+          "recording_id": 4177,
+          "seat": "Row 16, Seat 2, Orange train"
+        },
+        {
+          "advanced": 1,
+          "author": "MrEWhite",
+          "maxc": 4.7818,
+          "maxy": 4.7714,
+          "miny": -1.2321,
+          "quality": 10,
+          "recording_id": 5409,
+          "seat": "Row 2"
+        },
+        {
+          "advanced": 1,
+          "author": "MrEWhite",
+          "maxc": 4.5896,
+          "maxy": 4.5221,
+          "miny": -1.1829,
+          "quality": 10,
+          "recording_id": 5408,
+          "seat": "Row 16"
+        },
+        {
+          "advanced": 1,
+          "author": "MrEWhite",
+          "maxc": 4.4897,
+          "maxy": 4.4883,
+          "miny": -0.8699,
+          "quality": 10,
+          "recording_id": 5406,
+          "seat": "Row 1"
+        },
+        {
+          "advanced": 0,
+          "author": "chasingairtime",
+          "maxc": 5.8905,
+          "maxy": 5.8385,
+          "miny": -1.6125,
+          "quality": 10,
+          "recording_id": 5982,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": "chasingairtime",
+          "maxc": 5.159,
+          "maxy": 5.1506,
+          "miny": -1.3904,
+          "quality": 10,
+          "recording_id": 5981,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": "PacificCoasters",
+          "maxc": 4.6689,
+          "maxy": 4.3976,
+          "miny": -1.1797,
+          "quality": 0,
+          "recording_id": 6638,
+          "seat": "Row 16, Seat 1, Train 1"
+        },
+        {
+          "advanced": 0,
+          "author": "Pantherian",
+          "maxc": 4.4043,
+          "maxy": 4.4032,
+          "miny": -0.8648,
+          "quality": 10,
+          "recording_id": 6839,
+          "seat": ""
+        }
+      ],
+      "retrieved_utc": "2026-09-06T13:15:04Z",
+      "rideInfo_id": 6839,
+      "ride_name": "Pantherian",
+      "ride_slug": "pantherian",
+      "sha256": "1ae7b042bcc725d842a1563fb8875c0e2f5e932d57823644477496548c34fd6a",
+      "source_url": "https://rideforcesdb.com/rideInfo?id=6839"
+    },
+    {
+      "fetch_error": "",
+      "http_status": 200,
+      "label": "Do-Dodonpa",
+      "location": "Fuji-Q Highland",
+      "num_recordings": 5,
+      "peaks_disclaimer": "maxy/miny/maxc are INSTANTANEOUS peaks from RFDB metadata. They do NOT yield a ten-second exposure integral S. S requires a calibrated time trace.",
+      "probe_outcome": "verified-metadata",
+      "raw_file": "raw/rideInfo-4718.json",
+      "recording_peaks": [
+        {
+          "advanced": 0,
+          "author": null,
+          "maxc": 3.4993,
+          "maxy": 3.4941,
+          "miny": 0.0738,
+          "quality": 10,
+          "recording_id": 4720,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": null,
+          "maxc": 3.8379,
+          "maxy": 3.8355,
+          "miny": -0.0556,
+          "quality": 10,
+          "recording_id": 4719,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": null,
+          "maxc": 3.4788,
+          "maxy": 3.4493,
+          "miny": -0.0344,
+          "quality": 10,
+          "recording_id": 4722,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": null,
+          "maxc": 3.5349,
+          "maxy": 3.5225,
+          "miny": -0.0875,
+          "quality": 10,
+          "recording_id": 4721,
+          "seat": ""
+        },
+        {
+          "advanced": 0,
+          "author": null,
+          "maxc": 3.8663,
+          "maxy": 3.8361,
+          "miny": -0.1845,
+          "quality": 10,
+          "recording_id": 4718,
+          "seat": ""
+        }
+      ],
+      "retrieved_utc": "2026-09-06T13:15:04Z",
+      "rideInfo_id": 4718,
+      "ride_name": "Do-Dodonpa",
+      "ride_slug": "do-dodonpa",
+      "sha256": "4fbfd122ab52884a720e6c5161736878a644aab05494fd4808a3102460d7dc0d",
+      "source_url": "https://rideforcesdb.com/rideInfo?id=4718"
+    },
+    {
+      "fetch_error": "",
+      "http_status": 200,
+      "label": "Tormenta Rampaging Run",
+      "location": "Six Flags Over Texas",
+      "num_recordings": 2,
+      "peaks_disclaimer": "maxy/miny/maxc are INSTANTANEOUS peaks from RFDB metadata. They do NOT yield a ten-second exposure integral S. S requires a calibrated time trace.",
+      "probe_outcome": "verified-metadata",
+      "raw_file": "raw/rideInfo-6383.json",
+      "recording_peaks": [
+        {
+          "advanced": 0,
+          "author": "Zonies",
+          "maxc": 5.0898,
+          "maxy": 5.0218,
+          "miny": -0.6593,
+          "quality": 10,
+          "recording_id": 6369,
+          "seat": "Back right seat"
+        },
+        {
+          "advanced": 0,
+          "author": "tboltforlife",
+          "maxc": 4.3576,
+          "maxy": 4.3439,
+          "miny": -0.5176,
+          "quality": 10,
+          "recording_id": 6383,
+          "seat": "Row 2, Seat 8, Train 1"
+        }
+      ],
+      "retrieved_utc": "2026-09-06T13:15:04Z",
+      "rideInfo_id": 6383,
+      "ride_name": "Tormenta Rampaging Run",
+      "ride_slug": "tormenta",
+      "sha256": "af5e70671c7be7bcba3dd6deefc6c4c105b48465ea2652042a8614fc113cc7c5",
+      "source_url": "https://rideforcesdb.com/rideInfo?id=6383"
+    },
+    {
+      "fetch_error": "",
+      "http_status": 200,
+      "label": "Falcon's Flight",
+      "location": "Six Flags Qiddiya City",
+      "num_recordings": 1,
+      "peaks_disclaimer": "maxy/miny/maxc are INSTANTANEOUS peaks from RFDB metadata. They do NOT yield a ten-second exposure integral S. S requires a calibrated time trace.",
+      "probe_outcome": "verified-metadata",
+      "raw_file": "raw/rideInfo-4804.json",
+      "recording_peaks": [
+        {
+          "advanced": 1,
+          "author": "ZakCoaster",
+          "maxc": 4.0977,
+          "maxy": 3.8939,
+          "miny": -0.9862,
+          "quality": 10,
+          "recording_id": 4804,
+          "seat": "Row 7, L seat, ? train"
+        }
+      ],
+      "retrieved_utc": "2026-09-06T13:15:04Z",
+      "rideInfo_id": 4804,
+      "ride_name": "Falcon's Flight",
+      "ride_slug": "falcons-flight",
+      "sha256": "afaf54831275af5cb75a59cd61c0b30b3dd09d06f87c3dc81815c02c068a17dc",
+      "source_url": "https://rideforcesdb.com/rideInfo?id=4804"
+    }
+  ],
+  "ten_second_exposure": "unavailable-from-metadata-alone",
+  "tool": "reference_fetch",
+  "tool_version": "1.1.0"
+}

@@ -1,0 +1,15 @@
+{
+  "meta": null,
+  "content": [
+    {
+      "type": "text",
+      "text": "Code executed successfully: VC_TRAIN_STAGE_02_ACTIVE={\"scene\": \"VCTrain4_AssetReview\", \"window_scene\": \"VCTrain4_AssetReview\", \"layer\": \"ViewLayer\"}\n",
+      "annotations": null,
+      "meta": null
+    }
+  ],
+  "structuredContent": {
+    "result": "Code executed successfully: VC_TRAIN_STAGE_02_ACTIVE={\"scene\": \"VCTrain4_AssetReview\", \"window_scene\": \"VCTrain4_AssetReview\", \"layer\": \"ViewLayer\"}\n"
+  },
+  "isError": false
+}

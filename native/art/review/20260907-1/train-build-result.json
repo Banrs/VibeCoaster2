@@ -1,0 +1,15 @@
+{
+  "meta": null,
+  "content": [
+    {
+      "type": "text",
+      "text": "Error executing code: Connection to Blender lost: [WinError 10054] An existing connection was forcibly closed by the remote host",
+      "annotations": null,
+      "meta": null
+    }
+  ],
+  "structuredContent": {
+    "result": "Error executing code: Connection to Blender lost: [WinError 10054] An existing connection was forcibly closed by the remote host"
+  },
+  "isError": false
+}

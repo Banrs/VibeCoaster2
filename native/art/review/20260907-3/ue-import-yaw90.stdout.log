@@ -1,0 +1,328 @@
+LogInit: Display: Running engine for game: VibeCoaster
+LogCore: Display: Requested channels: 'cpu,gpu,frame,log,bookmark,screenshot,region'
+LogTrace: Display: Control listening on port 1985
+LogCsvProfiler: Display: Metadata set : platform="Windows"
+LogCsvProfiler: Display: Metadata set : config="Development"
+LogCsvProfiler: Display: Metadata set : buildversion="++UE5+Release-5.8-CL-56702186"
+LogCsvProfiler: Display: Metadata set : engineversion="5.8.2-56702186+++UE5+Release-5.8"
+LogCsvProfiler: Display: Metadata set : enginereleaseversion="5.8.2"
+LogCsvProfiler: Display: Metadata set : os="Windows 11 (26H2) [10.0.26340.9233] "
+LogCsvProfiler: Display: Metadata set : cpu="AuthenticAMD|AMD Ryzen 9 5900X 12-Core Processor"
+LogCsvProfiler: Display: Metadata set : pgoenabled="0"
+LogCsvProfiler: Display: Metadata set : pgoprofilingenabled="0"
+LogCsvProfiler: Display: Metadata set : ltoenabled="0"
+LogCsvProfiler: Display: Metadata set : asan="0"
+LogCsvProfiler: Display: Metadata set : mergedmodules="0"
+LogCsvProfiler: Display: Metadata set : compacttset="0"
+LogCsvProfiler: Display: Metadata set : commandline="" D:\Coding\Codex\Vibecoasterjs\native\unreal\VibeCoaster.uproject /Engine/Maps/Entry -ExecutePythonScript=D:\Coding\Codex\Vibecoasterjs\native\unreal\scripts\import_art_v071.py -unattended -nop4 -NullRHI -nosplash -stdout -abslog=D:\Coding\Codex\Vibecoasterjs\native\art\review\20260907-3\ue-import-yaw90.engine.log""
+LogCsvProfiler: Display: Metadata set : loginid="6fece52b458adb39dad6f49d4d28fed7"
+LogCsvProfiler: Display: Metadata set : llm="0"
+LogCsvProfiler: Display: Metadata set : zenstreaming="0"
+LogCsvProfiler: Display: Metadata set : systemresolution.resx="1280"
+LogCsvProfiler: Display: Metadata set : systemresolution.resy="720"
+LogAudio: Display: Pre-Initializing Audio Device Manager...
+LogAudio: Display: AudioInfo: 'OPUS' Registered
+LogAudioDebug: Display: Lib vorbis DLL was dynamically loaded.
+LogAudio: Display: AudioInfo: 'OGG' Registered
+LogAudio: Display: AudioInfo: 'ADPCM' Registered
+LogAudio: Display: AudioInfo: 'PCM' Registered
+LogAudio: Display: AudioInfo: 'BINKA' Registered
+LogAudio: Display: AudioInfo: 'RADA' Registered
+LogAudio: Display: Audio Device Manager Pre-Initialized
+LogAssetRegistry: Display: FindShardedCacheFiles: 1 via .ref, 0 via migration fallback, 1 total
+LogAssetRegistry: Display: CleanupOrphanedCacheFiles (PreLoad): 1 .ref files found, 1 referenced binaries
+LogAssetRegistry: Display: CleanupOrphanedCacheFiles: 1 total binaries, 1 referenced (kept), 0 old-style pre-migration (kept), 0 orphans deleted, 0 orphans locked (kept)
+LogAssetRegistry: Display: LoadCacheFiles: loading 1 cache files, memory-mapping=enabled
+Using bundled DotNet SDK version: 10.0 win-x64
+Running UnrealBuildTool: dotnet "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Mode=ValidatePlatforms -OutputSDKs  -AllPlatforms  -project="D:/Coding/Codex/Vibecoasterjs/native/unreal/VibeCoaster.uproject" -log="D:/Coding/Codex/Vibecoasterjs/native/unreal/Saved/Logs/AutoSDKInfo.txt" -verbose -timestamps
+LogConfig: Display: Loading VulkanPC ini files took 0.09 seconds
+LogConfig: Display: Loading Mac ini files took 0.09 seconds
+LogConfig: Display: Loading Android ini files took 0.09 seconds
+LogConfig: Display: Loading IOS ini files took 0.10 seconds
+LogConfig: Display: Loading Windows ini files took 0.11 seconds
+LogConfig: Display: Loading TVOS ini files took 0.11 seconds
+LogConfig: Display: Loading VisionOS ini files took 0.11 seconds
+LogConfig: Display: Loading Unix ini files took 0.11 seconds
+LogConfig: Display: Loading Linux ini files took 0.12 seconds
+LogAssetRegistry: Display: Asset registry cache read as 118.5 MiB from ../../../../../../Coding/Codex/Vibecoasterjs/native/unreal/Intermediate/CachedAssetRegistry/CachedAssetRegistry_0_29B8680F4BD1EB36E239D1AB2034386D.bin (memory-mapped=yes)
+RenderDocPlugin: Display: RenderDoc plugin will not be loaded. Use '-AttachRenderDoc' on the cmd line or enable 'renderdoc.AutoAttach' in the plugin settings.
+LogAnalytics: Display: Provider StudioTelemetry.Provider.Log is disabled for this application
+LogAnalytics: Display: Provider StudioTelemetry.Provider.CSV is disabled for this application
+LogAnalytics: Display: Provider StudioTelemetry.Provider.Horde is disabled for this application
+LogAnalytics: Display: Provider StudioTelemetry.Provider.Log is disabled for this application
+LogAnalytics: Display: Provider StudioTelemetry.Provider.CSV is disabled for this application
+LogAnalytics: Display: Provider StudioTelemetry.Provider.Horde is disabled for this application
+LogAsyncCompilation: Display: MemorySharingInfo: UsedMemory=364MiB, MaxMemoryAvailable=47526MiB
+LogStreaming: Display: AsyncLoading2 - Created: Async Loading Thread: false, Async Post Load: false, Multithreaded: false
+Log file: D:\Coding\Codex\Vibecoasterjs\native\unreal\Saved\Logs\AutoSDKInfo.txt
+[2026.09.07-14.18.15:609][  0]LogCsvProfiler: Display: Metadata set : systemresolution.resx="1920"
+[2026.09.07-14.18.15:609][  0]LogCsvProfiler: Display: Metadata set : systemresolution.resy="1080"
+[2026.09.07-14.18.15:611][  0]LogHAL: Display: Platform has ~ 32 GB [34266046464 / 34359738368 / 32], which maps to Largest [LargestMinGB=32, LargerMinGB=12, DefaultMinGB=8, SmallerMinGB=6, SmallestMinGB=0)
+[2026.09.07-14.18.15:633][  0]LogCsvProfiler: Display: Metadata set : extradevelopmentmemorymb="0"
+[2026.09.07-14.18.15:635][  0]LogObj: Display: Attempting to load config data for Default__DownlinkBandwidthManagerConfig before the Class has been constructed/registered/linked (likely during module loading or early startup). This will result in the load silently failing and should be fixed.
+##PlatformValidate: Win64 VALID 10.0.22621.0
+##PlatformValidate: Mac INVALID 26.1.1
+##PlatformValidate: IOS INVALID 26.1.1
+##PlatformValidate: Android INVALID r27c
+##PlatformValidate: Linux INVALID v26_clang-20.1.8-rockylinux8
+##PlatformValidate: LinuxArm64 INVALID <UNKNOWN>
+##PlatformValidate: TVOS INVALID 26.1.1
+##PlatformValidate: VisionOS INVALID <UNKNOWN>
+Unable to find required SDK version 'MainVersion' for platform LinuxArm64. Check your SDK.json files
+Unable to find required SDK version 'MainVersion' for platform VisionOS. Check your SDK.json files
+Trace written to file C:\Users\danie\AppData\Local\UnrealBuildTool\Trace.uba with size 319b
+[2026.09.07-14.18.16:280][  0]LogWindowsTouchpad: Display: CacheForceMaxTouchpadSensitivityMode SetMaxTouchpadSensitivity
+[2026.09.07-14.18.16:283][  0]LogObj: Display: Attempting to load config data for Default__SlateThemeManager before the Class has been constructed/registered/linked (likely during module loading or early startup). This will result in the load silently failing and should be fixed.
+[2026.09.07-14.18.16:454][  0]LogCsvProfiler: Display: Metadata set : verbatimrhiname="Null"
+[2026.09.07-14.18.16:454][  0]LogCsvProfiler: Display: Metadata set : rhiname="Null"
+[2026.09.07-14.18.16:454][  0]LogCsvProfiler: Display: Metadata set : rhifeaturelevel="SM6"
+[2026.09.07-14.18.16:454][  0]LogCsvProfiler: Display: Metadata set : shaderplatform="PCD3D_SM6"
+[2026.09.07-14.18.16:454][  0]LogCsvProfiler: Display: Metadata set : gpu=""
+[2026.09.07-14.18.16:454][  0]LogCsvProfiler: Display: Metadata set : gpudriver=""
+[2026.09.07-14.18.16:466][  0]LogTextureFormatASTC: Display: ASTCEnc version 5.0.1 library loaded
+[2026.09.07-14.18.16:467][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatASTC
+[2026.09.07-14.18.16:467][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatDXT
+[2026.09.07-14.18.16:467][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatETC2
+[2026.09.07-14.18.16:467][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatIntelISPCTexComp
+[2026.09.07-14.18.16:467][  0]LogTextureFormatOodle: Display: Oodle Texture TFO init; latest sdk version = 2.9.16
+[2026.09.07-14.18.16:469][  0]LogTextureFormatOodle: Display: Oodle Texture loading DLL: oo2tex_win64_2.9.16.dll
+[2026.09.07-14.18.16:469][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatOodle
+[2026.09.07-14.18.16:470][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatUncompressed
+[2026.09.07-14.18.16:503][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'Android'
+[2026.09.07-14.18.16:522][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'IOS'
+[2026.09.07-14.18.16:541][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'Linux'
+[2026.09.07-14.18.16:563][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'Mac'
+[2026.09.07-14.18.16:566][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'TVOS'
+[2026.09.07-14.18.16:586][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'Windows'
+[2026.09.07-14.18.16:586][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsEditor'
+[2026.09.07-14.18.16:586][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsServer'
+[2026.09.07-14.18.16:586][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsClient'
+[2026.09.07-14.18.16:586][  0]LogTargetPlatformManager: Display: Building Assets For WindowsEditor
+[2026.09.07-14.18.16:972][  0]LogDerivedDataCache: Display: ../../../Engine/DerivedDataCache/Compressed.ddp: Opened pak cache for reading. (1679 MiB)
+[2026.09.07-14.18.16:974][  0]LogZenServiceInstance: Display: Launching zen utility 'D:/Games/Epic Games/UE_5.8/Engine/Binaries/Win64/zen.exe service status'.
+[2026.09.07-14.18.17:387][  0]LogZenServiceInstance: Display: Writing plugin version info to 'C:/Users/danie/AppData/Local/UnrealEngine/Common/Zen/Install/zen_plugin_versions.json'
+[2026.09.07-14.18.17:387][  0]LogZenServiceInstance: Display: Read zen version cache file from 'C:/Users/danie/AppData/Local/UnrealEngine/5.8/Saved/Zen/zen.version', version: '5.8.13-202605190912-windows-x64-release-094f62c2'
+[2026.09.07-14.18.17:388][  0]LogZenServiceInstance: Display: Read zen version cache file from 'C:/Users/danie/AppData/Local/UnrealEngine/Common/Zen/Install/zen.version', version: '5.8.13-202605190912-windows-x64-release-094f62c2'
+[2026.09.07-14.18.17:388][  0]LogZenServiceInstance: Display: Installed service at 'C:/Users/danie/AppData/Local/UnrealEngine/Common/Zen/Install/zenserver.exe' is up to date
+[2026.09.07-14.18.17:388][  0]LogZenServiceInstance: Display: Launching executable 'C:/Users/danie/AppData/Local/UnrealEngine/Common/Zen/Install/zenserver.exe', working dir 'C:/Users/danie/AppData/Local/UnrealEngine/Common/Zen/Install', data dir 'D:/Coding/Codex/Vibecoasterjs/native/unreal/Saved/DerivedDataCache/Zen', args '--port 8558 --data-dir D:\Coding\Codex\Vibecoasterjs\native\unreal\Saved\DerivedDataCache\Zen --http asio --gc-cache-duration-seconds 1209600 --gc-interval-seconds 21600 --gc-low-diskspace-threshold 2147483648 --cache-bucket-limit-overwrites --quiet --restrict-content-types --allow-external-oidctoken-exe=false --plugins-config "C:/Users/danie/AppData/Local/UnrealEngine/Common/Zen/Install/zen_plugins_v1.json" --security-config-path "C:/Users/danie/AppData/Local/UnrealEngine/Common/Zen/Install/security-config.json" --owner-pid 33876  --child-id Zen_33876_Startup'
+[2026.09.07-14.18.19:611][  0]LogZenServiceInstance: Display: Unreal Zen Storage Server HTTP service at http://[::1]:8558 status: OK!.
+[2026.09.07-14.18.19:615][  0]LogDerivedDataCache: Display: ZenLocal: Using ZenServer HTTP service at [::1] with namespace ue.ddc. Status: OK!.
+[2026.09.07-14.18.19:619][  0]LogDerivedDataCache: Display: D:/Coding/Codex/Vibecoasterjs/native/unreal/Saved/DerivedDataCache: Performance: Latency=0.01ms. RandomReadSpeed=1234.48MBs, RandomWriteSpeed=191.32MBs. Assigned SpeedClass 'Local'
+[2026.09.07-14.18.19:622][  0]LogUbaHorde: Display: UBA/Horde Configuration [Uba.Provider.Horde]: Not Enabled
+[2026.09.07-14.18.19:623][  0]LogShaderCompilers: Display: No distributed shader compiler controller found
+[2026.09.07-14.18.19:623][  0]LogShaderCompilers: Display: Using 12 local workers for shader compilation
+[2026.09.07-14.18.19:636][  0]LogShaderCompilers: Display: Compiling shader autogen file: ../../../../../../Coding/Codex/Vibecoasterjs/native/unreal/Intermediate/ShaderAutogen/PCD3D_SM6/AutogenShaderHeaders.ush
+[2026.09.07-14.18.19:637][  0]LogShaderCompilers: Display: Autogen file is unchanged, skipping write.
+[2026.09.07-14.18.20:224][  0]LogEditorDomain: Display: EditorDomain is Disabled
+[2026.09.07-14.18.20:227][  0]LogAssetRegistry: Display: AssetDataGatherer spent 0.000s loading caches from ../../../../../../Coding/Codex/Vibecoasterjs/native/unreal/Intermediate/CachedAssetRegistry.
+[2026.09.07-14.18.20:579][  0]LogDeviceProfileManager: Display: Deviceprofile LinuxArm64Editor not found.
+[2026.09.07-14.18.20:580][  0]LogDeviceProfileManager: Display: Deviceprofile LinuxArm64 not found.
+[2026.09.07-14.18.20:643][  0]LogCsvProfiler: Display: Metadata set : deviceprofile="WindowsEditor"
+[2026.09.07-14.18.20:646][  0]LogStreaming: Display: FlushAsyncLoading(1): 1 QueuedPackages, 0 AsyncPackages
+[2026.09.07-14.18.20:667][  0]LogTextureEncodingSettings: Display: Texture Encode Speed: FinalIfAvailable (editor).
+[2026.09.07-14.18.20:668][  0]LogTextureEncodingSettings: Display: Oodle Texture Encode Speed settings: Fast: RDO Off Lambda=0, Effort=Normal Final: RDO Off Lambda=0, Effort=Normal
+[2026.09.07-14.18.20:668][  0]LogTextureEncodingSettings: Display: Shared linear texture encoding: Disabled
+[2026.09.07-14.18.20:693][  0]LogMeshReduction: Display: Using QuadricMeshReduction for automatic static mesh reduction
+[2026.09.07-14.18.20:693][  0]LogMeshReduction: Display: Using SkeletalMeshReduction for automatic skeletal mesh reduction
+[2026.09.07-14.18.20:693][  0]LogMeshReduction: Display: Using ProxyLODMeshReduction for automatic mesh merging
+[2026.09.07-14.18.20:693][  0]LogMeshReduction: Display: No distributed automatic mesh merging module available
+[2026.09.07-14.18.20:915][  0]LogShaderCompilers: Display: Compiling shader autogen file: ../../../../../../Coding/Codex/Vibecoasterjs/native/unreal/Intermediate/ShaderAutogen/PCD3D_SM5/AutogenShaderHeaders.ush
+[2026.09.07-14.18.20:915][  0]LogShaderCompilers: Display: Autogen file is unchanged, skipping write.
+[2026.09.07-14.18.20:915][  0]LogVirtualization: Display: VirtualizationSystem name found in ini file: None
+[2026.09.07-14.18.20:916][  0]LogVirtualization: Display: FNullVirtualizationSystem mounted, virtualization will be disabled
+[2026.09.07-14.18.20:977][  0]LogWorldPartition: Display: FWorldPartitionClassDescRegistry::Initialize started...
+[2026.09.07-14.18.20:980][  0]LogWorldPartition: Display: FWorldPartitionClassDescRegistry::Initialize took 3.607 ms
+[2026.09.07-14.18.21:491][  0]LogMetaSound: Display: MetaSound Page Target Initialized to 'Default'
+[2026.09.07-14.18.21:493][  0]LogAudio: Display: Registering Engine Module Parameter Interfaces...
+[2026.09.07-14.18.21:707][  0]LogUdpMessaging: Display: Unicast socket bound to '0.0.0.0:64511'.
+[2026.09.07-14.18.21:713][  0]LogUdpMessaging: Display: Added local interface '192.168.0.62' to multicast group '230.0.0.1:6666'
+[2026.09.07-14.18.21:713][  0]LogUdpMessaging: Display: Added local interface '127.0.0.1' to multicast group '230.0.0.1:6666'
+[2026.09.07-14.18.21:717][  0]LogUdpMessaging: Display: Using asynchronous task graph for message deserialization.
+[2026.09.07-14.18.22:132][  0]LogAudioCaptureCore: Display: No Audio Capture implementations found. Audio input will be silent.
+[2026.09.07-14.18.22:132][  0]LogAudioCaptureCore: Display: No Audio Capture implementations found. Audio input will be silent.
+[2026.09.07-14.18.22:855][  0]LogAnalytics: Display: [UEEditor.Rocket.Release] AnalyticsET::StartSession ( APIServer = https://datarouter.ol.epicgames.com/datarouter/api/v1/public/data. AppVersion = 5.8.2-56702186+++UE5+Release-5.8 )
+[2026.09.07-14.18.22:857][  0]LogAudio: Display: Initializing Audio Device Manager...
+[2026.09.07-14.18.22:864][  0]LogAudio: Display: Loading Default Audio Settings Objects...
+[2026.09.07-14.18.22:865][  0]LogAudio: Display: No default SoundConcurrencyObject specified (or failed to load).
+[2026.09.07-14.18.22:866][  0]LogAudio: Display: Audio Device Manager Initialized
+[2026.09.07-14.18.22:866][  0]LogAudio: Display: Creating Audio Device:                 Id: 1, Scope: Shared, Realtime: True
+[2026.09.07-14.18.22:867][  0]LogAudioMixer: Display: bUseRenderScheduler set to true.
+[2026.09.07-14.18.22:867][  0]LogAudioMixer: Display: Audio Mixer Platform Settings:
+[2026.09.07-14.18.22:867][  0]LogAudioMixer: Display: 	Sample Rate:						  48000
+[2026.09.07-14.18.22:867][  0]LogAudioMixer: Display: 	Callback Buffer Frame Size Requested: 1024
+[2026.09.07-14.18.22:867][  0]LogAudioMixer: Display: 	Callback Buffer Frame Size To Use:	  1024
+[2026.09.07-14.18.22:868][  0]LogAudioMixer: Display: 	Number of buffers to queue:			  1
+[2026.09.07-14.18.22:868][  0]LogAudioMixer: Display: 	Max Channels (voices):				  32
+[2026.09.07-14.18.22:868][  0]LogAudioMixer: Display: 	Number of Async Source Workers:		  4
+[2026.09.07-14.18.22:868][  0]LogAudio: Display: AudioDevice MaxSources: 32
+[2026.09.07-14.18.22:868][  0]LogAudio: Display: Audio Spatialization Plugin: None (built-in).
+[2026.09.07-14.18.22:868][  0]LogAudio: Display: Audio Reverb Plugin: None (built-in).
+[2026.09.07-14.18.22:869][  0]LogAudio: Display: Audio Occlusion Plugin: None (built-in).
+[2026.09.07-14.18.22:875][  0]LogAudioEnumeration: Display: Refreshing FWindowsMMDeviceCache
+[2026.09.07-14.18.22:882][  0]LogAudioEnumeration: Display: FWindowsMMDeviceCache: Default Render Role='Console', Device='Speakers (Razer Barracuda X 2.4)'
+[2026.09.07-14.18.22:883][  0]LogAudioEnumeration: Display: FWindowsMMDeviceCache: Default Capture Role='Console', Device='Microphone (C922 Pro Stream Webcam)'
+[2026.09.07-14.18.22:884][  0]LogAudioEnumeration: Display: FWindowsMMDeviceCache: Default Render Role='Multimedia', Device='Speakers (Razer Barracuda X 2.4)'
+[2026.09.07-14.18.22:884][  0]LogAudioEnumeration: Display: FWindowsMMDeviceCache: Default Capture Role='Multimedia', Device='Microphone (C922 Pro Stream Webcam)'
+[2026.09.07-14.18.22:885][  0]LogAudioEnumeration: Display: FWindowsMMDeviceCache: Default Render Role='Communications', Device='Speakers (Razer Barracuda X 2.4)'
+[2026.09.07-14.18.22:886][  0]LogAudioEnumeration: Display: FWindowsMMDeviceCache: Default Capture Role='Communications', Device='Microphone (C922 Pro Stream Webcam)'
+[2026.09.07-14.18.22:900][  0]LogAudioMixerWasapi: Display: FWasapiServiceWatcher started.
+[2026.09.07-14.18.22:901][  0]LogAudioMixer: Display: Initializing audio mixer using platform API: 'WASAPIMixer'
+[2026.09.07-14.18.22:901][  0]LogAudioMixerWasapi: Display: FWasapiServiceWatcher initial state: Audiosrv=RUNNING, AudioEndpointBuilder=RUNNING
+[2026.09.07-14.18.22:910][  0]LogAudioMixerWasapi: Display: FAudioMixerWasapiRenderStream::InitializeHardware audio mixer requested num channels: 2, Wasapi render stream hardware supports num channels: 2
+[2026.09.07-14.18.22:910][  0]LogAudioMixerWasapi: Display: FAudioMixerWasapiRenderStream::InitializeHardware succeeded with sample rate: 48000, buffer period: 1024
+[2026.09.07-14.18.22:911][  0]LogAudioMixer: Display: FAudioMixerWasapi initialized: SampleRate=48000 NumChannels=2 NumDirectOutChannels=0 bIsAggregateDevice=0 StreamParams.Num()=1
+[2026.09.07-14.18.22:911][  0]LogAudioMixer: Display: Using Audio Hardware Device Speakers (Razer Barracuda X 2.4)
+[2026.09.07-14.18.22:911][  0]LogAudioMixer: Display: Initializing Sound Submixes...
+[2026.09.07-14.18.22:912][  0]LogAudioMixer: Display: Creating Master Submix 'MasterSubmixDefault'
+[2026.09.07-14.18.22:913][  0]LogAudioMixer: Display: Creating Master Submix 'MasterReverbSubmixDefault'
+[2026.09.07-14.18.22:913][  0]LogAudioMixer: Display: Output buffers initialized: Frames=1024, Channels=2, Samples=2048, InstanceID=1
+[2026.09.07-14.18.22:920][  0]LogAudioMixer: Display: Starting AudioMixerPlatformInterface::RunInternal(), InstanceID=1
+[2026.09.07-14.18.22:923][  0]LogAudio: Display: Audio Device (ID: 1) registered with world 'Untitled'.
+[2026.09.07-14.18.22:930][  0]LogCsvProfiler: Display: Metadata set : largeworldcoordinates="1"
+[2026.09.07-14.18.22:938][  0]LogSourceControl: Display: Uncontrolled Changelist persistency file loaded ../../../../../../Coding/Codex/Vibecoasterjs/native/unreal/Saved/SourceControl/UncontrolledChangelists.json
+[2026.09.07-14.18.23:146][  0]LogPython: Display: No pip-enabled plugins with python dependencies found, skipping
+[2026.09.07-14.18.23:666][  0]LogCsvProfiler: Display: Metadata set : raytracing="0"
+[2026.09.07-14.18.23:931][  0]LogCore: Display: InsightsEditor module auto-connecting to local trace server...
+[2026.09.07-14.18.24:063][  0]LogInit: Display: Engine is initialized. Leaving FEngineLoop::Init()
+[2026.09.07-14.18.24:104][  0]LogAudio: Display: Audio Device unregistered from world 'Untitled'.
+[2026.09.07-14.18.24:110][  0]LogAudio: Display: Audio Device (ID: 1) registered with world 'Entry'.
+[2026.09.07-14.18.24:179][  0]LogPlacementMode: Display: The Asset Registry is not yet fully loaded so some placeable classes might be missing.
+[2026.09.07-14.18.24:574][  0]LogSlate: Display: Synchronously lazy loading font file '../../../Engine/Content/Slate/Fonts/Roboto-Regular.ttf' with subface index 0 in Game thread.
+[2026.09.07-14.18.24:574][  0]LogSlate: Display: Took 0.000142 seconds to synchronously load lazily loaded font '../../../Engine/Content/Slate/Fonts/Roboto-Regular.ttf' (155K) on Game thread.
+[2026.09.07-14.18.24:575][  0]LogSlate: Display: Freetype font face in memory successfully created with synchronously loaded raw font file '../../../Engine/Content/Slate/Fonts/Roboto-Regular.ttf' subface 0 in Game thread.
+[2026.09.07-14.18.24:575][  0]LogSlate: Display: Font face '../../../Engine/Content/Slate/Fonts/Roboto-Regular.ttf' subface index 0 successfully added to font face map in Game thread.
+[2026.09.07-14.18.25:157][  0]LogPython: Display: Running start-up script D:/Games/Epic Games/UE_5.8/Engine/Plugins/Animation/IKRig/Content/Python/init_unreal.py... started...
+[2026.09.07-14.18.25:168][  0]LogPython: Display: Running start-up script D:/Games/Epic Games/UE_5.8/Engine/Plugins/Animation/IKRig/Content/Python/init_unreal.py... took 10.665 ms
+[2026.09.07-14.18.25:169][  0]LogPython: Display: Running start-up script D:/Games/Epic Games/UE_5.8/Engine/Plugins/Animation/ControlRig/Content/Python/init_unreal.py... started...
+[2026.09.07-14.18.25:197][  0]LogPython: Display: Running start-up script D:/Games/Epic Games/UE_5.8/Engine/Plugins/Animation/ControlRig/Content/Python/init_unreal.py... took 29.027 ms (total: 39.693 ms)
+[2026.09.07-14.18.25:649][  1]LogAssetRegistry: Display: Starting OnFilesLoaded.Broadcast
+[2026.09.07-14.18.25:666][  1]LogPlacementMode: Display: The Asset Registry is done with its initial scan, the list of placeable classes has been updated.
+[2026.09.07-14.18.25:694][  1]LogAssetRegistry: Display: Completed OnFilesLoaded.Broadcast: 0.046s
+[2026.09.07-14.18.25:909][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Witness_Forward_X
+[2026.09.07-14.18.25:912][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Witness_OneMetreCube
+[2026.09.07-14.18.25:913][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Witness_RiderRight_MinusY
+[2026.09.07-14.18.25:921][  2]LogStaticMesh: Display: Building static mesh REVIEW_CoordinateWitness (Required Memory Estimate: 0.30229 MB)...
+[2026.09.07-14.18.25:924][  2]LogStaticMesh: Display: REVIEW_CoordinateWitness has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option.
+[2026.09.07-14.18.25:924][  2]LogStaticMesh: Display: REVIEW_CoordinateWitness has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4)
+[2026.09.07-14.18.25:928][  2]FBXImport: Warning: No smoothing group information was found in this FBX scene.  Please make sure to enable the 'Export Smoothing Groups' option in the FBX Exporter plug-in before exporting the file.  Even for tools that don't support smoothing groups, the FBX Exporter will generate appropriate smoothing data at export-time so that correct vertex normals can be inferred while importing. 
+[2026.09.07-14.18.25:928][  2]FBXImport: Warning: REVIEW_CoordinateWitness has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option. 
+[2026.09.07-14.18.25:928][  2]FBXImport: Warning: REVIEW_CoordinateWitness has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4) 
+[2026.09.07-14.18.26:308][  2]LogFbx: Display: Triangulating static mesh VCTrain_SM_TrainCar_Assembled
+[2026.09.07-14.18.26:839][  2]LogStaticMesh: Display: Building static mesh SM_TrainCar (Required Memory Estimate: 29.039984 MB)...
+[2026.09.07-14.18.27:011][  2]LogStaticMesh: Display: SM_TrainCar has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option.
+[2026.09.07-14.18.27:012][  2]LogStaticMesh: Display: SM_TrainCar has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4)
+[2026.09.07-14.18.27:014][  2]FBXImport: Warning: No smoothing group information was found in this FBX scene.  Please make sure to enable the 'Export Smoothing Groups' option in the FBX Exporter plug-in before exporting the file.  Even for tools that don't support smoothing groups, the FBX Exporter will generate appropriate smoothing data at export-time so that correct vertex normals can be inferred while importing. 
+[2026.09.07-14.18.27:014][  2]FBXImport: Warning: SM_TrainCar has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option. 
+[2026.09.07-14.18.27:016][  2]FBXImport: Warning: SM_TrainCar has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4) 
+[2026.09.07-14.18.27:039][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.27:108][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.27:259][  2]LogAssetRegistry: Display: Asset registry cache written as 118.5 MiB to ../../../../../../Coding/Codex/Vibecoasterjs/native/unreal/Intermediate/CachedAssetRegistry/CachedAssetRegistry_*.ref
+[2026.09.07-14.18.27:267][  2]LogAssetRegistry: Display: CleanupOrphanedCacheFiles (PostWrite): 1 .ref files found, 1 referenced binaries
+[2026.09.07-14.18.27:267][  2]LogAssetRegistry: Display:   CachedAssetRegistry_0_29B8680F4BD1EB36E239D1AB2034386D.bin: deleted (orphaned, unreferenced by any .ref)
+[2026.09.07-14.18.27:267][  2]LogAssetRegistry: Display: CleanupOrphanedCacheFiles: 2 total binaries, 1 referenced (kept), 0 old-style pre-migration (kept), 1 orphans deleted, 0 orphans locked (kept)
+[2026.09.07-14.18.27:349][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.27:461][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.27:583][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.27:699][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.27:844][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.27:974][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.28:093][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.28:137][  2]LogStaticMesh: Display: Waiting for static meshes to be ready 0/1 (/Game/Art/V071/Import3/SM_TrainCar) ...
+[2026.09.07-14.18.28:194][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_ConcreteCore
+[2026.09.07-14.18.28:196][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_DeckSlab_0
+[2026.09.07-14.18.28:199][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_DeckSlab_1
+[2026.09.07-14.18.28:202][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_DeckSlab_2
+[2026.09.07-14.18.28:204][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_DeckSlab_3
+[2026.09.07-14.18.28:207][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_EdgeGroove
+[2026.09.07-14.18.28:210][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_EdgeStripe
+[2026.09.07-14.18.28:215][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_EndSeam
+[2026.09.07-14.18.28:217][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_EndSeam.001
+[2026.09.07-14.18.28:220][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_Fascia_-1
+[2026.09.07-14.18.28:223][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformPanel_Fascia_1
+[2026.09.07-14.18.28:226][  2]LogStaticMesh: Display: Building static mesh SM_StationPlatformPanel (Required Memory Estimate: 1.526116 MB)...
+[2026.09.07-14.18.28:234][  2]LogStaticMesh: Display: SM_StationPlatformPanel has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option.
+[2026.09.07-14.18.28:234][  2]LogStaticMesh: Display: SM_StationPlatformPanel has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4)
+[2026.09.07-14.18.28:241][  2]FBXImport: Warning: No smoothing group information was found in this FBX scene.  Please make sure to enable the 'Export Smoothing Groups' option in the FBX Exporter plug-in before exporting the file.  Even for tools that don't support smoothing groups, the FBX Exporter will generate appropriate smoothing data at export-time so that correct vertex normals can be inferred while importing. 
+[2026.09.07-14.18.28:241][  2]FBXImport: Warning: SM_StationPlatformPanel has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option. 
+[2026.09.07-14.18.28:244][  2]FBXImport: Warning: SM_StationPlatformPanel has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4) 
+[2026.09.07-14.18.28:645][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_ConcreteCore
+[2026.09.07-14.18.28:648][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_DeckSlab_0
+[2026.09.07-14.18.28:650][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_DeckSlab_1
+[2026.09.07-14.18.28:651][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_DeckSlab_2
+[2026.09.07-14.18.28:653][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_DeckSlab_3
+[2026.09.07-14.18.28:655][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_EdgeGroove
+[2026.09.07-14.18.28:658][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_EdgeStripe
+[2026.09.07-14.18.28:662][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_EndSeam
+[2026.09.07-14.18.28:666][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_EndSeam.001
+[2026.09.07-14.18.28:666][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_Fascia_-1
+[2026.09.07-14.18.28:670][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_SM_StationPlatformEndPanel_1m_Fascia_1
+[2026.09.07-14.18.28:674][  2]LogStaticMesh: Display: Building static mesh SM_StationPlatformEndPanel (Required Memory Estimate: 1.526116 MB)...
+[2026.09.07-14.18.28:687][  2]LogStaticMesh: Display: SM_StationPlatformEndPanel has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option.
+[2026.09.07-14.18.28:688][  2]LogStaticMesh: Display: SM_StationPlatformEndPanel has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4)
+[2026.09.07-14.18.28:689][  2]FBXImport: Warning: No smoothing group information was found in this FBX scene.  Please make sure to enable the 'Export Smoothing Groups' option in the FBX Exporter plug-in before exporting the file.  Even for tools that don't support smoothing groups, the FBX Exporter will generate appropriate smoothing data at export-time so that correct vertex normals can be inferred while importing. 
+[2026.09.07-14.18.28:690][  2]FBXImport: Warning: SM_StationPlatformEndPanel has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option. 
+[2026.09.07-14.18.28:690][  2]FBXImport: Warning: SM_StationPlatformEndPanel has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4) 
+[2026.09.07-14.18.28:789][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_Diffuser
+[2026.09.07-14.18.28:791][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_Diffuser.001
+[2026.09.07-14.18.28:794][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_EdgeFascia
+[2026.09.07-14.18.28:796][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_EdgeFascia.001
+[2026.09.07-14.18.28:798][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_LightHousing
+[2026.09.07-14.18.28:799][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_LightHousing.001
+[2026.09.07-14.18.28:802][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_TransverseRib
+[2026.09.07-14.18.28:806][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_TransverseRib.001
+[2026.09.07-14.18.28:809][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_TransverseRib.002
+[2026.09.07-14.18.28:810][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_UndersideInfill
+[2026.09.07-14.18.28:813][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_UndersideInfill.001
+[2026.09.07-14.18.28:816][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_UndersideInfill.002
+[2026.09.07-14.18.28:818][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_UndersideInfill.003
+[2026.09.07-14.18.28:821][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_UndersideInfill.004
+[2026.09.07-14.18.28:824][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Roof_WeatherSkin
+[2026.09.07-14.18.28:831][  2]LogStaticMesh: Display: Building static mesh SM_StationRoofPanel (Required Memory Estimate: 2.077851 MB)...
+[2026.09.07-14.18.28:842][  2]LogStaticMesh: Display: SM_StationRoofPanel has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option.
+[2026.09.07-14.18.28:842][  2]LogStaticMesh: Display: SM_StationRoofPanel has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4)
+[2026.09.07-14.18.28:844][  2]FBXImport: Warning: No smoothing group information was found in this FBX scene.  Please make sure to enable the 'Export Smoothing Groups' option in the FBX Exporter plug-in before exporting the file.  Even for tools that don't support smoothing groups, the FBX Exporter will generate appropriate smoothing data at export-time so that correct vertex normals can be inferred while importing. 
+[2026.09.07-14.18.28:844][  2]FBXImport: Warning: SM_StationRoofPanel has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option. 
+[2026.09.07-14.18.28:844][  2]FBXImport: Warning: SM_StationRoofPanel has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4) 
+[2026.09.07-14.18.29:139][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_BasePlate
+[2026.09.07-14.18.29:141][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_BoxSection
+[2026.09.07-14.18.29:145][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_CapPlate
+[2026.09.07-14.18.29:149][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_RecessChannel
+[2026.09.07-14.18.29:151][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_RecessChannel.001
+[2026.09.07-14.18.29:154][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_RecessedAnchor
+[2026.09.07-14.18.29:154][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_RecessedAnchor.001
+[2026.09.07-14.18.29:156][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_RecessedAnchor.002
+[2026.09.07-14.18.29:157][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Post_RecessedAnchor.003
+[2026.09.07-14.18.29:159][  2]LogStaticMesh: Display: Building static mesh SM_StationPost (Required Memory Estimate: 0.818624 MB)...
+[2026.09.07-14.18.29:163][  2]LogStaticMesh: Display: SM_StationPost has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option.
+[2026.09.07-14.18.29:163][  2]LogStaticMesh: Display: SM_StationPost has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4)
+[2026.09.07-14.18.29:168][  2]FBXImport: Warning: No smoothing group information was found in this FBX scene.  Please make sure to enable the 'Export Smoothing Groups' option in the FBX Exporter plug-in before exporting the file.  Even for tools that don't support smoothing groups, the FBX Exporter will generate appropriate smoothing data at export-time so that correct vertex normals can be inferred while importing. 
+[2026.09.07-14.18.29:168][  2]FBXImport: Warning: SM_StationPost has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option. 
+[2026.09.07-14.18.29:169][  2]FBXImport: Warning: SM_StationPost has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4) 
+[2026.09.07-14.18.29:326][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_FlushFastener
+[2026.09.07-14.18.29:328][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_FlushFastener.001
+[2026.09.07-14.18.29:329][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_FlushFastener.002
+[2026.09.07-14.18.29:330][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_FlushFastener.003
+[2026.09.07-14.18.29:331][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_LowerFlange
+[2026.09.07-14.18.29:333][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_RailSeat
+[2026.09.07-14.18.29:336][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_RailSeat.001
+[2026.09.07-14.18.29:339][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_SectionWeb
+[2026.09.07-14.18.29:344][  2]LogFbx: Display: Triangulating static mesh VC_ENVKIT_Tie_UpperFlange
+[2026.09.07-14.18.29:348][  2]LogStaticMesh: Display: Building static mesh SM_TrackTie (Required Memory Estimate: 0.818457 MB)...
+[2026.09.07-14.18.29:353][  2]LogStaticMesh: Display: SM_TrackTie has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option.
+[2026.09.07-14.18.29:354][  2]LogStaticMesh: Display: SM_TrackTie has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4)
+[2026.09.07-14.18.29:357][  2]FBXImport: Warning: No smoothing group information was found in this FBX scene.  Please make sure to enable the 'Export Smoothing Groups' option in the FBX Exporter plug-in before exporting the file.  Even for tools that don't support smoothing groups, the FBX Exporter will generate appropriate smoothing data at export-time so that correct vertex normals can be inferred while importing. 
+[2026.09.07-14.18.29:357][  2]FBXImport: Warning: SM_TrackTie has degenerate tangent bases which will result in incorrect shading.  MikkTSpace relies on tangent bases and may result in mesh corruption, consider disabling this option. 
+[2026.09.07-14.18.29:358][  2]FBXImport: Warning: SM_TrackTie has some nearly zero bi-normals which can create some issues. (Tolerance of 1E-4) 
+[2026.09.07-14.18.29:448][  2]LogSourceControl: Display: Uncontrolled Changelist persistency file saved ../../../../../../Coding/Codex/Vibecoasterjs/native/unreal/Saved/SourceControl/UncontrolledChangelists.json
+[2026.09.07-14.18.29:452][  3]LogContentValidation: Display: Starting to validate 23 assets (0 associated objects such as actors)
+[2026.09.07-14.18.29:528][  4]LogAnalytics: Display: [UEEditor.Rocket.Release] AnalyticsET::EndSession
+[2026.09.07-14.18.29:528][  4]LogAudio: Display: Beginning Audio Device Manager Shutdown (Module: AudioMixerWasapi)...
+[2026.09.07-14.18.29:529][  4]LogAudio: Display: Destroying 1 Remaining Audio Device(s)...
+[2026.09.07-14.18.29:529][  4]LogAudio: Display: Audio Device unregistered from world 'Entry'.
+[2026.09.07-14.18.29:529][  4]LogAudio: Display: Shutting down audio device while 1 references to it are still alive. For more information, compile with INSTRUMENT_AUDIODEVICE_HANDLES.
+[2026.09.07-14.18.29:529][  4]LogAudioMixer: Display: FAudioMixerWasapi::StopAudioStream() InstanceID=1, StreamState=4
+[2026.09.07-14.18.29:540][  4]LogAudioMixerWasapi: Display: FWasapiServiceWatcher stopped.
+[2026.09.07-14.18.29:549][  4]LogAudio: Display: Audio Device Manager Shutdown
+[2026.09.07-14.18.30:803][  4]LogAssetRegistry: Display: CleanupOrphanedCacheFiles (PostWrite): 1 .ref files found, 1 referenced binaries
+[2026.09.07-14.18.30:804][  4]LogAssetRegistry: Display: CleanupOrphanedCacheFiles: 1 total binaries, 1 referenced (kept), 0 old-style pre-migration (kept), 0 orphans deleted, 0 orphans locked (kept)
+[2026.09.07-14.18.31:096][  4]LogShaderCompilers: Display: Exiting ShaderCompilingThread

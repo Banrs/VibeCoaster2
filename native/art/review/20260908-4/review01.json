@@ -1,0 +1,15 @@
+{
+  "meta": null,
+  "content": [
+    {
+      "type": "text",
+      "text": "Code executed successfully: VC_REVIEW4_READY={\"scene\": \"VCReview4_Scene\", \"engine\": \"BLENDER_EEVEE\", \"resolution\": [1280, 720], \"samplesRequested\": 64, \"eyeM\": [0, 0, 1.2], \"spacingM\": 3.4, \"gamePerformanceBenchmark\": false}\n",
+      "annotations": null,
+      "meta": null
+    }
+  ],
+  "structuredContent": {
+    "result": "Code executed successfully: VC_REVIEW4_READY={\"scene\": \"VCReview4_Scene\", \"engine\": \"BLENDER_EEVEE\", \"resolution\": [1280, 720], \"samplesRequested\": 64, \"eyeM\": [0, 0, 1.2], \"spacingM\": 3.4, \"gamePerformanceBenchmark\": false}\n"
+  },
+  "isError": false
+}

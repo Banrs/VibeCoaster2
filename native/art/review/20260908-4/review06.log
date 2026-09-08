@@ -1,0 +1,21 @@
+2026-09-08 01:05:32,359 - BlenderMCPServer - INFO - BlenderMCP server starting up
+2026-09-08 01:05:32,360 - BlenderMCPServer - INFO - Could not find a Blender addons folder. If Blender is installed, set BLENDERMCP_ADDONS_DIR, or install addon.py manually from the repo.
+2026-09-08 01:05:32,360 - BlenderMCPServer - INFO - Connected to Blender at 127.0.0.1:9876
+2026-09-08 01:05:32,360 - BlenderMCPServer - INFO - Created new persistent connection to Blender
+2026-09-08 01:05:32,360 - BlenderMCPServer - INFO - Sending command: get_addon_info with params: None
+2026-09-08 01:05:32,360 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:05:32,402 - BlenderMCPServer - INFO - Received complete response (358 bytes)
+2026-09-08 01:05:32,402 - BlenderMCPServer - INFO - Received 358 bytes of data
+2026-09-08 01:05:32,402 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:05:32,402 - BlenderMCPServer - INFO - Blender addon up to date (protocol 5, addon [1, 6], Blender 5.2.1 LTS)
+2026-09-08 01:05:32,402 - BlenderMCPServer - INFO - Successfully connected to Blender on startup
+2026-09-08 01:05:32,406 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2026-09-08 01:05:32,410 - BlenderMCPServer - INFO - Sending command: execute_code with params: {'code': 'import bpy\nimport math\nimport json\nfrom mathutils import Vector\nscene=bpy.data.scenes["VCReview4_Scene"]\nassert bpy.context.scene==scene, "Activate review in separate prior MCP call"\ncam=scene.camera\ncam.location=(0, 0, 1.2)\ncam.rotation_euler=(Vector((20, 0, 1.2))-cam.location).to_track_quat("-Z","Y").to_euler()\ncam.data.lens_unit="FOV"\ncam.data.angle=math.radians(82)\nfor i in (1,2): bpy.data.objects["VCReview4_Car"+str(i)].hide_render=False\nscene.render.filepath="D:/Coding/Codex/Vibecoasterjs/native/art/review/20260908-4/train-eye-1p2m.png"\nresult=bpy.ops.render.render(write_still=True,scene=scene.name)\nassert "FINISHED" in result\nprint("VC_REVIEW4_RENDER="+json.dumps({"path":scene.render.filepath,"engine":scene.render.engine,"gamePOV":False,"gamePerformanceBenchmark":False,"eyeDatumM":1.2,"carSpacingM":3.4}))\n'}
+2026-09-08 01:05:32,410 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:05:32,814 - BlenderMCPServer - INFO - Received complete response (308 bytes)
+2026-09-08 01:05:32,814 - BlenderMCPServer - INFO - Received 308 bytes of data
+2026-09-08 01:05:32,814 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:05:32,817 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2026-09-08 01:05:32,820 - BlenderMCPServer - INFO - Disconnecting from Blender on shutdown
+2026-09-08 01:05:32,820 - BlenderMCPServer - INFO - BlenderMCP server shut down
+{"meta": null, "content": [{"type": "text", "text": "Code executed successfully: VC_REVIEW4_RENDER={\"path\": \"D:/Coding/Codex/Vibecoasterjs/native/art/review/20260908-4/train-eye-1p2m.png\", \"engine\": \"BLENDER_EEVEE\", \"gamePOV\": false, \"gamePerformanceBenchmark\": false, \"eyeDatumM\": 1.2, \"carSpacingM\": 3.4}\n", "annotations": null, "meta": null}], "structuredContent": {"result": "Code executed successfully: VC_REVIEW4_RENDER={\"path\": \"D:/Coding/Codex/Vibecoasterjs/native/art/review/20260908-4/train-eye-1p2m.png\", \"engine\": \"BLENDER_EEVEE\", \"gamePOV\": false, \"gamePerformanceBenchmark\": false, \"eyeDatumM\": 1.2, \"carSpacingM\": 3.4}\n"}, "isError": false}

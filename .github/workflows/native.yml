@@ -1,0 +1,35 @@
+name: Native core checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Configure independent C++ core
+        run: cmake -S native -B native/build-cmake -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build native/build-cmake --config Release --parallel 2
+      - name: Test core contracts
+        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 1 --timeout 600
+      - name: Test Python tooling
+        run: |
+          python -m pip install -r native/tools/requirements.txt
+          python -B -m unittest discover -s native/tools -p "test_*.py" -v
+
+# UE cooking and Mac/Metal runtime verification require suitable engine hosts.
+# Performance benchmarks are deliberately absent from this workflow.

@@ -1,0 +1,6 @@
+{
+  "run": "v071_20260908_first",
+  "destinationRoot": "/Game/Art/V071",
+  "trainManifest": "D:\\Coding\\Codex\\Vibecoasterjs\\native\\art\\review\\20260907-3\\train-manifest.json",
+  "environmentManifest": "D:\\Coding\\Codex\\Vibecoasterjs\\native\\art\\review\\20260907-2\\environment-manifest.json"
+}

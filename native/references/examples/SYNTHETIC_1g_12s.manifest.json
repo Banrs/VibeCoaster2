@@ -1,0 +1,18 @@
+{
+  "ride": "SYNTHETIC-TestCoaster",
+  "device": "SYNTHETIC-generator",
+  "seat": "SYNTHETIC-Row1",
+  "source": "SYNTHETIC example only, never a measured reference",
+  "configuration": "SYNTHETIC-config-A",
+  "recording_id": "SYNTHETIC-EXAMPLE-1g-12s",
+  "calibration": {
+    "status": "known",
+    "convention": "rider-vertical-specific-force-with-g",
+    "frame": "rider",
+    "transform": "none",
+    "calibration_id": "SYNTHETIC-CAL-EXAMPLE",
+    "smoothing": "none",
+    "notes": "SYNTHETIC constant 1g; expected S=10 g*s."
+  },
+  "quality": {}
+}

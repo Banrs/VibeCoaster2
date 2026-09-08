@@ -1,0 +1,16 @@
+{
+  "bytes": 5,
+  "fetch_error": "",
+  "http_status": 200,
+  "note": "Single probe only; no retry, no bypass. Provide your own calibrated CSV via reference_forces importer; never treat peaks as traces.",
+  "probe_outcome": "observed-false",
+  "provenance_file": "raw/getRec-6839.provenance.json",
+  "raw_accessible_without_login": false,
+  "raw_file": "raw/getRec-6839.response.json",
+  "raw_preserved": false,
+  "raw_status": "observed-false (unauthenticated probe returned literal 'false'; login requirement reported by site docs but NOT verified by this tool from this response alone)",
+  "recording_id": 6839,
+  "retrieved_utc": "2026-09-06T13:15:04Z",
+  "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+  "source_url": "https://rideforcesdb.com/getRec?id=6839"
+}

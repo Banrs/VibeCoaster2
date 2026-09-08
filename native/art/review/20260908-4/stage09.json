@@ -1,0 +1,15 @@
+{
+  "meta": null,
+  "content": [
+    {
+      "type": "text",
+      "text": "Code executed successfully: VC_TRAIN_STAGE_09_VISIBILITY_SET\n",
+      "annotations": null,
+      "meta": null
+    }
+  ],
+  "structuredContent": {
+    "result": "Code executed successfully: VC_TRAIN_STAGE_09_VISIBILITY_SET\n"
+  },
+  "isError": false
+}

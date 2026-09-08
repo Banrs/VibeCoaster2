@@ -1,0 +1,21 @@
+2026-09-08 00:05:18,887 - BlenderMCPServer - INFO - BlenderMCP server starting up
+2026-09-08 00:05:18,887 - BlenderMCPServer - INFO - Could not find a Blender addons folder. If Blender is installed, set BLENDERMCP_ADDONS_DIR, or install addon.py manually from the repo.
+2026-09-08 00:05:18,888 - BlenderMCPServer - INFO - Connected to Blender at 127.0.0.1:9876
+2026-09-08 00:05:18,888 - BlenderMCPServer - INFO - Created new persistent connection to Blender
+2026-09-08 00:05:18,888 - BlenderMCPServer - INFO - Sending command: get_addon_info with params: None
+2026-09-08 00:05:18,889 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 00:05:18,939 - BlenderMCPServer - INFO - Received complete response (358 bytes)
+2026-09-08 00:05:18,939 - BlenderMCPServer - INFO - Received 358 bytes of data
+2026-09-08 00:05:18,939 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 00:05:18,939 - BlenderMCPServer - INFO - Blender addon up to date (protocol 5, addon [1, 6], Blender 5.2.1 LTS)
+2026-09-08 00:05:18,939 - BlenderMCPServer - INFO - Successfully connected to Blender on startup
+2026-09-08 00:05:18,943 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2026-09-08 00:05:18,950 - BlenderMCPServer - INFO - Sending command: execute_code with params: {'code': 'import bpy\nimport json\nfrom mathutils import Matrix\nPREFIX="VCTrain_"\nSCENE="VCTrain_AssetReview"\nSOURCE="D:/Coding/Codex/Vibecoasterjs/native/art/source/train/20260908-train-v003"\nEXPORT="D:/Coding/Codex/Vibecoasterjs/native/art/exports/train/20260908-train-v003"\nscene=bpy.data.scenes[SCENE]\nassert bpy.context.scene == scene, "Train review scene must remain active"\nlayer=bpy.context.view_layer\nlayer.objects.active=None\nfor obj in list(layer.objects): obj.select_set(False)\nreview=bpy.data.collections[PREFIX+"BogieReview_UNVALIDATED"]\nreferences=bpy.data.collections[PREFIX+"ReferenceGuides"]\nfor obj in [bpy.data.objects[PREFIX+"SM_TrainCar_Assembled"],bpy.data.objects[PREFIX+"SM_Bogie_REVIEW_ONLY"]]+list(review.objects)+list(references.objects):\n    obj.hide_render=True\n    obj.hide_set(True)\nprint("VC_TRAIN_STAGE_11_VISIBILITY_SET")\n'}
+2026-09-08 00:05:18,950 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 00:05:18,996 - BlenderMCPServer - INFO - Received complete response (99 bytes)
+2026-09-08 00:05:18,996 - BlenderMCPServer - INFO - Received 99 bytes of data
+2026-09-08 00:05:18,996 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 00:05:19,000 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2026-09-08 00:05:19,004 - BlenderMCPServer - INFO - Disconnecting from Blender on shutdown
+2026-09-08 00:05:19,005 - BlenderMCPServer - INFO - BlenderMCP server shut down
+{"meta": null, "content": [{"type": "text", "text": "Code executed successfully: VC_TRAIN_STAGE_11_VISIBILITY_SET\n", "annotations": null, "meta": null}], "structuredContent": {"result": "Code executed successfully: VC_TRAIN_STAGE_11_VISIBILITY_SET\n"}, "isError": false}

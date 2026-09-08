@@ -1,0 +1,21 @@
+2026-09-08 01:13:58,372 - BlenderMCPServer - INFO - BlenderMCP server starting up
+2026-09-08 01:13:58,372 - BlenderMCPServer - INFO - Could not find a Blender addons folder. If Blender is installed, set BLENDERMCP_ADDONS_DIR, or install addon.py manually from the repo.
+2026-09-08 01:13:58,372 - BlenderMCPServer - INFO - Connected to Blender at 127.0.0.1:9876
+2026-09-08 01:13:58,373 - BlenderMCPServer - INFO - Created new persistent connection to Blender
+2026-09-08 01:13:58,373 - BlenderMCPServer - INFO - Sending command: get_addon_info with params: None
+2026-09-08 01:13:58,373 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:13:58,376 - BlenderMCPServer - INFO - Received complete response (358 bytes)
+2026-09-08 01:13:58,376 - BlenderMCPServer - INFO - Received 358 bytes of data
+2026-09-08 01:13:58,376 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:13:58,376 - BlenderMCPServer - INFO - Blender addon up to date (protocol 5, addon [1, 6], Blender 5.2.1 LTS)
+2026-09-08 01:13:58,376 - BlenderMCPServer - INFO - Successfully connected to Blender on startup
+2026-09-08 01:13:58,380 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2026-09-08 01:13:58,383 - BlenderMCPServer - INFO - Sending command: execute_code with params: {'code': 'import bpy\nimport json\nfrom mathutils import Vector\nscene=bpy.data.scenes["VCTrain4_AssetReview"]\nbpy.context.window.scene=scene\nfor area in bpy.context.screen.areas:\n    if area.type=="VIEW_3D":\n        space=area.spaces.active\n        space.shading.type="SOLID"\n        space.shading.color_type="MATERIAL"\n        space.overlay.show_floor=False\n        space.region_3d.view_location=Vector((0,0,.7))\n        space.region_3d.view_distance=4.8\n        space.region_3d.view_rotation=(Vector((0,0,.7))-Vector((4,-5,3))).to_track_quat("-Z","Y")\n        space.region_3d.view_perspective="PERSP"\nprint(json.dumps({"blender":bpy.app.version_string,"activeScene":scene.name,"editableRuntimeParts":len(bpy.data.collections["VCTrain4_RuntimeParts_AboveRail"].objects)}))\n'}
+2026-09-08 01:13:58,383 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:13:58,429 - BlenderMCPServer - INFO - Received complete response (168 bytes)
+2026-09-08 01:13:58,430 - BlenderMCPServer - INFO - Received 168 bytes of data
+2026-09-08 01:13:58,430 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:13:58,433 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2026-09-08 01:13:58,435 - BlenderMCPServer - INFO - Disconnecting from Blender on shutdown
+2026-09-08 01:13:58,435 - BlenderMCPServer - INFO - BlenderMCP server shut down
+{"meta": null, "content": [{"type": "text", "text": "Code executed successfully: {\"blender\": \"5.2.1 LTS\", \"activeScene\": \"VCTrain4_AssetReview\", \"editableRuntimeParts\": 76}\n", "annotations": null, "meta": null}], "structuredContent": {"result": "Code executed successfully: {\"blender\": \"5.2.1 LTS\", \"activeScene\": \"VCTrain4_AssetReview\", \"editableRuntimeParts\": 76}\n"}, "isError": false}

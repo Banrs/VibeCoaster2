@@ -1,0 +1,7 @@
+{
+  "run": "v071_20260908_yaw90",
+  "destinationRoot": "/Game/Art/V071/Import3",
+  "trainManifest": "D:\\Coding\\Codex\\Vibecoasterjs\\native\\art\\review\\20260907-3\\train-manifest.json",
+  "environmentManifest": "D:\\Coding\\Codex\\Vibecoasterjs\\native\\art\\review\\20260907-2\\environment-manifest.json",
+  "exportCoordinatePreparation": "Original Blender FBX. Observed material-coded basis is (-y,-x,z); explicit UE import yaw +90 degrees yields required (x,-y,z). No source mesh reflection or scale change."
+}

@@ -1,0 +1,15 @@
+# Saved payload checksums cover exact bytes; never translate their newlines.
+*.coaster -text
+*.vcdesign -text
+
+# Preserve imported and editable art byte-for-byte.
+*.uasset binary
+*.umap binary
+*.blend binary
+*.blend1 binary
+*.fbx binary
+*.glb binary
+
+# Scripts must retain the line endings required by their target shell.
+*.sh text eol=lf
+*.cmd text eol=crlf

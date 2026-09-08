@@ -1,0 +1,21 @@
+2026-09-08 01:43:15,562 - BlenderMCPServer - INFO - BlenderMCP server starting up
+2026-09-08 01:43:15,563 - BlenderMCPServer - INFO - Could not find a Blender addons folder. If Blender is installed, set BLENDERMCP_ADDONS_DIR, or install addon.py manually from the repo.
+2026-09-08 01:43:15,563 - BlenderMCPServer - INFO - Connected to Blender at 127.0.0.1:9876
+2026-09-08 01:43:15,563 - BlenderMCPServer - INFO - Created new persistent connection to Blender
+2026-09-08 01:43:15,563 - BlenderMCPServer - INFO - Sending command: get_addon_info with params: None
+2026-09-08 01:43:15,563 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:43:15,614 - BlenderMCPServer - INFO - Received complete response (358 bytes)
+2026-09-08 01:43:15,614 - BlenderMCPServer - INFO - Received 358 bytes of data
+2026-09-08 01:43:15,614 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:43:15,614 - BlenderMCPServer - INFO - Blender addon up to date (protocol 5, addon [1, 6], Blender 5.2.1 LTS)
+2026-09-08 01:43:15,614 - BlenderMCPServer - INFO - Successfully connected to Blender on startup
+2026-09-08 01:43:15,618 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2026-09-08 01:43:15,620 - BlenderMCPServer - INFO - Sending command: execute_code with params: {'code': 'import bpy\nbpy.context.window.scene=bpy.data.scenes["VCWebReview2_Scene"]\nprint("VC_WEB_REVIEW_ACTIVATED")\n'}
+2026-09-08 01:43:15,620 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:43:15,668 - BlenderMCPServer - INFO - Received complete response (90 bytes)
+2026-09-08 01:43:15,668 - BlenderMCPServer - INFO - Received 90 bytes of data
+2026-09-08 01:43:15,668 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:43:15,671 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2026-09-08 01:43:15,674 - BlenderMCPServer - INFO - Disconnecting from Blender on shutdown
+2026-09-08 01:43:15,674 - BlenderMCPServer - INFO - BlenderMCP server shut down
+{"meta": null, "content": [{"type": "text", "text": "Code executed successfully: VC_WEB_REVIEW_ACTIVATED\n", "annotations": null, "meta": null}], "structuredContent": {"result": "Code executed successfully: VC_WEB_REVIEW_ACTIVATED\n"}, "isError": false}

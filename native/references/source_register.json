@@ -1,0 +1,134 @@
+{
+  "register": "official record specifications (as-published context only)",
+  "updated_utc": "2026-09-06T13:47:30Z",
+  "verification_policy": "Only entries with per-entry retrieved_utc fetched 2026-09-06 are verified-as-published (manufacturer / operator / RCDB page body observed). Wikipedia summaries, press-release mirrors, and prior numbers not observed on refetch are leads_only, status unverified, not primary evidence. Marketing record claims are labelled record-claim, distinct from measurement. This repo did NOT independently measure any spec. No peaks substitute for 10-s force exposure.",
+  "game_targets": {
+    "note": "Configured physics-proof thresholds from native/core/NUMERICS.md, not independently confirmed world records.",
+    "height_m": 220,
+    "speed_ms": 75,
+    "speed_kmh_derived": 270,
+    "inversion_height_m": 80,
+    "launch_0_to_50ms_s": 1.4,
+    "source": "native/core/NUMERICS.md line 9"
+  },
+  "entries": [
+    {
+      "ride": "Falcon's Flight (Six Flags Qiddiya City, Intamin LSM Launch Coaster)",
+      "parameter": "height_native",
+      "value_native": "195 meters height; 195 meters cliff; 165-meter camelback; 55-meter twisted drop",
+      "units_native": "m (source-native, labels preserved)",
+      "source_publisher": "Intamin (project page body)",
+      "source_url": "https://www.intamin.com/project/falcons-flight/",
+      "retrieved_utc": "2026-09-06T13:47:30Z",
+      "status": "verified-as-published",
+      "record_claim": "Page markets ride as world's tallest/fastest/longest (opened 31 Dec 2025); claim is marketing, not independent measurement here.",
+      "conflicts": "Prior register cited 163 m structure vs 195 m elevation change and 4250 m length; current page body states 195 m height and omits length number (header counters rendered 0). 163 m / 4250 m NOT observed on this fetch; kept only as unverified leads below. Do not merge height / cliff / camelback."
+    },
+    {
+      "ride": "Falcon's Flight (Six Flags Qiddiya City, Intamin LSM Launch Coaster)",
+      "parameter": "top_speed",
+      "value_native": 250,
+      "units_native": "km/h",
+      "source_publisher": "Intamin (project page body)",
+      "source_url": "https://www.intamin.com/project/falcons-flight/",
+      "retrieved_utc": "2026-09-06T13:47:30Z",
+      "status": "verified-as-published",
+      "conflicts": "Body also gives 40 km/h lift, 150 km/h cliff-top launch, ~3 min 25 s ride time. mph conversions are derived, not source-native."
+    },
+    {
+      "ride": "Do-Dodonpa (Fuji-Q Highland, S&S, removed)",
+      "parameter": "height_length_speed_launch_native",
+      "value_native": "Height 160.8 ft / Length 4081.3 ft / Speed 111.8 mph / 0-111.8 mph in 1.6 s / 160.8 ft loop",
+      "units_native": "ft/mph/s (source-native imperial listing)",
+      "source_publisher": "RCDB",
+      "source_url": "https://rcdb.com/1423.htm",
+      "retrieved_utc": "2026-09-06T13:47:30Z",
+      "status": "verified-as-published",
+      "conflicts": "Same page history text gives metric: 49 m tall 39.7 m diameter loop; 0-180 km/h in 1.56 s (prior config 0-172 km/h in 1.8 s); length 1189 m to 1244 m; prior height 52 m, prior listed 4.3 g. Imperial listing is rounded conversion; keep both labels, do not merge. Listed 4.3 g is prior-config press figure, not a measured 10-s exposure."
+    },
+    {
+      "ride": "Do-Dodonpa (Fuji-Q Highland, S&S, removed)",
+      "parameter": "closure_status",
+      "value_native": "Dodonpa closed 2 Oct 2016, reopened 15 Jul 2017 as Do-Dodonpa with loop replacing top hat (per RCDB operating schedule)",
+      "units_native": "n/a (status)",
+      "source_publisher": "RCDB",
+      "source_url": "https://rcdb.com/1423.htm",
+      "retrieved_utc": "2026-09-06T13:47:30Z",
+      "status": "verified-as-published",
+      "conflicts": "Final removal / SBNO filings are leads_only below; only archival traces possible."
+    },
+    {
+      "ride": "Tormenta Rampaging Run (Six Flags Over Texas, giga dive)",
+      "parameter": "height_drop_speed_length_native",
+      "value_native": "309 ft height / 285 ft drop at 95 deg / 87 mph / 4199 ft length",
+      "units_native": "ft/deg/mph (source-native imperial)",
+      "source_publisher": "Six Flags Over Texas (operator page)",
+      "source_url": "https://www.sixflags.com/overtexas/attractions/tormenta-rampaging-run",
+      "retrieved_utc": "2026-09-06T13:47:30Z",
+      "status": "verified-as-published",
+      "record_claim": "Page markets six world records (tallest/fastest/longest dive, highest 95-deg drop, highest Immelmann, tallest loop); claims are marketing, not independent measurement here.",
+      "conflicts": "Metric conversions are derived; keep imperial canonical."
+    },
+    {
+      "ride": "Tormenta Rampaging Run (Six Flags Over Texas, giga dive)",
+      "parameter": "element_heights_native",
+      "value_native": "218 ft Immelmann / 179 ft loop",
+      "units_native": "ft (source-native)",
+      "source_publisher": "Six Flags Over Texas (operator page)",
+      "source_url": "https://www.sixflags.com/overtexas/attractions/tormenta-rampaging-run",
+      "retrieved_utc": "2026-09-06T13:47:30Z",
+      "status": "verified-as-published",
+      "conflicts": "Preserve each label; do not collapse height / drop / element heights."
+    }
+  ],
+  "leads_only": [
+    {
+      "label": "Falcon's Flight 163 m structure / 4250 m length / 195 m elevation-change split",
+      "source_urls": ["https://www.intamin.com/project/falcons-flight/", "https://en.wikipedia.org/wiki/Falcons_Flight"],
+      "status": "unverified-lead",
+      "note": "Prior register values; not observed on 2026-09-06 Intamin body fetch. Wikipedia is a summary lead, not primary evidence."
+    },
+    {
+      "label": "Tormenta B&M manufacturer + PR Newswire release context",
+      "source_urls": ["https://www.bolliger-mabillard.com/blog/coming-soon-tormenta-rampaging-run", "https://www.prnewswire.com/news-releases/record-breaking-tormenta-rampaging-run-opens-today-at-six-flags-over-texas-302821429.html"],
+      "status": "unverified-lead",
+      "note": "Preserved from research-forces.md; not refetched in this pass. Use operator page above as verified."
+    },
+    {
+      "label": "Do-Dodonpa closure filings and press (Fujikyu filing, Yomiuri, Asahi, MLIT accident-report trace excerpt)",
+      "source_urls": ["https://www.fujikyu.co.jp/soumu/investors/pdf/202403tokubetsu.pdf", "https://japannews.yomiuri.co.jp/society/general-news/20240313-174439/", "https://www.asahi.com/ajw/articles/15198501"],
+      "status": "unverified-lead",
+      "note": "Preserved from prior register; MLIT PDF trace excerpt is a lead, not a downloadable calibrated CSV."
+    },
+    {
+      "label": "Pantherian / ex-Intimidator 305 summaries (305 ft / 300 ft 85 deg / 90 mph / 5100 ft, reprofile history)",
+      "source_urls": ["https://en.wikipedia.org/wiki/Pantherian", "https://thrillzing.com/roller-coasters/pantherian-kings-dominion/"],
+      "status": "unverified-lead",
+      "note": "Encyclopedic summaries only, not primary evidence. Pre/post first-turn reprofile must be split by date; do not pool. No raw I305 benchmark on file."
+    },
+    {
+      "label": "Do-Dodonpa 49 m / 1244 m encyclopedic summary",
+      "source_urls": ["https://en.wikipedia.org/wiki/Do-Dodonpa"],
+      "status": "unverified-lead",
+      "note": "Summary lead; RCDB entry above is the verified source for this pass."
+    },
+    {
+      "label": "Method / calibration guides (rideforces, phyphox, fizziq, Kanonen paper, RFDB rotated-trace flag)",
+      "source_urls": ["https://rideforces.com/guides/recording/", "https://rideforces.com/guides/improving-accuracy/", "https://rideforces.com/guides/editing/", "https://rideforces.com/guides/understanding-forces/", "https://rideforces.com/guides/recording-types/", "https://phyphox.org/experiment/acceleration-with-g/", "http://physics.gu.se/LISEBERG/eng/pe8_5_003.pdf", "https://rideforcesdb.com/?axes=y&id=1607"],
+      "status": "unverified-lead",
+      "note": "Preserved from prior register / research-forces.md; not refetched in this pass."
+    }
+  ],
+  "rfdb": {
+    "browse": "https://rideforcesdb.com/browse",
+    "about": "https://rideforcesdb.com/about",
+    "record": "https://rideforcesdb.com/record",
+    "access": "rideInfo metadata public; /getRec traces gated to logged-in users per About privacy policy. This repo performs no bypass."
+  },
+  "limits": {
+    "i305_benchmark": "No raw I305/Pantherian trace on file; benchmark.json status unavailable. RFDB peak metadata (instantaneous max/min) cannot be inferred into 10-s exposure S.",
+    "peaks_vs_exposure": "RFDB browse peaks are instantaneous only; Falcon's n=1 / Tormenta n=2 too thin for median even if traces existed; Do-Dodonpa archival only.",
+    "wikipedia": "Wikipedia summaries are leads, never verified specs.",
+    "game_vs_record": "220 m / 270 km/h (75 m/s) / 1.4 s (0-50 m/s) / 80 m inversion are configured game goals, not confirmed world records."
+  }
+}

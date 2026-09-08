@@ -1,0 +1,8 @@
+{
+  "run": "v072_20260908_trainv004",
+  "destinationRoot": "/Game/Art/V072/Import1",
+  "trainManifest": "D:\\Coding\\Codex\\Vibecoasterjs\\native\\art\\review\\20260908-4\\train-manifest.json",
+  "environmentManifest": "D:\\Coding\\Codex\\Vibecoasterjs\\native\\art\\review\\20260907-2\\environment-manifest.json",
+  "exportCoordinatePreparation": "Original v004 Blender FBX with unchanged source vertices. Established material-coded basis (-y,-x,z) plus explicit UE import yaw +90 yields (x,-y,z). Fresh independent witness remains mandatory.",
+  "opticalReviewRequired": "Thin translucent clear-cyan shield; graph/settings receipt is not a visual or aerodynamic certificate."
+}

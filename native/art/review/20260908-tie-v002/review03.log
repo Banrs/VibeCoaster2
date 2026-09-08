@@ -1,0 +1,21 @@
+2026-09-08 01:43:17,013 - BlenderMCPServer - INFO - BlenderMCP server starting up
+2026-09-08 01:43:17,013 - BlenderMCPServer - INFO - Could not find a Blender addons folder. If Blender is installed, set BLENDERMCP_ADDONS_DIR, or install addon.py manually from the repo.
+2026-09-08 01:43:17,013 - BlenderMCPServer - INFO - Connected to Blender at 127.0.0.1:9876
+2026-09-08 01:43:17,013 - BlenderMCPServer - INFO - Created new persistent connection to Blender
+2026-09-08 01:43:17,013 - BlenderMCPServer - INFO - Sending command: get_addon_info with params: None
+2026-09-08 01:43:17,013 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:43:17,034 - BlenderMCPServer - INFO - Received complete response (358 bytes)
+2026-09-08 01:43:17,034 - BlenderMCPServer - INFO - Received 358 bytes of data
+2026-09-08 01:43:17,034 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:43:17,034 - BlenderMCPServer - INFO - Blender addon up to date (protocol 5, addon [1, 6], Blender 5.2.1 LTS)
+2026-09-08 01:43:17,034 - BlenderMCPServer - INFO - Successfully connected to Blender on startup
+2026-09-08 01:43:17,038 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2026-09-08 01:43:17,041 - BlenderMCPServer - INFO - Sending command: execute_code with params: {'code': 'import bpy\nassert bpy.context.scene.name=="VCWebReview2_Scene"\nbpy.ops.render.render(write_still=True)\nprint("VC_WEB_REVIEW_IMAGE="+bpy.context.scene.render.filepath)\n'}
+2026-09-08 01:43:17,041 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 01:43:17,415 - BlenderMCPServer - INFO - Received complete response (174 bytes)
+2026-09-08 01:43:17,415 - BlenderMCPServer - INFO - Received 174 bytes of data
+2026-09-08 01:43:17,415 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 01:43:17,417 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2026-09-08 01:43:17,421 - BlenderMCPServer - INFO - Disconnecting from Blender on shutdown
+2026-09-08 01:43:17,421 - BlenderMCPServer - INFO - BlenderMCP server shut down
+{"meta": null, "content": [{"type": "text", "text": "Code executed successfully: VC_WEB_REVIEW_IMAGE=D:/Coding/Codex/Vibecoasterjs/native/art/review/20260908-tie-v002/track-web-oblique.png\n", "annotations": null, "meta": null}], "structuredContent": {"result": "Code executed successfully: VC_WEB_REVIEW_IMAGE=D:/Coding/Codex/Vibecoasterjs/native/art/review/20260908-tie-v002/track-web-oblique.png\n"}, "isError": false}

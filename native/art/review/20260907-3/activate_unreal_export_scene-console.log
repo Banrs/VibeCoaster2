@@ -1,0 +1,21 @@
+2026-09-08 00:12:27,049 - BlenderMCPServer - INFO - BlenderMCP server starting up
+2026-09-08 00:12:27,049 - BlenderMCPServer - INFO - Could not find a Blender addons folder. If Blender is installed, set BLENDERMCP_ADDONS_DIR, or install addon.py manually from the repo.
+2026-09-08 00:12:27,050 - BlenderMCPServer - INFO - Connected to Blender at 127.0.0.1:9876
+2026-09-08 00:12:27,050 - BlenderMCPServer - INFO - Created new persistent connection to Blender
+2026-09-08 00:12:27,050 - BlenderMCPServer - INFO - Sending command: get_addon_info with params: None
+2026-09-08 00:12:27,050 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 00:12:27,077 - BlenderMCPServer - INFO - Received complete response (358 bytes)
+2026-09-08 00:12:27,077 - BlenderMCPServer - INFO - Received 358 bytes of data
+2026-09-08 00:12:27,077 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 00:12:27,077 - BlenderMCPServer - INFO - Blender addon up to date (protocol 5, addon [1, 6], Blender 5.2.1 LTS)
+2026-09-08 00:12:27,077 - BlenderMCPServer - INFO - Successfully connected to Blender on startup
+2026-09-08 00:12:27,083 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2026-09-08 00:12:27,091 - BlenderMCPServer - INFO - Sending command: execute_code with params: {'code': 'import bpy\nimport json\nscene=bpy.data.scenes.get("VC_ENVKIT_ExportMasters")\nif scene is None: scene=bpy.data.scenes.get("VC_ENVKIT_Export")\nassert scene is not None and bpy.context.window is not None\nassert "VC_UE_EXPORT_v001_manifest" in scene\nbpy.context.window.scene=scene\nprint("VC_UNREAL_EXPORT_SCENE_ACTIVE="+scene.name)\n'}
+2026-09-08 00:12:27,091 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-08 00:12:27,144 - BlenderMCPServer - INFO - Received complete response (120 bytes)
+2026-09-08 00:12:27,144 - BlenderMCPServer - INFO - Received 120 bytes of data
+2026-09-08 00:12:27,144 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-08 00:12:27,148 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2026-09-08 00:12:27,153 - BlenderMCPServer - INFO - Disconnecting from Blender on shutdown
+2026-09-08 00:12:27,153 - BlenderMCPServer - INFO - BlenderMCP server shut down
+{"meta": null, "content": [{"type": "text", "text": "Code executed successfully: VC_UNREAL_EXPORT_SCENE_ACTIVE=VC_ENVKIT_ExportMasters\n", "annotations": null, "meta": null}], "structuredContent": {"result": "Code executed successfully: VC_UNREAL_EXPORT_SCENE_ACTIVE=VC_ENVKIT_ExportMasters\n"}, "isError": false}

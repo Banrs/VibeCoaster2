@@ -1,0 +1,21 @@
+2026-09-07 23:53:58,005 - BlenderMCPServer - INFO - BlenderMCP server starting up
+2026-09-07 23:53:58,005 - BlenderMCPServer - INFO - Could not find a Blender addons folder. If Blender is installed, set BLENDERMCP_ADDONS_DIR, or install addon.py manually from the repo.
+2026-09-07 23:53:58,006 - BlenderMCPServer - INFO - Connected to Blender at 127.0.0.1:9876
+2026-09-07 23:53:58,006 - BlenderMCPServer - INFO - Created new persistent connection to Blender
+2026-09-07 23:53:58,006 - BlenderMCPServer - INFO - Sending command: get_addon_info with params: None
+2026-09-07 23:53:58,006 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-07 23:53:58,053 - BlenderMCPServer - INFO - Received complete response (359 bytes)
+2026-09-07 23:53:58,053 - BlenderMCPServer - INFO - Received 359 bytes of data
+2026-09-07 23:53:58,053 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-07 23:53:58,053 - BlenderMCPServer - INFO - Blender addon up to date (protocol 5, addon [1, 6], Blender 4.5.13 LTS)
+2026-09-07 23:53:58,053 - BlenderMCPServer - INFO - Successfully connected to Blender on startup
+2026-09-07 23:53:58,061 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2026-09-07 23:53:58,061 - BlenderMCPServer - INFO - Sending command: get_scene_info with params: None
+2026-09-07 23:53:58,061 - BlenderMCPServer - INFO - Command sent, waiting for response...
+2026-09-07 23:53:58,117 - BlenderMCPServer - INFO - Received complete response (305 bytes)
+2026-09-07 23:53:58,117 - BlenderMCPServer - INFO - Received 305 bytes of data
+2026-09-07 23:53:58,117 - BlenderMCPServer - INFO - Response parsed, status: success
+2026-09-07 23:53:58,122 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2026-09-07 23:53:58,126 - BlenderMCPServer - INFO - Disconnecting from Blender on shutdown
+2026-09-07 23:53:58,126 - BlenderMCPServer - INFO - BlenderMCP server shut down
+{"meta": null, "content": [{"type": "text", "text": "{\n  \"name\": \"Scene\",\n  \"object_count\": 3,\n  \"objects\": [\n    {\n      \"name\": \"Cube\",\n      \"type\": \"MESH\",\n      \"location\": [\n        0.0,\n        0.0,\n        0.0\n      ]\n    },\n    {\n      \"name\": \"Light\",\n      \"type\": \"LIGHT\",\n      \"location\": [\n        4.08,\n        1.01,\n        5.9\n      ]\n    },\n    {\n      \"name\": \"Camera\",\n      \"type\": \"CAMERA\",\n      \"location\": [\n        7.36,\n        -6.93,\n        4.96\n      ]\n    }\n  ],\n  \"materials_count\": 1\n}", "annotations": null, "meta": null}], "structuredContent": {"result": "{\n  \"name\": \"Scene\",\n  \"object_count\": 3,\n  \"objects\": [\n    {\n      \"name\": \"Cube\",\n      \"type\": \"MESH\",\n      \"location\": [\n        0.0,\n        0.0,\n        0.0\n      ]\n    },\n    {\n      \"name\": \"Light\",\n      \"type\": \"LIGHT\",\n      \"location\": [\n        4.08,\n        1.01,\n        5.9\n      ]\n    },\n    {\n      \"name\": \"Camera\",\n      \"type\": \"CAMERA\",\n      \"location\": [\n        7.36,\n        -6.93,\n        4.96\n      ]\n    }\n  ],\n  \"materials_count\": 1\n}"}, "isError": false}

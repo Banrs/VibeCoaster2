@@ -1,0 +1,22 @@
+{
+  "access": "public-metadata",
+  "bytes": 504,
+  "fetch_error": "",
+  "http_status": 200,
+  "location": "Six Flags Qiddiya City",
+  "num_recordings": 1,
+  "parsed_ok": true,
+  "probe_outcome": "verified-metadata",
+  "provenance_file": "raw/rideInfo-4804.provenance.json",
+  "raw_file": "raw/rideInfo-4804.json",
+  "raw_preserved": false,
+  "recording_ids": [
+    4804
+  ],
+  "retrieved_utc": "2026-09-06T13:15:04Z",
+  "rideInfo_id": 4804,
+  "ride_name": "Falcon's Flight",
+  "ride_slug": "falcons-flight",
+  "sha256": "afaf54831275af5cb75a59cd61c0b30b3dd09d06f87c3dc81815c02c068a17dc",
+  "source_url": "https://rideforcesdb.com/rideInfo?id=4804"
+}

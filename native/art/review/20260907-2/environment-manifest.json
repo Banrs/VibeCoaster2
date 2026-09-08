@@ -1,0 +1,379 @@
+{
+  "schema": 1,
+  "kit": "VC_ENVKIT",
+  "units": "metres",
+  "axes": "+X forward, +Z up, -Y rider-right",
+  "sourceBlend": "D:/Coding/Codex/Vibecoasterjs/native/art/source/environment/EnvironmentKit.blend",
+  "runtimeIntegrated": false,
+  "supportReference": {
+    "sourceSave": "D:/Coding/Codex/Vibecoasterjs/native/unreal/Saved/RuntimeVerification/20260907-folded-final/canyon42-profile/Saved/Designs/Accepted.vcdesign",
+    "sourceSha256": "26656c8b0aa12a6536513dc811a67576932c1caef57f0bdeeee41aa24dc6e336",
+    "saveGenerationVersion": "0.7.0-folded.1",
+    "integrity": "COASTER5 byte count and FNV-1a checksum verified; source is previously accepted runtime design; not a new physics revalidation"
+  },
+  "supportIndex": 72,
+  "supportMemberCount": 92,
+  "assets": [
+    {
+      "name": "SM_StationPlatformPanel",
+      "status": "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW",
+      "pivot": "Top centre; inner platform edge is local -Y. Tile along +X. Rotate opposite-side instances 180 degrees about Z.",
+      "boundsMinimumM": [
+        -1.496000051498413,
+        -1.9249999523162842,
+        -0.800000011920929
+      ],
+      "boundsMaximumM": [
+        1.496000051498413,
+        1.9249999523162842,
+        0.0
+      ],
+      "declaredEnvelopeM": [
+        [
+          -1.5,
+          -1.925,
+          -0.8
+        ],
+        [
+          1.5,
+          1.925,
+          0
+        ]
+      ],
+      "partCount": 11,
+      "vertexCount": 528,
+      "materialSlots": [
+        "VC_ENVKIT_Concrete",
+        "VC_ENVKIT_ConcreteEdge",
+        "VC_ENVKIT_DarkRecess",
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_SafetyOchre"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationPlatformPanel.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationPlatformPanel.fbx"
+    },
+    {
+      "name": "SM_StationPlatformEndPanel_1m",
+      "status": "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW",
+      "pivot": "Top centre; inner platform edge is local -Y. Tile along +X. Rotate opposite-side instances 180 degrees about Z.",
+      "boundsMinimumM": [
+        -0.4959999918937683,
+        -1.9249999523162842,
+        -0.800000011920929
+      ],
+      "boundsMaximumM": [
+        0.4959999918937683,
+        1.9249999523162842,
+        0.0
+      ],
+      "declaredEnvelopeM": [
+        [
+          -0.5,
+          -1.925,
+          -0.8
+        ],
+        [
+          0.5,
+          1.925,
+          0
+        ]
+      ],
+      "partCount": 11,
+      "vertexCount": 528,
+      "materialSlots": [
+        "VC_ENVKIT_Concrete",
+        "VC_ENVKIT_ConcreteEdge",
+        "VC_ENVKIT_DarkRecess",
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_SafetyOchre"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationPlatformEndPanel_1m.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationPlatformEndPanel_1m.fbx"
+    },
+    {
+      "name": "SM_StationRoofPanel",
+      "status": "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW",
+      "pivot": "Canopy midplane centre; place at station up +5.40 m, tile along +X.",
+      "boundsMinimumM": [
+        -1.496000051498413,
+        -5.650000095367432,
+        -0.18000000715255737
+      ],
+      "boundsMaximumM": [
+        1.496000051498413,
+        5.650000095367432,
+        0.18000000715255737
+      ],
+      "declaredEnvelopeM": [
+        [
+          -1.5,
+          -5.65,
+          -0.18
+        ],
+        [
+          1.5,
+          5.65,
+          0.18
+        ]
+      ],
+      "partCount": 15,
+      "vertexCount": 720,
+      "materialSlots": [
+        "VC_ENVKIT_BlueSteel",
+        "VC_ENVKIT_DarkRecess",
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_LightDiffuser"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationRoofPanel.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationRoofPanel.fbx"
+    },
+    {
+      "name": "SM_StationPost",
+      "status": "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW",
+      "pivot": "Post base centre; full-size 5.22 m post, never stretch bolts or top cap.",
+      "boundsMinimumM": [
+        -0.20000000298023224,
+        -0.20000000298023224,
+        0.0
+      ],
+      "boundsMaximumM": [
+        0.20000000298023224,
+        0.20000000298023224,
+        5.21999979019165
+      ],
+      "declaredEnvelopeM": [
+        [
+          -0.2,
+          -0.2,
+          0
+        ],
+        [
+          0.2,
+          0.2,
+          5.22
+        ]
+      ],
+      "partCount": 9,
+      "vertexCount": 288,
+      "materialSlots": [
+        "VC_ENVKIT_BlueSteel",
+        "VC_ENVKIT_DarkRecess",
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_MachinedSteel"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationPost.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_StationPost.fbx"
+    },
+    {
+      "name": "SM_TrackTie",
+      "status": "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW",
+      "pivot": "Tie midpoint. Runtime places origin at rail up -0.19 m; repeat at canonical 3 m ties.",
+      "boundsMinimumM": [
+        -0.07000000029802322,
+        -0.824999988079071,
+        -0.07999999821186066
+      ],
+      "boundsMaximumM": [
+        0.07000000029802322,
+        0.824999988079071,
+        0.07999999821186066
+      ],
+      "declaredEnvelopeM": [
+        [
+          -0.07,
+          -0.825,
+          -0.08
+        ],
+        [
+          0.07,
+          0.825,
+          0.08
+        ]
+      ],
+      "partCount": 9,
+      "vertexCount": 288,
+      "materialSlots": [
+        "VC_ENVKIT_BlueSteel",
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_MachinedSteel"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_TrackTie.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_TrackTie.fbx"
+    },
+    {
+      "name": "REVIEW_TrackRailToSpineWeb",
+      "status": "REVIEW_ONLY_OUTSIDE_TIE_ENVELOPE",
+      "pivot": "Rail midpoint datum. Outside current tie box; DO NOT integrate before adding and validating static hardware solids.",
+      "boundsMinimumM": [
+        -0.04600000008940697,
+        -0.7200000286102295,
+        -0.6399999856948853
+      ],
+      "boundsMaximumM": [
+        0.04600000008940697,
+        0.7200000286102295,
+        -0.09000000357627869
+      ],
+      "declaredEnvelopeM": [
+        [
+          -0.09,
+          -0.72,
+          -0.71
+        ],
+        [
+          0.09,
+          0.72,
+          -0.085
+        ]
+      ],
+      "partCount": 2,
+      "vertexCount": 24,
+      "materialSlots": [
+        "VC_ENVKIT_ReviewCoral"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/REVIEW_TrackRailToSpineWeb.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/REVIEW_TrackRailToSpineWeb.fbx"
+    },
+    {
+      "name": "SM_SupportJoint_R032_L032",
+      "status": "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW",
+      "pivot": "Base centre, local +Z toward member top. Reference straight cylinder radius 0.32 m / length 0.32 m; regenerate per actual radius, do not inflate a solid.",
+      "boundsMinimumM": [
+        -0.3199999928474426,
+        -0.3199999928474426,
+        0.0
+      ],
+      "boundsMaximumM": [
+        0.3199999928474426,
+        0.3199999928474426,
+        0.3199999928474426
+      ],
+      "declaredEnvelopeM": [
+        [
+          -0.32,
+          -0.32,
+          0
+        ],
+        [
+          0.32,
+          0.32,
+          0.32
+        ]
+      ],
+      "partCount": 11,
+      "vertexCount": 288,
+      "materialSlots": [
+        "VC_ENVKIT_BlueSteel",
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_MachinedSteel"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_SupportJoint_R032_L032.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_SupportJoint_R032_L032.fbx"
+    },
+    {
+      "name": "SM_FootingCap_R180_H020",
+      "status": "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW",
+      "pivot": "Cap-slice base centre. Reference radius 1.8 m / depth 0.20 m; must sit wholly inside each saved footing, not on top of it.",
+      "boundsMinimumM": [
+        -1.7999999523162842,
+        -1.7999999523162842,
+        0.0
+      ],
+      "boundsMaximumM": [
+        1.7999999523162842,
+        1.7999999523162842,
+        0.20000000298023224
+      ],
+      "declaredEnvelopeM": [
+        [
+          -1.8,
+          -1.8,
+          0
+        ],
+        [
+          1.8,
+          1.8,
+          0.2
+        ]
+      ],
+      "partCount": 10,
+      "vertexCount": 320,
+      "materialSlots": [
+        "VC_ENVKIT_Concrete",
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_MachinedSteel"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_FootingCap_R180_H020.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/SM_FootingCap_R180_H020.fbx"
+    },
+    {
+      "name": "REVIEW_CoordinateWitness",
+      "status": "REVIEW_ONLY_IMPORT_WITNESS",
+      "pivot": "One-metre cube centred at (0,0,0.5); ochre nose +X, coral rider-right -Y. Verify single UE handedness conversion.",
+      "boundsMinimumM": [
+        -0.5,
+        -1.600000023841858,
+        0.0
+      ],
+      "boundsMaximumM": [
+        1.600000023841858,
+        0.5,
+        1.0
+      ],
+      "declaredEnvelopeM": [
+        [
+          -0.5,
+          -1.6,
+          0
+        ],
+        [
+          1.6,
+          0.5,
+          1
+        ]
+      ],
+      "partCount": 3,
+      "vertexCount": 104,
+      "materialSlots": [
+        "VC_ENVKIT_Graphite",
+        "VC_ENVKIT_ReviewCoral",
+        "VC_ENVKIT_SafetyOchre"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/REVIEW_CoordinateWitness.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/REVIEW_CoordinateWitness.fbx"
+    },
+    {
+      "name": "REVIEW_AdaptiveTower_Saved072",
+      "status": "REVIEW_ONLY_EXACT_SAVED_MEMBER_ASSEMBLY",
+      "pivot": "Assembly pivot is saved support base. Source world axes retained. Each member pivot is its own base and local +Z follows its actual endpoint.",
+      "boundsMinimumM": [
+        -7.000843048095703,
+        -7.000904083251953,
+        -1.55474853515625
+      ],
+      "boundsMaximumM": [
+        7.000843048095703,
+        11.992616653442383,
+        76.0311279296875
+      ],
+      "declaredEnvelopeM": null,
+      "partCount": 92,
+      "vertexCount": 5888,
+      "materialSlots": [
+        "VC_ENVKIT_BlueSteel",
+        "VC_ENVKIT_Concrete"
+      ],
+      "glb": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/REVIEW_AdaptiveTower_Saved072.glb",
+      "fbx": "D:/Coding/Codex/Vibecoasterjs/native/art/exports/environment/REVIEW_AdaptiveTower_Saved072.fbx"
+    }
+  ],
+  "limitations": [
+    "No structural engineering certification.",
+    "Rail/spine paths remain canonical procedural geometry.",
+    "Review web extends outside the tie envelope and cannot be integrated yet.",
+    "Footing/joint references require regenerated dimensions per actual saved solid; do not stretch details.",
+    "Default station assembly is a geometry preview; no invented stairs or ground texture.",
+    "UE import scale/handedness requires the asymmetric witness and 1 m cube test.",
+    "Adaptive tower member rotations encode local +Z along each saved member; object scales are one."
+  ]
+}
