@@ -324,6 +324,54 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
     VibeMesh::FPreparedRide Bad; Bad.Design = Rejected;
     TestFalse(TEXT("Rejected designs cannot become ride meshes"), VibeMesh::Prepare(Bad, [] { return false; }));
     TestTrue(TEXT("Rejection creates no render buffers"), Bad.Chunks.IsEmpty() && Bad.Station.IsEmpty() && Bad.Ties.IsEmpty());
+
+    // Check actual canyon render triangles against the continuous heightfield,
+    // not just vertices (which also passed on the visibly faceted 20 m grid).
+    Request.terrain = coaster::Terrain::seeded(coaster::TerrainKind::Canyon, 42);
+    auto Canyon = std::make_shared<coaster::Design>(coaster::generate(Request));
+    if (!TestTrue(TEXT("Canyon tessellation fixture passes full acceptance"), Canyon->accepted())) return false;
+    VibeMesh::FPreparedRide Cliff; Cliff.Design = Canyon;
+    if (!TestTrue(TEXT("Accepted canyon prepares within unchanged render budgets"), VibeMesh::Prepare(Cliff, [] { return false; })))
+    { AddError(Cliff.Error); return false; }
+    const auto& Landscape = Canyon->request.terrain;
+    int64 CliffSamples = 0, CliffVertices = 0;
+    double HeightError = 0, NormalErrorDegrees = 0;
+    for (const auto& Chunk : Cliff.Chunks)
+    {
+        CliffVertices += Chunk.Vertices.Num();
+        if (!Chunk.Terrain) continue;
+        for (int32 I = 0; I < Chunk.Indices.Num(); I += 3)
+        {
+            FVector P[3], N[3]; bool NearRide = true;
+            for (int32 J = 0; J < 3; ++J)
+            {
+                P[J] = Chunk.Vertices[Chunk.Indices[I + J]]; N[J] = Chunk.Normals[Chunk.Indices[I + J]];
+                NearRide &= P[J].X >= Cliff.Bounds.Min.X && P[J].X <= Cliff.Bounds.Max.X &&
+                    P[J].Y >= Cliff.Bounds.Min.Y && P[J].Y <= Cliff.Bounds.Max.Y;
+            }
+            if (!NearRide) continue;
+            // Centroid and edge midpoints independently assess linear raster
+            // interpolation; a finer derivative is the reference normal.
+            for (const FVector& Weight : {FVector(1. / 3), FVector(.5, .5, 0), FVector(.5, 0, .5), FVector(0, .5, .5)})
+            {
+                const FVector V = P[0] * Weight.X + P[1] * Weight.Y + P[2] * Weight.Z;
+                const auto Q = VibeCoordinates::CorePosition({V.X, V.Y, V.Z});
+                const double DX = (Landscape.height(Q.x + .01, Q.y) - Landscape.height(Q.x - .01, Q.y)) / .02;
+                const double DY = (Landscape.height(Q.x, Q.y + .01) - Landscape.height(Q.x, Q.y - .01)) / .02;
+                if (std::hypot(DX, DY) < .2) continue; // Exercise the wall, not only the rims.
+                const FVector Normal = (N[0] * Weight.X + N[1] * Weight.Y + N[2] * Weight.Z).GetSafeNormal();
+                const FVector Reference = VibeMesh::Direction(coaster::unit({-DX, -DY, 1}));
+                HeightError = FMath::Max(HeightError, std::abs(Q.z - Landscape.height(Q.x, Q.y)));
+                NormalErrorDegrees = FMath::Max(NormalErrorDegrees, FMath::RadiansToDegrees(std::acos(FMath::Clamp(FVector::DotProduct(Normal, Reference), -1., 1.))));
+                ++CliffSamples;
+            }
+        }
+    }
+    AddInfo(FString::Printf(TEXT("Canyon near-wall samples=%lld max height error=%.6f m normal error=%.6f degrees vertices=%lld chunks=%d"),
+        CliffSamples, HeightError, NormalErrorDegrees, CliffVertices, Cliff.Chunks.Num()));
+    TestTrue(TEXT("Actual near-wall triangles stay within 0.35 m of the canonical cliff"), CliffSamples > 10000 && HeightError < .35);
+    TestTrue(TEXT("Interpolated near-wall normals stay within 0.6 degrees of the continuous cliff"), NormalErrorDegrees < .6);
+    TestTrue(TEXT("Fine canyon rendering retains aggregate budgets"), CliffVertices <= 2000000 && Cliff.Chunks.Num() <= 4096);
     return true;
 }
 
@@ -529,30 +577,33 @@ bool FCoasterTerrainBackdropTest::RunTest(const FString& Parameters)
     }
     TestTrue(TEXT("Steep-wall halo keeps <=20 m side spacing through 960 m"), DenseHalo && RingPlan[48].MinX == X0 - 960);
 
-    std::set<Edge> ExpectedInner;
-    for (int32 I = 0; I < 2 * 16; ++I)
-    {
-        ExpectedInner.insert(EdgeKey(Point{X0 + I * 20, Y0}, Point{X0 + (I + 1) * 20, Y0}));
-        ExpectedInner.insert(EdgeKey(Point{X0 + I * 20, Y1}, Point{X0 + (I + 1) * 20, Y1}));
-    }
-    for (int32 I = 0; I < 3 * 16; ++I)
-    {
-        ExpectedInner.insert(EdgeKey(Point{X0, Y0 + I * 20}, Point{X0, Y0 + (I + 1) * 20}));
-        ExpectedInner.insert(EdgeKey(Point{X1, Y0 + I * 20}, Point{X1, Y0 + (I + 1) * 20}));
-    }
     const auto BoundsUnchanged = [&](const VibeMesh::FPreparedRide& P)
     { return P.Bounds.IsValid == OriginalBounds.IsValid && P.Bounds.Min == OriginalBounds.Min && P.Bounds.Max == OriginalBounds.Max; };
-    for (const auto Kind : {coaster::TerrainKind::Flat, coaster::TerrainKind::Hills, coaster::TerrainKind::Canyon})
+    for (const auto& Terrain : {coaster::Terrain::seeded(coaster::TerrainKind::Flat, 42),
+        coaster::Terrain::seeded(coaster::TerrainKind::Hills, 42), coaster::Terrain::seeded(coaster::TerrainKind::Canyon, 42),
+        coaster::Terrain{coaster::TerrainKind::Canyon}})
     {
-        const coaster::Terrain Terrain = coaster::Terrain::seeded(Kind, 42);
-        const bool DetailedCliffs = Kind == coaster::TerrainKind::Canyon;
+        const bool DetailedCliffs = Terrain.kind == coaster::TerrainKind::Canyon && Terrain.cliffHeight > 0;
+        std::set<Edge> ExpectedInner;
+        const double NearStep = DetailedCliffs ? 5. : 20.;
+        for (int32 I = 0; I < (X1 - X0) / NearStep; ++I)
+        {
+            ExpectedInner.insert(EdgeKey(Point{X0 + I * NearStep, Y0}, Point{X0 + (I + 1) * NearStep, Y0}));
+            ExpectedInner.insert(EdgeKey(Point{X0 + I * NearStep, Y1}, Point{X0 + (I + 1) * NearStep, Y1}));
+        }
+        for (int32 I = 0; I < (Y1 - Y0) / NearStep; ++I)
+        {
+            ExpectedInner.insert(EdgeKey(Point{X0, Y0 + I * NearStep}, Point{X0, Y0 + (I + 1) * NearStep}));
+            ExpectedInner.insert(EdgeKey(Point{X1, Y0 + I * NearStep}, Point{X1, Y0 + (I + 1) * NearStep}));
+        }
         const auto CasePlan = VibeMesh::TerrainBackdrop::BuildRingPlan(X0, Y0, 2, 3, DetailedCliffs);
         const double Extension = DetailedCliffs ? 81900 + 48 * 20 : 81900;
         const int32 ChunkLimit = DetailedCliffs ? VibeMesh::TerrainBackdrop::CliffChunkVertices : VibeMesh::TerrainBackdrop::DefaultChunkVertices;
         int64 CaseTriangles = 0;
         for (int32 Ring = 1; Ring < CasePlan.Num(); ++Ring) CaseTriangles += 2 * int64(CasePlan[Ring - 1].SegmentsX + CasePlan[Ring - 1].SegmentsY + CasePlan[Ring].SegmentsX + CasePlan[Ring].SegmentsY);
         TestEqual(TEXT("Only actual cliff profiles add dense halo bands"), CasePlan.Num(), DetailedCliffs ? 61 : 13);
-        const FString Label(UTF8_TO_TCHAR(Terrain.name().c_str()));
+        const FString Label = FString(UTF8_TO_TCHAR(Terrain.name().c_str())) +
+            (Terrain.kind == coaster::TerrainKind::Canyon && !DetailedCliffs ? TEXT(" default profile") : TEXT(""));
         VibeMesh::FPreparedRide Prepared; Prepared.Bounds = OriginalBounds;
         if (!TestTrue(Label + TEXT(": backdrop prepares"), VibeMesh::AppendTerrainBackdrop(Prepared, Terrain, X0, Y0, 2, 3, [] { return false; })))
         { AddError(Prepared.Error); return false; }

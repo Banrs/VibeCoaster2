@@ -266,6 +266,16 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         break;
     case FState::OverviewView:
         if (Now - S.StageStarted < 1) break;
+        for (const auto& Knot : PC.Ride->ActiveDesign()->track.knots)
+        {
+            FVector2D Screen;
+            const auto Position = VibeCoordinates::Position(Knot.position);
+            if (!PC.ProjectWorldLocationToScreen(FVector(Position.X, Position.Y, Position.Z), Screen) ||
+                Screen.X < 0 || Screen.X > Width || Screen.Y < 0 || Screen.Y > Height)
+            { S.Fail(TEXT("Overview clips the accepted circuit")); break; }
+        }
+        if (S.Stage == FState::Finish) break;
+        S.Event(TEXT("overview-circuit-framing-passed"));
         S.Capture(PC, TEXT("overview")); S.Advance(FState::OverviewCaptured); break;
     case FState::OverviewCaptured:
         PC.Ride->ToggleOverview(); S.Advance(FState::StationView); break;

@@ -31,8 +31,16 @@ Support compactBent(const TrackSample& q,Vec3 right,double distance,const Terrai
     const double localHeight=attachment.z-terrain.height(attachment.x,attachment.y);
     // A low pier needs a short rail joint, not the same two-metre neck as a
     // tall bent. The complete resulting steel still faces the rider sweep.
-    const double standoff=paired?2.:std::clamp(localHeight-3.,.6,2.);
-    const Vec3 cap=attachment-q.up*standoff;
+    double standoff=paired?2.:std::clamp(localHeight-3.,.6,2.);
+    Vec3 cap=attachment-q.up*standoff;
+    if(!paired&&standoff>.6&&cap.z-terrain.height(cap.x,cap.y)<3){
+        // Tilt moves the cap onto different terrain. Shorten the neck at its
+        // actual ground location instead of relaxing the pier-height minimum.
+        double lower=.6,upper=standoff;
+        for(int i=0;i<32;++i){double mid=(lower+upper)*.5;Vec3 trial=attachment-q.up*mid;
+            if(trial.z-terrain.height(trial.x,trial.y)>=3)lower=mid;else upper=mid;}
+        standoff=lower;cap=attachment-q.up*standoff;
+    }
     const Vec3 centre{cap.x,cap.y,terrain.height(cap.x,cap.y)};
     Support s{centre,cap,attachment,true,distance,{}};
     const double height=cap.z-centre.z;

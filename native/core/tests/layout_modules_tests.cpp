@@ -99,10 +99,30 @@ int main(){try{
     near(largeModule.sampledMaxFrameTwistPerMeter,smallModule.sampledMaxFrameTwistPerMeter*.5,2e-10,"Uniform scaling halves spatial twist");
     auto rounder=small;rounder.pitchShape=-.3;auto rounderModule=buildReversingModule(rounder);good(rounderModule);
     check(std::abs(rounderModule.pitchLength-smallModule.pitchLength)>1,"Shape control changes integrated proportions at fixed height");
+    // A compound inversion keeps the centerline and endpoints while sharing
+    // pitch and physical roll over a finite arc, rather than stopping one
+    // motion completely before the other begins.
+    for(auto kind:{ReversingModuleKind::Immelmann,ReversingModuleKind::DiveLoop})for(int hand:{-1,1}){
+        auto compound=small;compound.kind=kind;compound.rollDirection=hand;compound.rollOverlap=.3;
+        auto m=buildReversingModule(compound);good(m);checkJoins(m.track);
+        auto separate=compound;separate.rollOverlap=0;auto original=buildReversingModule(separate);good(original);
+        nearVector(m.exit.position,original.exit.position,1e-12,"Compound roll preserves endpoint position");
+        nearVector(m.exit.up,original.exit.up,1e-12,"Compound roll restores exit orientation");
+        near(m.track.length,original.track.length,1e-9,"Compound roll does not compress the centerline");
+        bool simultaneous=false;
+        for(size_t i=m.pitchBeginIndex;i<m.pitchEndIndex;++i){
+            auto q=sampleSpanKinematics(m.track,i,.5);
+            simultaneous|=norm(q.sample.curvature)>1e-4&&std::abs(dot(q.upS,q.sample.right))>1e-3;
+        }
+        check(simultaneous,"Pitch and roll must actually overlap");
+        checkJoins(compile(m.points,false));
+        check(m.sampledMaxFrameTwistPerMeter<original.sampledMaxFrameTwistPerMeter,"Sharing the roll arc reduces its peak spatial twist");
+    }
     auto reject=[](ReversingModuleRequest r,const char* expected){auto value=buildReversingModule(r);check(!value.report.valid()&&!value.geometryBuilt&&!value.canonicalBuilt&&value.report.errors.front().code==expected,"Unsupported geometry is rejected explicitly");};
     request=ReversingModuleRequest{};request.height=NAN;reject(request,"LAYOUT_MODULE_INPUT");
     request=ReversingModuleRequest{};request.pitchShape=.66;reject(request,"LAYOUT_MODULE_INPUT");
     request=ReversingModuleRequest{};request.rollShape=INFINITY;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.rollOverlap=.41;reject(request,"LAYOUT_MODULE_INPUT");
     request=ReversingModuleRequest{};request.entry.up=request.entry.forward;reject(request,"LAYOUT_MODULE_INPUT");
     request=ReversingModuleRequest{};request.portLength=1;reject(request,"LAYOUT_MODULE_INPUT");
     request=ReversingModuleRequest{};request.rollDirection=0;reject(request,"LAYOUT_MODULE_INPUT");

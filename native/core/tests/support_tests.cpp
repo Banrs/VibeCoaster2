@@ -50,7 +50,10 @@ int main(int argc,char** argv){try{
     for(const auto& tower:banked.supports){auto frame=banked.track.sample(tower.trackDistance);
         const double standoff=-dot(tower.top-tower.attachment,frame.up);check(std::abs(standoff-2)<1e-8||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Tower cap uses a bounded canonical under-spine stand-off across banking");}
     const auto bankedPath=out/"banked-outreach.coaster";check(saveDesign(banked,bankedPath.string(),error),"Banked outreach saves after independent validation: "+error);Design bankedReplay;
-    check(loadDesign(bankedPath.string(),bankedReplay,error),"Banked outreach normally replays: "+error);check(reportJson(banked)==reportJson(bankedReplay),"Banked outreach complete physical replay is exact");
+    check(loadDesign(bankedPath.string(),bankedReplay,error),"Banked outreach normally replays: "+error);
+    const std::string pacingWarning="Moving ride exceeds the 180-second pacing goal; physical acceptance is unchanged.";
+    for(const auto* ride:{&banked,&bankedReplay})check((std::find(ride->report.warnings.begin(),ride->report.warnings.end(),pacingWarning)!=ride->report.warnings.end())==(movingRideSeconds(*ride)>180),"Pacing warning derives from actual duration on both generation and saved replay");
+    check(reportJson(banked)==reportJson(bankedReplay),"Banked outreach complete physical replay is exact");
     auto good=out/"new.coaster";check(saveDesign(d,good.string(),error),"New save: "+error);Design replay;check(loadDesign(good.string(),replay,error),"New load: "+error);check(reportJson(d)==reportJson(replay),"Schema5 exact independent replay");for(size_t i=0;i<d.supports.size();++i)sameSupport(d.supports[i],replay.supports[i]);
     auto support=d.supports.front();
     check(!support.members.empty()&&support.members.front().kind==SupportMemberKind::Footing,"Malformed-footing fixtures start from a real footing");

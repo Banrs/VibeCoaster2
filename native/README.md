@@ -1,5 +1,8 @@
 # VibeCoaster native game
 
+Active source is **0.8.0-flow.1 / COASTER5**, undergoing final Windows runtime
+review. The published preview below remains available until that review completes.
+
 **Windows preview: 0.7.3-review.5.** [Download and play](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.5) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
 
 Extract the entire Windows ZIP, then open **Play VibeCoaster.cmd** or
@@ -20,8 +23,8 @@ targets; it does not claim an intensity record or silently substitute a benchmar
 ## Existing implementation
 
 This is the single active C++/UE5 game. The obsolete TypeScript/browser
-implementation was archived and removed at the user's request. Geometry/save identity remains **0.7.2-pacing.2 / COASTER5**, so the
-0.7.3 application updates retain compatible p2 saves.
+implementation was archived and removed at the user's request. Source geometry/save
+identity is **0.8.0-flow.1 / COASTER5**; older saves require the preserved older app.
 
 - Canonical G3 septic centreline and C2 orientation shared by dynamics, rendering,
   rider forces, clearance and saved geometry.

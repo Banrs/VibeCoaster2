@@ -52,6 +52,9 @@ def distribute(package, output, version):
         if sha256(target) != expected:
             raise IOError(f'Copy verification failed: {relative}')
         source_files.append(dict(path=relative.as_posix(), sha256=expected, bytes=target.stat().st_size))
+    repository = Path(__file__).resolve().parents[2]
+    for name in ('LICENSE', 'LICENSE-SCOPE.md'):
+        shutil.copy2(repository / name, folder / name)
     (folder / 'Play VibeCoaster.cmd').write_bytes(
         b'@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
         b'start "" "%~dp0VibeCoaster.exe" -windowed -ResX=1600 -ResY=900 -ExecCmds="t.MaxFPS 60"\r\n')
@@ -76,10 +79,11 @@ numerical acceptance requirements; it is not an intensity record claim.
 If Windows reports missing MSVC runtime DLLs, run the included
 Engine/Extras/Redist/en-us/vc_redist.x64.exe, then start the game again.
 This unsigned development preview may show a Windows publisher warning.
-Mac binaries are not available yet. No new performance benchmark was run
-for this delivery while Cities: Skylines 2 was open.
+Mac binaries are not available yet. See the delivery report for the exact
+validation and performance scope of this version.
 
-Source and status: https://github.com/Banrs/OpenVibeCoaster
+License scope and runtime terms: LICENSE-SCOPE.md (included in this ZIP).
+Source and status: https://github.com/Banrs/VibeCoaster2
 ''', encoding='utf-8')
     (folder / 'runtime-files.json').write_text(json.dumps(dict(version=version, files=source_files), indent=2) + '\n', encoding='utf-8')
     with zipfile.ZipFile(archive, 'x', zipfile.ZIP_DEFLATED, compresslevel=1) as zipped:

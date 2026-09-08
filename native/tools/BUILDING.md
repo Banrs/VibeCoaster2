@@ -1,6 +1,6 @@
 # Build the native game and numerical tools
 
-Application: 0.7.3-review.5. Geometry/save identity: 0.7.2-pacing.2 / COASTER5.
+Current source: application and geometry/save identity 0.8.0-flow.1 / COASTER5.
 Windows UE5.8.2 builds and packages successfully. Mac/Metal still needs a Mac.
 
 ## Current source build
@@ -24,7 +24,7 @@ to bound memory use. Build into a fresh timestamped package:
 
 ```powershell
 & .\native\unreal\scripts\package.ps1 -UnrealRoot 'D:\Games\Epic Games\UE_5.8'
-python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.7.3-review.5
+python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.8.0-flow.1
 ```
 
 The distribution helper requires Python 3.11+, verifies copied runtime files and
@@ -32,7 +32,7 @@ ZIP CRCs, retains notices/MSVC redist, excludes debug symbols and refuses to
 replace prior output. Keep the whole extracted game folder together.
 
 [Player download and controls](../DELIVERY.md). [Mac preparation](../unreal/MACOS.md).
-No performance benchmarks were rerun for the recovery delivery.
+Consult the delivery report for that package's measured performance scope.
 
 Python diagnostic tools/tests use the recorded plotting dependency:
 

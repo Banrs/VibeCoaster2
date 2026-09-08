@@ -33,6 +33,7 @@ struct FRing
     }
 };
 constexpr int32 DenseRings = 48, CoarseRings = 12;
+constexpr int32 CliffNearCells = 64, DefaultNearCells = 16;
 // Each chunk becomes one procedural component/section. Keep cliff geometry
 // intact while avoiding hundreds of tiny draw submissions in the dense halo.
 constexpr int32 CliffChunkVertices = 6144, DefaultChunkVertices = 288;
@@ -43,7 +44,8 @@ inline TArray<FRing> BuildRingPlan(double X0, double Y0, int32 NX, int32 NY, boo
 {
     const int32 DenseBands = DetailedCliffs ? DenseRings : 0;
     TArray<FRing> Plan; Plan.Reserve(1 + DenseBands + CoarseRings);
-    Plan.Add({X0, Y0, X0 + NX * 320., Y0 + NY * 320., NX * 16, NY * 16});
+    const int32 NearCells = DetailedCliffs ? CliffNearCells : DefaultNearCells;
+    Plan.Add({X0, Y0, X0 + NX * 320., Y0 + NY * 320., NX * NearCells, NY * NearCells});
     for (int32 Ring = 0; Ring < DenseBands + CoarseRings; ++Ring)
     {
         const FRing Inner = Plan.Last();
@@ -59,7 +61,8 @@ inline TArray<FRing> BuildRingPlan(double X0, double Y0, int32 NX, int32 NY, boo
 }
 
 // Call after the existing NX*NY near-terrain tiles, before Prepare returns.
-// X0/Y0 and NX/NY must describe those exact 320m tiles (16 cells of 20m).
+// X0/Y0 and NX/NY describe the exact 320 m near tiles. The zipper joins
+// their 5 m cliff / 20 m other edges to the unchanged 20 m outer halo.
 // Out.Bounds intentionally remains ride-only: overview framing must not grow.
 // Like Prepare, false on cancellation means discard the unfinished candidate;
 // already appended staging chunks are never committed by this helper.

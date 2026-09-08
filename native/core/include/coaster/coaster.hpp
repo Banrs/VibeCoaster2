@@ -13,7 +13,7 @@
 namespace coaster {
 constexpr double pi=3.14159265358979323846, gravity=9.80665;
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
-constexpr const char* generatorVersion="0.7.2-pacing.2";
+constexpr const char* generatorVersion="0.8.0-flow.1";
 struct Vec3 {
     double x{},y{},z{};
     Vec3 operator+(Vec3 b) const { return {x+b.x,y+b.y,z+b.z}; }
@@ -234,6 +234,9 @@ ValidationReport compareSimulationConvergence(const SimulationResult&,const Simu
 void verifyConvergence(Design&,Cancel cancel={});
 void buildSupportLayout(Design&,Cancel cancel={});
 Design generate(const GenerationRequest&,Cancel cancel={},std::function<void(int,const std::string&)> progress={});
+// Completed ride: powered departure until the train centre reaches final braking.
+// Derived from replay and the terminal Station operation, including after load.
+double movingRideSeconds(const Design&);
 bool saveDesign(const Design&,const std::string& path,std::string& error,Cancel cancel={});
 bool loadDesign(const std::string& path,Design&,std::string& error,Cancel cancel={});
 std::string reportJson(const Design&);

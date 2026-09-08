@@ -42,3 +42,4 @@ in [MACOS.md](native/unreal/MACOS.md); a Mac binary is not yet verified.
 
 Original source uses the repository [license](LICENSE). Unreal and bundled
 runtime components retain their own redistribution notices in the player ZIP.
+See [license scope and runtime terms](LICENSE-SCOPE.md).

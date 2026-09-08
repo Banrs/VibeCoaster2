@@ -98,20 +98,42 @@ static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,
             q.origin=stationAnchor+inFrame({0,double(placement%3-1)*180,0},q.heading);
             double station=req.terrain.height(q.origin.x,q.origin.y),lo=1e9,hi=-1e9,totalDeviation=0,slope2=0,valleyNear=0,totalValleyDistance=0;Vec3 previous{};double previousGround=0,previousValley=0;bool first=true;
             for(const auto& local:corridor){
-                Vec3 point=q.origin+inFrame(local,q.heading);double ground=req.terrain.height(point.x,point.y);lo=std::min(lo,ground);hi=std::max(hi,ground);totalDeviation+=std::abs(ground-station);double valley=point.y-120*std::sin(point.x/850);totalValleyDistance+=std::abs(valley);valleyNear+=std::abs(valley)<210?1:0;if(!first&&valley*previousValley<0)++q.valleyCrossings;previousValley=valley;
+                Vec3 point=q.origin+inFrame(local,q.heading);double ground=req.terrain.height(point.x,point.y);lo=std::min(lo,ground);hi=std::max(hi,ground);totalDeviation+=std::abs(ground-station);
+                Vec3 terrainPoint=inFrame({(point.x-req.terrain.offsetX)/req.terrain.horizontalScale,(point.y-req.terrain.offsetY)/req.terrain.horizontalScale,0},-req.terrain.headingRadians);
+                double valley=terrainPoint.y-120*std::sin(terrainPoint.x/850);totalValleyDistance+=std::abs(valley);valleyNear+=std::abs(valley)<210?1:0;if(!first&&valley*previousValley<0)++q.valleyCrossings;previousValley=valley;
                 if(!first){double span=norm(point-previous);if(span>1)slope2+=std::pow((ground-previousGround)/span,2);}first=false;previous=point;previousGround=ground;
             }
             q.groundMinimum=lo;q.groundMaximum=hi;q.valleyFraction=valleyNear/corridor.size();q.valleyDistance=totalValleyDistance/corridor.size();
             q.relief=hi-lo;q.deviation=totalDeviation/corridor.size();q.grade=std::sqrt(slope2/corridor.size());
             Vec3 stationEnd=q.origin+inFrame({80,0,0},q.heading);q.stationGrade=std::abs(req.terrain.height(stationEnd.x,stationEnd.y)-station)/80;
             if(req.terrain.kind==TerrainKind::Canyon&&!dramaticTerrain&&q.valleyFraction<.12)continue;
-            q.score=dramaticTerrain?2*std::abs(q.relief-200)+.1*q.deviation+200*q.grade+350*q.stationGrade+.003*q.length:1.5*q.relief+.5*q.deviation+200*q.grade+150*q.stationGrade+.003*q.length+(req.terrain.kind==TerrainKind::Canyon?100*(1-q.valleyFraction):0);
+            q.score=dramaticTerrain?2*std::abs(q.relief-req.terrain.cliffHeight)+.1*q.deviation+200*q.grade+350*q.stationGrade+q.length/65+100*(1-q.valleyFraction):1.5*q.relief+.5*q.deviation+200*q.grade+150*q.stationGrade+q.length/65+(req.terrain.kind==TerrainKind::Canyon?100*(1-q.valleyFraction):0);
             feasible.push_back(std::move(q));
         }
     }
     std::stable_sort(feasible.begin(),feasible.end(),[](const RoutePlan& a,const RoutePlan& b){return a.score<b.score;});return feasible;
 }
-static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
+struct AuthoringFeedback {
+    std::array<double,4> airtimeSpeed{65,65,65,65};
+    double reversalEnergyCorrection{};
+};
+struct CandidatePorts {
+    std::array<double,4> airtimeEntry{};
+    double reversalExit{},reversalSpeedHint{};
+};
+static double replayValueAt(const std::vector<Frame>& frames,double distance,bool time=false){
+    if(frames.empty())throw std::runtime_error("Authoring feedback requires an actual replay");
+    auto right=std::lower_bound(frames.begin(),frames.end(),distance,[](const Frame& f,double s){return f.distance<s;});
+    if(right==frames.begin())return time?right->time:right->speed;
+    if(right==frames.end())return time?frames.back().time:frames.back().speed;
+    const auto& left=*(right-1);double u=(distance-left.distance)/(right->distance-left.distance);
+    return time?left.time+u*(right->time-left.time):left.speed+u*(right->speed-left.speed);
+}
+double movingRideSeconds(const Design& d){
+    for(const auto& op:d.operations)if(op.kind==DriveKind::Station)return replayValueAt(d.simulation.frames,op.start,true);
+    throw std::runtime_error("Moving duration requires the terminal station brake");
+}
+static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,const AuthoringFeedback& feedback,CandidatePorts& ports){
     const int geometryAttempt=attempt/2,placementVariant=attempt%2;
     const bool dramaticTerrain=req.terrain.kind==TerrainKind::Canyon&&!req.terrain.isDefaultProfile();
     Design d;d.request=req;d.candidate=attempt;Random rng{req.seed};rng.next();int sides=4;bool helix=false;
@@ -131,21 +153,55 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
     // only six-corridor plans reserve its inward three-lane footprint.
     Random detail{req.seed^0x8d2f41b79a5c630eull};
     const bool reversingPair=true;
-    const double reversalHeight=std::max(84.,req.targets.inversionHeight+detail.range(7,14));
-    const double reversalRoll=detail.range(82,96),reversalConnector=detail.range(190,240);
-    const double reversalLead=2*reversalRoll+reversalConnector+200;
+    double reversalHeight=std::max(84.,req.targets.inversionHeight+detail.range(7,14));
+    const double reversalRoll=detail.range(82,96);detail.range(190,240);
     const double reversalLane=detail.range(95,125),reversalSeparation=detail.range(155,190);
     const double reversalPitchShape=detail.range(-.12,.08),reversalRollShape=detail.range(-.3,.3);
     const double reversalApexSpeed=detail.range(23,26);
     const int reversalHand=(detail.next()&1)?1:-1;
-    const double reversalNetLength=detail.range(930,1010);
+    const double reversalLengthPreference=detail.range(930,1010)/970;
+    // Scale the pitch from its authored curvature and measured entry-energy
+    // correction. Holding apex speed while enlarging the pitch avoids buying
+    // force compliance with a slower inversion. This point-mass estimate is
+    // authoring only; finite-train replay retains the full force limits.
+    ReversingModuleRequest pitchSizing;pitchSizing.height=reversalHeight;pitchSizing.rollLength=reversalRoll;pitchSizing.pitchShape=reversalPitchShape;
+    auto pitch=buildReversingModule(pitchSizing,cancel);
+    if(!pitch.canonicalBuilt||!pitch.report.valid())throw std::runtime_error(pitch.cancelled?"CANCELLED":"Reversal curvature sizing failed");
+    const double apexEnergy=reversalApexSpeed*reversalApexSpeed+feedback.reversalEnergyCorrection;
+    if(!std::isfinite(apexEnergy)||apexEnergy<=0)throw std::runtime_error("Measured reversal energy cannot sustain the apex");
+    for(size_t i=pitch.pitchBeginIndex+1;i<pitch.pitchEndIndex;++i){
+        const auto& knot=pitch.track.knots[i];
+        const double curvatureHeight=norm(knot.curvature)*pitch.height,heightFraction=knot.position.z/pitch.height;
+        const double available=req.limits.maxVerticalG-knot.tangent.x-2*(1-heightFraction)*curvatureHeight;
+        if(available<=0)throw std::runtime_error("Reversal pitch cannot fit the selected normal-force limit at any height");
+        reversalHeight=std::max(reversalHeight,apexEnergy*curvatureHeight/(gravity*available));
+    }
+    if(!std::isfinite(reversalHeight)||reversalHeight>250)throw std::runtime_error("Reversal entry energy requires height outside the authored module domain");
+    // S7 lateral transfers have |y''| <= 7.514*offset/L^2. Size their
+    // horizontal extent from real entry energy and the selected normal-load
+    // envelope instead of reserving fixed long elevated and recovery lanes.
+    const double reversalEntrySpeed=std::sqrt(2*gravity*reversalHeight+reversalApexSpeed*reversalApexSpeed+feedback.reversalEnergyCorrection);
+    if(!std::isfinite(reversalEntrySpeed)||reversalEntrySpeed<=0)throw std::runtime_error("Measured reversal energy cannot produce a positive entry-speed target");
+    const double lateralAcceleration=gravity*std::sqrt(designNormalG*designNormalG-1);
+    auto transferLength=[&](double offset,double speed){return speed*std::sqrt(7.514*offset/lateralAcceleration)*reversalLengthPreference;};
+    const double reversalConnector=transferLength(reversalSeparation,reversalApexSpeed);
+    const double brakeDistance=std::max(0.,(65*65-reversalEntrySpeed*reversalEntrySpeed)/(2*3.5))+65*.5+(req.train.cars-1)*req.train.spacing;
+    const double reversalLead=std::max(transferLength(reversalLane,65),brakeDistance);
+    // The broad return crest flies over the low entry footprint; size the
+    // lateral transfer for its load rather than reserving a longer detour.
+    // The complete three-dimensional sweep still decides crossing clearance.
+    const double reversalReturnLength=transferLength(reversalLane+reversalSeparation,reversalEntrySpeed);
+    const double reversalNetLength=reversalLead-2*reversalRoll-reversalConnector+reversalReturnLength;
     const double hillProfileShape=detail.range(-.05,.05),loopProfileShape=detail.range(-.04,.04);
-    const double reversalReturnBias=detail.range(1.6,1.85);
+    detail.range(1.6,1.85); // Retain the independent shape random sequence.
     std::vector<double> turnRiseScale(sides),turnRiseShape(sides);for(int side=0;side<sides;++side){turnRiseScale[side]=detail.range(.8,1.15);turnRiseShape[side]=detail.range(-.08,.08);}
     std::vector<FvdAirtimeResult> forceHills;
-    for(int hill=0;hill<4;++hill){FvdAirtimeRequest force;force.speed=65;force.pushG=detail.range(2.08,2.4);force.crestG=detail.range(-.22,-.08);
+    for(int hill=0;hill<4;++hill){FvdAirtimeRequest force;force.speed=feedback.airtimeSpeed[hill];force.pushG=detail.range(2.08,2.4);force.crestG=detail.range(-.22,-.08);
         auto authored=designFvdAirtime(force,cancel);
-        if(!authored.section.integrated||!authored.section.canonicalBuilt||!authored.section.report.valid()||!authored.section.assessment.passed)throw std::runtime_error(authored.section.cancelled?"CANCELLED":"Force-designed airtime source failed canonical replay");
+        if(!authored.section.integrated||!authored.section.canonicalBuilt||!authored.section.report.valid()||!authored.section.assessment.passed){
+            if(authored.section.cancelled)throw std::runtime_error("CANCELLED");
+            throw std::runtime_error("FVD hill "+std::to_string(hill)+" at "+std::to_string(force.speed)+" m/s: "+(authored.section.report.errors.empty()?"canonical replay failed":authored.section.report.errors.front().message));
+        }
         forceHills.push_back(std::move(authored));}
     const double forceReturnSpan=forceHills[1].span+forceHills[2].span+forceHills[3].span;
     if(reversingPair)module[2]=4;
@@ -184,7 +240,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
     auto record=[&](std::pair<size_t,size_t> range,int side,const std::string& identity){modules.push_back({range.first,range.second,side,identity});};
     auto reversing=[&](ReversingModuleKind kind){
         ReversingModuleRequest request;request.kind=kind;request.entry={cursor,{std::cos(heading),std::sin(heading),0},{0,0,1}};
-        request.height=reversalHeight;request.rollLength=reversalRoll;request.pitchShape=reversalPitchShape;
+        request.height=reversalHeight;request.rollLength=reversalRoll;request.pitchShape=reversalPitchShape;request.rollOverlap=.25;
         request.rollShape=kind==ReversingModuleKind::Immelmann?reversalRollShape:-reversalRollShape;
         request.rollDirection=kind==ReversingModuleKind::Immelmann?reversalHand:-reversalHand;
         auto authored=buildReversingModule(request,cancel);
@@ -194,8 +250,10 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
         cursor=authored.exit.position;heading=std::atan2(authored.exit.forward.y,authored.exit.forward.x);
         return std::pair{start,raw.size()-1};
     };
+    std::array<size_t,4> forceEntryIndices{};size_t reversalExitIndex=0;
     auto forceHill=[&](int index,int side){const auto& authored=forceHills[index];const auto& track=authored.section.track;
         Vec3 base=cursor;size_t start=raw.empty()?0:raw.size()-1;
+        forceEntryIndices[index]=start;
         const int samples=int(std::ceil(track.length/1.5));
         for(int i=0;i<=samples;++i){auto point=track.sample(track.length*i/samples);append(base+inFrame(point.position,heading),0,Element::Airtime,inFrame(point.up,heading));}
         cursor=base+inFrame(authored.section.samples.back().position,heading);record({start,raw.size()-1},side,"fvd-airtime");
@@ -220,14 +278,14 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
             // is laterally separated from both the lead and the elevated lane.
             // The speed here is an energy-based estimate only: the same real
             // finite-train brake and complete-circuit checks decide eligibility.
-            double entrySpeed=std::sqrt(2*gravity*reversalHeight+reversalApexSpeed*reversalApexSpeed);
+            double entrySpeed=reversalEntrySpeed;
             auto lead=piece(reversalLead+reversalLane,[=](double u){return Vec3{reversalLead*u,reversalLane*layoutSmooth(u),0};},Element::Turn);
             pending.push_back({lead.first,lead.second,DriveKind::Brake,entrySpeed});record(lead,side,"immelmann-inward-entry-brake");
-            record(reversing(ReversingModuleKind::Immelmann),side,"high-immelmann");
+            record(reversing(ReversingModuleKind::Immelmann),side,"high-immelmann");reversalExitIndex=raw.size()-1;
             record(piece(reversalConnector+reversalSeparation,[=](double u){return Vec3{reversalConnector*u,-reversalSeparation*layoutSmooth(u),0};},Element::Turn),side,"elevated-reverse-connector");
             record(reversing(ReversingModuleKind::DiveLoop),side,"dive-loop");
-            const double returnLength=reversalNetLength-reversalLead+2*reversalRoll+reversalConnector;
-            record(piece(returnLength+reversalLane+reversalSeparation,[=](double u){return Vec3{returnLength*u,-(reversalLane+reversalSeparation)*layoutSmooth(std::pow(u,reversalReturnBias)),0};},Element::Turn),side,"interior-low-return");
+            const double returnLength=reversalReturnLength;
+            record(piece(returnLength+reversalLane+reversalSeparation,[=](double u){return Vec3{returnLength*u,-(reversalLane+reversalSeparation)*layoutSmooth(u),0};},Element::Turn),side,"interior-low-return");
             used+=reversalNetLength;
         }else if(module[side]==2){
             record(drive(100,DriveKind::Boost,65),side,"airtime-entry-boost");used+=100;
@@ -248,6 +306,15 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
     }
     if(std::hypot(cursor.x-origin.x,cursor.y-origin.y)>.001)throw std::runtime_error("Solved route failed canonical XY closure");
     size_t unique=raw.size()-1;std::vector<double> distance(raw.size());for(size_t i=1;i<raw.size();++i)distance[i]=distance[i-1]+norm(raw[i].position-raw[i-1].position);
+    if(forceHoldEnd){
+        // Keep the reversing pair and its flyover on the same raised datum.
+        // Settle the extra helix elevation on the final return before joins
+        // and crossing lifts are planned; a later warp would erase clearance.
+        auto returning=std::find_if(modules.begin(),modules.end(),[&](const ModuleRun& run){return run.corridor==sides-1;});
+        const double begin=distance[returning->begin],remaining=distance.back()-begin;
+        for(size_t i=returning->begin;i<raw.size();++i)raw[i].position.z-=55*layoutSmooth((distance[i]-begin)/remaining);
+        for(size_t i=1;i<raw.size();++i)distance[i]=distance[i-1]+norm(raw[i].position-raw[i-1].position);
+    }
     // Full connecting crests occupy existing transit envelopes. Dimensions
     // follow the gravity energy budget and v^2 curvature, not random telemetry.
     // All existing operation indices survive and finite-train replay remains
@@ -266,28 +333,35 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
         if(run.identity=="inversion-recovery"&&m+1<modules.size()&&modules[m+1].identity=="airtime-entry-boost")pace(run.begin,modules[m+1].end,52,1);
         if(run.identity=="organic-inward-recovery"&&run.corridor==1)pace(run.begin,run.end,65,1);
         if(run.identity=="immelmann-inward-entry-brake")pace(run.begin,run.end,55,1);
-        if(run.identity=="interior-low-return")pace(run.begin,run.end,46,2);
+        // A single broad crest flies over the low Immelmann entry footprint;
+        // two crests put their shared valley directly at this crossing.
+        if(run.identity=="interior-low-return")pace(run.begin,run.end,46,1);
     }
     for(size_t i=1;i<raw.size();++i)distance[i]=distance[i-1]+norm(raw[i].position-raw[i-1].position);
-    // One continuous G3 transition replaces the upright recovery pause
-    // between the returning S and its following banked turn. Preserve actual
-    // endpoint position/tangent/curvature/curvature derivative; no extra hill
-    // or force signal is prescribed. Real motors retain their indexed zones.
+    // Join the neighbouring physical profiles through their connector, rather
+    // than returning every port to zero curvature and roll. Keep a quarter
+    // of each major profile as the maximum transition extent, so its interior
+    // remains authored. Drive zones keep their indices through compilation.
+    auto connector=[](const std::string& name){return name=="recovery"||name=="corridor-recovery"||name=="inversion-recovery"||name=="airtime-entry-boost";};
+    std::vector<std::pair<size_t,size_t>> flowJoins;
     size_t flowBridgeBegin=0,flowBridgeEnd=0;
-    for(size_t m=0;m<modules.size();++m)if(modules[m].identity=="interior-low-return"){
-        for(size_t n=m+1;n<modules.size();++n)if(modules[n].corridor==modules[m].corridor&&modules[n].identity=="banked-camelback-turn"){
-            const double begin=distance[modules[m].end]-110,end=distance[modules[n].begin]+110;
-            const size_t first=size_t(std::lower_bound(distance.begin(),distance.end(),begin)-distance.begin()),last=size_t(std::lower_bound(distance.begin(),distance.end(),end)-distance.begin());
-            if(first<4||last+5>=raw.size()||last<=first)throw std::runtime_error("Flow raccord left its authored derivative guards");
-            std::vector<AuthoredPoint> local(raw.begin()+first-4,raw.begin()+last+5);Track source=compile(local,false);
-            const double left=source.spans[4].start,right=source.spans[last-first+4].start,span=right-left;
-            const auto a=sampleKinematics(source,left),b=sampleKinematics(source,right);
-            const auto c=detail::flowBridgePolynomial(a,b,span);
-            const double authoredSpan=distance[last]-distance[first];
-            for(size_t index=first;index<=last;++index){if((index&31)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");double u=(distance[index]-distance[first])/authoredSpan;Vec3 point=c[7];for(int degree=6;degree>=0;--degree)point=point*u+c[degree];raw[index].position=point;raw[index].upHint={0,0,1};raw[index].element=Element::Turn;}
-            flowBridgeBegin=first;flowBridgeEnd=last;break;
-        }
-        break;
+    for(size_t m=0;m+1<modules.size();++m){
+        const auto& left=modules[m];if(connector(left.identity)||left.identity=="station"||left.identity=="departure-launch")continue;
+        size_t n=m+1;while(n<modules.size()&&connector(modules[n].identity))++n;if(n==modules.size())continue;
+        const auto& right=modules[n];
+        const double begin=distance[left.end]-std::min(110.,.25*(distance[left.end]-distance[left.begin]));
+        const double end=distance[right.begin]+std::min(110.,.25*(distance[right.end]-distance[right.begin]));
+        // Terminal braking and the level station approach retain their own
+        // physical profiles; this pass composes the moving ride's elements.
+        if(end>distance.back()-(65*65/(2*2.4)+60))continue;
+        size_t first=size_t(std::lower_bound(distance.begin(),distance.end(),begin)-distance.begin());
+        size_t last=size_t(std::lower_bound(distance.begin(),distance.end(),end)-distance.begin());
+        detail::blendAuthoredJoin(raw,first,last,cancel);flowJoins.push_back({first,last});
+        if(left.identity=="interior-low-return"&&right.identity=="banked-camelback-turn"){flowBridgeBegin=first;flowBridgeEnd=last;}
+        // The whole curved part of a drive participates in force-aligned
+        // banking, including shared endpoints. Its motor remains an operation.
+        if(raw[first].element==Element::Turn||raw[last].element==Element::Turn)
+            for(size_t i=first;i<=last;++i)if(raw[i].element==Element::Launch||raw[i].element==Element::Brake||raw[i].element==Element::Return)raw[i].element=Element::Turn;
     }
     if(!flowBridgeEnd)throw std::runtime_error("Folded flow family has no returning-S raccord");
     for(size_t i=1;i<raw.size();++i)distance[i]=distance[i-1]+norm(raw[i].position-raw[i-1].position);
@@ -311,7 +385,6 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
         raw[i].position.z+=lift;
     }
     for(size_t i=0;i<raw.size();++i)raw[i].bank*=stationBankFactor(distance.back()-distance[i],req.train);
-    if(forceHoldEnd){double begin=distance[forceHoldEnd],remaining=distance.back()-begin;for(size_t i=forceHoldEnd;i<raw.size();++i)raw[i].position.z-=55*smooth((distance[i]-begin)/remaining);}
     if(norm(raw.back().position-raw.front().position)>.001)throw std::runtime_error("Solved route failed canonical height closure");raw.back().position=raw.front().position;
 
     // Fix the station to its local ground, then solve a smooth baseline away
@@ -331,7 +404,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
         double floor=-1e9;const double terrainEnvelopeMargin=2*req.terrain.localSlopeBound(raw[i].position.x,raw[i].position.y,8);
         for(double side:{-1.5,1.5})for(double height:{-.8,2.4}){Vec3 corner=raw[i].position+right*side+up*height;floor=std::max(floor,req.terrain.height(corner.x,corner.y)+req.limits.minClearance+1.6+.3+terrainEnvelopeMargin-corner.z);}
         double ground=req.terrain.height(raw[i].position.x,raw[i].position.y);
-        if(req.terrain.kind!=TerrainKind::Flat&&raw[i].element==Element::Turn){
+        if(raw[i].element==Element::Turn){
             // Later force-aligned banking can rotate every authored rider
             // corner. Bound all such orientations, not only the initial bank.
             const double cornerRadius=std::hypot(1.5,2.4),slope=req.terrain.localSlopeBound(raw[i].position.x,raw[i].position.y,cornerRadius);
@@ -391,6 +464,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
     for(int refinement=0;refinement<3;++refinement){solveBaseline();bool raised=false;for(size_t i=0;i<unique;++i){double deficit=required[i]-baseline(distance[i]);if(deficit>.01){int k=int(std::llround(distance[i]/spacing))%controls;if(fixed[k])throw std::runtime_error("Local station boundary violates terrain envelope");lower[k]=std::max(lower[k],base[k]+deficit*1.5);raised=true;}}if(!raised)break;}
     solveBaseline();for(size_t i=0;i<unique;++i)raw[i].position.z+=baseline(distance[i]);raw.back()=raw.front();d.track=compile(raw);
     auto at=[&](size_t index){return index>=d.track.spans.size()?d.track.length:d.track.spans[index].start;};
+    for(size_t i=0;i<forceEntryIndices.size();++i)ports.airtimeEntry[i]=at(forceEntryIndices[i]);
+    ports.reversalExit=at(reversalExitIndex);ports.reversalSpeedHint=reversalApexSpeed;
     const bool terrainDriveControl=req.terrain.kind!=TerrainKind::Flat&&!req.terrain.isDefaultProfile();
     struct TerrainDriveSizing{std::string module;double nominalSpeed,targetSpeed,actualRise,rawRise;};std::vector<TerrainDriveSizing> terrainDriveSizing;
     for(auto p:pending){
@@ -444,17 +519,19 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
     for(auto& operation:d.operations)operation.exitFadeMeters=std::max(1.,operation.targetSpeed*operation.rampSeconds);
     coalesceDriveProfiles(d.operations);
     if(reversingPair)d.topology+="/immelmann-dive-interior";
-    if(flowBridgeEnd)d.topology+="/continuous-return-bridge";
+    if(!flowJoins.empty())d.topology+="/continuous-module-joins";
     if(!pacingCrests.empty())d.topology+="/paced-connectors";
     if(organicRecoveryCount)d.topology+="/organic-recovery";
-    std::ostringstream diagnostic;diagnostic<<std::setprecision(12)<<"{\"schemaVersion\":1,\"generationOnly\":true,\"seed\":"<<req.seed<<",\"candidate\":"<<attempt<<",\"order\":\""<<orderName<<"\",\"stationAnchoring\":{\"geometryScale\":"<<geometryAttempt<<",\"placementVariant\":"<<placementVariant<<",\"deferredFirstPlacement\":"<<firstFeasiblePlacement<<",\"selectedTerrainRank\":"<<(&plan-plans.data())<<",\"checkedPlanCount\":"<<(&plan-plans.data()+1)<<",\"heightBudget\":16,\"datum\":"<<stationDatum<<",\"groundMinimum\":"<<stationGroundMin<<",\"groundMaximum\":"<<stationGroundMax<<",\"datumAboveLowestGround\":"<<stationDatum-stationGroundMin<<",\"datumAboveHighestGround\":"<<stationDatum-stationGroundMax<<",\"fixedDepartureMeters\":"<<fixedDeparture<<",\"fixedReturnMeters\":"<<fixedReturn<<",\"controlSpacing\":"<<spacing<<"},\"launchPlanning\":{\"requestedSeconds\":"<<req.targets.launchSeconds<<",\"motorAcceleration\":"<<launchAcceleration<<",\"predictedSeconds\":"<<plannedLaunchTime(launchAcceleration,req.train)<<"},\"intensityPlanning\":{\"configured\":"<<(intensityDesign?"true":"false")<<",\"exposureGoal\":"<<exposureGoal<<",\"normalLoadHint\":"<<designNormalG<<",\"extraHelixCorner\":"<<holdCorner<<"},\"sides\":"<<sides<<",\"plannedHorizontalLength\":"<<plan.length<<",\"canonicalLength\":"<<d.track.length<<",\"selected\":{\"shape\":"<<plan.shape<<",\"placement\":"<<plan.placement<<",\"score\":"<<plan.score<<",\"terrainRelief\":"<<plan.relief<<",\"terrainStationDeviation\":"<<plan.deviation<<",\"terrainGradeRms\":"<<plan.grade<<",\"stationGrade\":"<<plan.stationGrade<<",\"groundMinimum\":"<<plan.groundMinimum<<",\"groundMaximum\":"<<plan.groundMaximum<<",\"valleyFraction\":"<<plan.valleyFraction<<",\"meanValleyDistance\":"<<plan.valleyDistance<<",\"valleyCrossings\":"<<plan.valleyCrossings<<"},\"scoreWeights\":{\"terrainRelief\":"<<(dramaticTerrain?0:1.5)<<",\"terrainReliefTarget\":"<<(dramaticTerrain?200:0)<<",\"terrainReliefTargetDeviation\":"<<(dramaticTerrain?2:0)<<",\"terrainStationDeviation\":"<<(dramaticTerrain?.1:.5)<<",\"terrainGradeRms\":200,\"stationGrade\":"<<(dramaticTerrain?350:150)<<",\"horizontalLength\":0.003,\"canyonOutsideValleyFraction\":"<<(dramaticTerrain?0:100)<<",\"legacyValleyHeuristicApplies\":"<<(dramaticTerrain?"false":"true")<<"},\"corridors\":[";
+    std::ostringstream diagnostic;diagnostic<<std::setprecision(12)<<"{\"schemaVersion\":1,\"generationOnly\":true,\"seed\":"<<req.seed<<",\"candidate\":"<<attempt<<",\"order\":\""<<orderName<<"\",\"stationAnchoring\":{\"geometryScale\":"<<geometryAttempt<<",\"placementVariant\":"<<placementVariant<<",\"deferredFirstPlacement\":"<<firstFeasiblePlacement<<",\"selectedTerrainRank\":"<<(&plan-plans.data())<<",\"checkedPlanCount\":"<<(&plan-plans.data()+1)<<",\"heightBudget\":16,\"datum\":"<<stationDatum<<",\"groundMinimum\":"<<stationGroundMin<<",\"groundMaximum\":"<<stationGroundMax<<",\"datumAboveLowestGround\":"<<stationDatum-stationGroundMin<<",\"datumAboveHighestGround\":"<<stationDatum-stationGroundMax<<",\"fixedDepartureMeters\":"<<fixedDeparture<<",\"fixedReturnMeters\":"<<fixedReturn<<",\"controlSpacing\":"<<spacing<<"},\"launchPlanning\":{\"requestedSeconds\":"<<req.targets.launchSeconds<<",\"motorAcceleration\":"<<launchAcceleration<<",\"predictedSeconds\":"<<plannedLaunchTime(launchAcceleration,req.train)<<"},\"intensityPlanning\":{\"configured\":"<<(intensityDesign?"true":"false")<<",\"exposureGoal\":"<<exposureGoal<<",\"normalLoadHint\":"<<designNormalG<<",\"extraHelixCorner\":"<<holdCorner<<"},\"sides\":"<<sides<<",\"plannedHorizontalLength\":"<<plan.length<<",\"canonicalLength\":"<<d.track.length<<",\"selected\":{\"shape\":"<<plan.shape<<",\"placement\":"<<plan.placement<<",\"score\":"<<plan.score<<",\"terrainRelief\":"<<plan.relief<<",\"terrainStationDeviation\":"<<plan.deviation<<",\"terrainGradeRms\":"<<plan.grade<<",\"stationGrade\":"<<plan.stationGrade<<",\"groundMinimum\":"<<plan.groundMinimum<<",\"groundMaximum\":"<<plan.groundMaximum<<",\"valleyFraction\":"<<plan.valleyFraction<<",\"meanValleyDistance\":"<<plan.valleyDistance<<",\"valleyCrossings\":"<<plan.valleyCrossings<<"},\"scoreWeights\":{\"terrainRelief\":"<<(dramaticTerrain?0:1.5)<<",\"terrainReliefTarget\":"<<(dramaticTerrain?req.terrain.cliffHeight:0)<<",\"terrainReliefTargetDeviation\":"<<(dramaticTerrain?2:0)<<",\"terrainStationDeviation\":"<<(dramaticTerrain?.1:.5)<<",\"terrainGradeRms\":200,\"stationGrade\":"<<(dramaticTerrain?350:150)<<",\"horizontalLength\":0.015384615384615385,\"canyonOutsideValleyFraction\":"<<(req.terrain.kind==TerrainKind::Canyon?100:0)<<",\"valleyCoordinateUsesTerrainProfile\":"<<"true"<<"},\"corridors\":[";
     for(int i=0;i<sides;++i){if(i)diagnostic<<',';diagnostic<<"{\"length\":"<<plan.lengths[i]<<",\"turnAngle\":"<<plan.angles[i]<<'}';}diagnostic<<"],\"rankedPlans\":[";
     for(size_t i=0;i<plans.size();++i){if(i)diagnostic<<',';auto& p=plans[i];diagnostic<<"{\"shape\":"<<p.shape<<",\"placement\":"<<p.placement<<",\"score\":"<<p.score<<",\"relief\":"<<p.relief<<",\"deviation\":"<<p.deviation<<",\"grade\":"<<p.grade<<",\"stationGrade\":"<<p.stationGrade<<",\"length\":"<<p.length<<",\"groundMinimum\":"<<p.groundMinimum<<",\"groundMaximum\":"<<p.groundMaximum<<",\"valleyFraction\":"<<p.valleyFraction<<",\"meanValleyDistance\":"<<p.valleyDistance<<",\"valleyCrossings\":"<<p.valleyCrossings<<",\"stationBudgetChecked\":"<<(p.stationChecked?"true":"false")<<",\"stationBudgetFeasible\":"<<(p.stationFeasible?"true":"false")<<",\"stationSelectionEligible\":"<<(p.stationSelectionEligible?"true":"false");if(p.stationChecked)diagnostic<<",\"stationBayMinimum\":"<<p.stationBayMinimum<<",\"stationBayMaximum\":"<<p.stationBayMaximum<<",\"stationRequiredDatum\":"<<p.stationRequiredDatum;diagnostic<<'}';}diagnostic<<"],\"modules\":[";
     for(size_t i=0;i<modules.size();++i){if(i)diagnostic<<',';auto& m=modules[i];diagnostic<<"{\"identity\":\""<<m.identity<<"\",\"corridor\":"<<m.corridor<<",\"start\":"<<at(m.begin)<<",\"end\":"<<at(m.end)<<'}';}diagnostic<<"]}";d.planningDiagnostics=diagnostic.str();
     d.planningDiagnostics.pop_back();std::ostringstream expansion;expansion<<std::setprecision(12)<<",\"layoutExpansion\":{\"reversingPair\":"<<(reversingPair?"true":"false")<<",\"organicRecoveryCount\":"<<organicRecoveryCount<<",\"hillProfileShape\":"<<hillProfileShape<<",\"loopProfileShape\":"<<loopProfileShape;
-    if(reversingPair)expansion<<",\"height\":"<<reversalHeight<<",\"rollLength\":"<<reversalRoll<<",\"pitchShape\":"<<reversalPitchShape<<",\"rollShape\":"<<reversalRollShape<<",\"idealApexSpeedHint\":"<<reversalApexSpeed<<",\"innerLane\":"<<reversalLane<<",\"laneSeparation\":"<<reversalSeparation<<",\"netForwardLength\":"<<reversalNetLength<<",\"returnProgressExponent\":"<<reversalReturnBias<<",\"repeatedHelixLengthOutsideCorridorBudget\":"<<(holdCorner>=0?2*pi*radius:0);
-    expansion<<",\"returnFlowBridge\":{\"start\":"<<at(flowBridgeBegin)<<",\"end\":"<<at(flowBridgeEnd)<<"},\"forceDesignedAirtime\":[";
-    for(size_t i=0;i<forceHills.size();++i){if(i)expansion<<',';const auto& hill=forceHills[i];expansion<<"{\"span\":"<<hill.span<<",\"height\":"<<hill.height<<",\"sourceReplayPassed\":"<<(hill.section.assessment.passed?"true":"false")<<",\"maxSourceNormalResidualG\":"<<hill.section.assessment.maxNormalResidualG<<'}';}
+    if(reversingPair)expansion<<",\"height\":"<<reversalHeight<<",\"rollLength\":"<<reversalRoll<<",\"pitchShape\":"<<reversalPitchShape<<",\"rollShape\":"<<reversalRollShape<<",\"idealApexSpeedHint\":"<<reversalApexSpeed<<",\"innerLane\":"<<reversalLane<<",\"laneSeparation\":"<<reversalSeparation<<",\"netForwardLength\":"<<reversalNetLength<<",\"returnProgressExponent\":"<<1<<",\"rollOverlap\":0.25,\"entryEnergyCorrection\":"<<feedback.reversalEnergyCorrection<<",\"entrySpeedHint\":"<<reversalEntrySpeed<<",\"leadHorizontalLength\":"<<reversalLead<<",\"elevatedHorizontalLength\":"<<reversalConnector<<",\"returnHorizontalLength\":"<<reversalReturnLength<<",\"repeatedHelixLengthOutsideCorridorBudget\":"<<(holdCorner>=0?2*pi*radius:0);
+    expansion<<",\"returnFlowBridge\":{\"start\":"<<at(flowBridgeBegin)<<",\"end\":"<<at(flowBridgeEnd)<<"},\"flowJoins\":[";
+    for(size_t i=0;i<flowJoins.size();++i){if(i)expansion<<',';expansion<<"{\"start\":"<<at(flowJoins[i].first)<<",\"end\":"<<at(flowJoins[i].second)<<'}';}
+    expansion<<"],\"forceDesignedAirtime\":[";
+    for(size_t i=0;i<forceHills.size();++i){if(i)expansion<<',';const auto& hill=forceHills[i];expansion<<"{\"span\":"<<hill.span<<",\"height\":"<<hill.height<<",\"sourceSpeedMps\":"<<hill.authoring.speed<<",\"sourceReplayPassed\":"<<(hill.section.assessment.passed?"true":"false")<<",\"maxSourceNormalResidualG\":"<<hill.section.assessment.maxNormalResidualG<<'}';}
     expansion<<"],\"connectorPacing\":[";
     for(size_t i=0;i<pacingCrests.size();++i){if(i)expansion<<',';const auto& crest=pacingCrests[i];expansion<<"{\"start\":"<<at(crest.begin)<<",\"end\":"<<at(crest.end)<<",\"height\":"<<crest.height<<",\"designSpeed\":"<<crest.speed<<",\"count\":"<<crest.count<<'}';}
     expansion<<"],\"terrainDriveSizing\":[";
@@ -466,20 +543,22 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel){
 static void placeSupports(Design& d,Cancel cancel){buildSupportLayout(d,cancel);}
 static void improveBanking(Design& d){
     const auto& frames=d.simulation.frames;if(frames.empty())return;
-    const size_t count=d.track.spans.size();std::vector<double> authored(count),target(count),along(count),left(count),right(count);
-    double previous=0;bool inTurn=false;
+    const size_t count=d.track.spans.size();std::vector<double> authored(count),target(count),along(count),left(count),right(count),speed(count);
     for(size_t i=0;i<count;++i){const auto& k=d.track.knots[i];authored[i]=target[i]=k.bank;along[i]=d.track.spans[i].start;
-        if(k.element!=Element::Turn){inTurn=false;continue;}
-        auto it=std::lower_bound(frames.begin(),frames.end(),along[i],[](const Frame& f,double v){return f.distance<v;});double speed=it==frames.end()?frames.back().speed:it->speed;
-        Vec3 required=k.curvature*(speed*speed)+Vec3{0,0,gravity},side=cross(k.tangent,k.up);double normal=dot(required,k.up),lateral=dot(required,side);
-        double angle=k.bank;if(std::hypot(normal,lateral)>1e-5){angle=std::atan2(lateral,normal);double reference=inTurn?previous:k.bank;while(angle-reference>pi)angle-=2*pi;while(angle-reference< -pi)angle+=2*pi;}
-        previous=angle;inTurn=true;target[i]=std::clamp(angle,-1.5,1.5);
+        speed[i]=replayValueAt(frames,along[i]);if(k.element!=Element::Turn)continue;
+        Vec3 required=k.curvature*(speed[i]*speed[i])+Vec3{0,0,gravity},side=cross(k.tangent,k.up);double normal=dot(required,k.up),lateral=dot(required,side);
+        // Select within the bounded turn-bank interval before smoothing. A
+        // force-vector winding cannot carry the bank target into another lap.
+        double angle=k.bank;if(std::hypot(normal,lateral)>1e-5)angle=std::atan2(lateral,normal);
+        target[i]=std::clamp(angle,-1.5,1.5);
     }
     double edge=0;
     for(size_t i=0;i<count;++i){if(d.track.knots[i].element!=Element::Turn)edge=along[i]+d.track.spans[i].length;left[i]=std::max(0.,along[i]-edge);}
     edge=d.track.length;for(size_t i=count;i-->0;){if(d.track.knots[i].element!=Element::Turn)edge=along[i];right[i]=std::max(0.,edge-along[i]);}
-    constexpr double radius=20;
-    for(size_t i=0;i<count;++i){auto& k=d.track.knots[i];if(k.element!=Element::Turn)continue;double weighted=0,total=0;
+    // A 1.2-second authoring window on either side allows finite roll response
+    // through low-load S crests. This is not an ASTM limit; full-train replay
+    // still assesses the resulting canonical frame and rider-offset forces.
+    for(size_t i=0;i<count;++i){auto& k=d.track.knots[i];if(k.element!=Element::Turn)continue;double weighted=0,total=0,radius=std::max(1.,speed[i]*1.2);
         size_t first=i;while(first&&along[i]-along[first-1]<radius)--first;
         for(size_t j=first;j<count&&along[j]-along[i]<radius;++j){double u=(along[j]-along[i])/radius,w=std::pow(std::max(0.,1-u*u),4)*d.track.spans[j].length;weighted+=w*target[j];total+=w;}
         double fade=layoutSmooth(std::min(left[i],right[i])/radius);double bank=authored[i]+fade*(weighted/total-authored[i]);
@@ -499,6 +578,7 @@ void evaluateTargets(Design& d){
     auto dynamic=validateSimulationTargets(d.simulation,req.targets,req.limits);
     d.report.errors.insert(d.report.errors.end(),dynamic.errors.begin(),dynamic.errors.end());
     d.report.warnings.push_back("Force limits are provisional game assumptions; reference calibration is not complete.");
+    if(d.simulation.completed&&movingRideSeconds(d)>180)d.report.warnings.push_back("Moving ride exceeds the 180-second pacing goal; physical acceptance is unchanged.");
 }
 ValidationReport validateRequest(const GenerationRequest& req){
     ValidationReport r;if(!req.terrain.valid()){r.fail("TERRAIN_PROFILE","Terrain profile is outside its supported domain");return r;}const auto& t=req.targets;const auto& l=req.limits;
@@ -519,23 +599,36 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
     double fastestDeparture=plannedLaunchTime(req.limits.maxLongitudinalG*gravity-.02,req.train);
     if(fastestDeparture>req.targets.launchSeconds){last.report.fail("LAUNCH_FEASIBILITY","Requested departure is below the force-limited flat-station prototype bound",0,fastestDeparture,req.targets.launchSeconds);return last;}
     if(req.targets.requireIntensity&&std::isfinite(req.targets.referenceExposure)&&req.targets.referenceExposure*1.1>10*std::max(0.,req.limits.maxVerticalG)){last.report.fail("INTENSITY_FEASIBILITY","Requested exposure exceeds ten seconds at the selected vertical force ceiling",0,req.targets.referenceExposure*1.1,10*std::max(0.,req.limits.maxVerticalG));return last;}
-    std::vector<std::string> history;Design bestIntensity;bool haveBestIntensity=false;
+    std::vector<std::string> history;Design bestIntensity,bestPacing;bool haveBestIntensity=false,haveBestPacing=false;double bestDuration=INFINITY;
     auto remember=[&](const Design* d,int index){
         std::ostringstream h;h<<std::setprecision(12)<<"{\"candidate\":"<<index<<",\"constructed\":"<<(d?"true":"false");
-        if(d){h<<",\"completed\":"<<(d->simulation.completed?"true":"false")<<",\"exposure10Seconds\":"<<d->simulation.metrics.exposure10Seconds<<",\"launchSeconds\":";if(std::isfinite(d->simulation.metrics.launchTo180))h<<d->simulation.metrics.launchTo180;else h<<"null";h<<",\"errors\":[";bool comma=false;for(const auto* report:{&d->report,&d->simulation.report})for(const auto& f:report->errors){if(comma)h<<',';comma=true;h<<'"'<<f.code<<'"';}h<<']';}
+        if(d){h<<",\"completed\":"<<(d->simulation.completed?"true":"false")<<",\"exposure10Seconds\":"<<d->simulation.metrics.exposure10Seconds<<",\"launchSeconds\":";if(std::isfinite(d->simulation.metrics.launchTo180))h<<d->simulation.metrics.launchTo180;else h<<"null";if(d->simulation.completed)h<<",\"movingDurationSeconds\":"<<movingRideSeconds(*d);h<<",\"errors\":[";bool comma=false;for(const auto* report:{&d->report,&d->simulation.report})for(const auto& f:report->errors){if(comma)h<<',';comma=true;h<<'"'<<f.code<<'"';}h<<']';}
         else h<<",\"errors\":[\"CANDIDATE_FAILURE\"]";h<<'}';history.push_back(h.str());
     };
     auto withHistory=[&](Design d,const char* selection){
         if(d.planningDiagnostics.empty())d.planningDiagnostics="{\"generationOnly\":true}";
-        d.planningDiagnostics.pop_back();d.planningDiagnostics+=",\"searchSelection\":\""+std::string(selection)+"\",\"candidateHistory\":[";
+        d.planningDiagnostics.pop_back();
+        if(d.simulation.completed){std::ostringstream pacing;pacing<<std::setprecision(12)<<",\"movingDurationSeconds\":"<<movingRideSeconds(d)<<",\"movingDurationGoalMaximumSeconds\":180,\"movingDurationDefinition\":\"Powered departure to train center reaching terminal Station operation start; excludes terminal stopping\"";d.planningDiagnostics+=pacing.str();}
+        d.planningDiagnostics+=",\"searchSelection\":\""+std::string(selection)+"\",\"candidateHistory\":[";
         for(size_t i=0;i<history.size();++i){if(i)d.planningDiagnostics+=',';d.planningDiagnostics+=history[i];}d.planningDiagnostics+="]}";return d;
     };
     for(int i=0;i<req.maxCandidates;++i){
         if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}
         if(progress)progress(i,"Solving terrain corridor and circuit");
         try{
-            Design d=candidate(req,i,cancel);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);
+            AuthoringFeedback feedback;CandidatePorts ports;
+            Design d=candidate(req,i,cancel,feedback,ports);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);
             if(d.simulation.cancelled){d.report.fail("CANCELLED","Generation cancelled");return d;}
+            if(d.simulation.completed){
+                // One bounded correction uses measured finite-train entry energy.
+                // Rebuild the entire route, terrain placement and operation zones;
+                // never stretch an FVD curve or substitute a prescribed speed.
+                for(size_t h=0;h<feedback.airtimeSpeed.size();++h)feedback.airtimeSpeed[h]=replayValueAt(d.simulation.frames,ports.airtimeEntry[h]);
+                double exitSpeed=replayValueAt(d.simulation.frames,ports.reversalExit);
+                feedback.reversalEnergyCorrection=ports.reversalSpeedHint*ports.reversalSpeedHint-exitSpeed*exitSpeed;
+                d=candidate(req,i,cancel,feedback,ports);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);
+                if(d.simulation.cancelled){d.report.fail("CANCELLED","Generation cancelled");return d;}
+            }
             if(d.simulation.completed){improveBanking(d);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);}
             d.station=buildStation(d.track,req.terrain,req.train,cancel);
             placeSupports(d,cancel);
@@ -549,13 +642,18 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
                 verifyConvergence(d,cancel);
                 if(d.simulation.cancelled)return d;
             }
-            remember(&d,i);if(d.accepted())return withHistory(std::move(d),"first-accepted");
+            remember(&d,i);if(d.accepted()){
+                double duration=movingRideSeconds(d);
+                if(duration<=180)return withHistory(std::move(d),"accepted-within-moving-duration-goal");
+                if(duration<bestDuration){bestDuration=duration;bestPacing=std::move(d);haveBestPacing=true;}
+                continue;
+            }
             bool intensityOnly=d.simulation.completed&&d.simulation.report.valid()&&d.report.errors.size()==1&&d.report.errors.front().code=="INTENSITY_TARGET";
             if(intensityOnly&&(!haveBestIntensity||d.simulation.metrics.exposure10Seconds>bestIntensity.simulation.metrics.exposure10Seconds)){bestIntensity=d;haveBestIntensity=true;}last=std::move(d);
             // Missing reference data cannot be repaired by searching other seeds.
             bool onlyMissing=last.simulation.completed&&last.simulation.report.valid()&&last.report.errors.size()==1&&last.report.errors.front().code=="REFERENCE_UNAVAILABLE";
             if(onlyMissing)return withHistory(std::move(last),"reference-unavailable");
-        }catch(const std::exception& e){if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}remember(nullptr,i);last.report.fail("CANDIDATE_FAILURE",e.what());}
-    }if(haveBestIntensity)return withHistory(std::move(bestIntensity),"best-physically-valid-intensity-shortfall");return withHistory(std::move(last),"last-constructed-rejection");
+        }catch(const std::exception& e){if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}remember(nullptr,i);last.report.fail("CANDIDATE_FAILURE",e.what());if(progress)progress(i,std::string("Candidate rejected: ")+e.what());}
+    }if(haveBestPacing)return withHistory(std::move(bestPacing),"best-accepted-moving-duration-shortfall");if(haveBestIntensity)return withHistory(std::move(bestIntensity),"best-physically-valid-intensity-shortfall");return withHistory(std::move(last),"last-constructed-rejection");
 }
 }

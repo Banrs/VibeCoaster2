@@ -359,6 +359,8 @@ void AVibeCoasterWorld::CommitChunks()
     Runtime->Message = Runtime->Design->request.targets.requireIntensity
         ? TEXT("Accepted against configured record targets and reference. Space to ride.")
         : TEXT("PHYSICS-PROOF accepted. Intensity comparison disabled by your preset. Space to ride.");
+    Runtime->Message += FString::Printf(TEXT("\n%.0f s to final braking | %.0f s to a complete stop"),
+        coaster::movingRideSeconds(*Runtime->Design), Runtime->Design->simulation.metrics.duration);
     Runtime->Prepared.Reset(); Runtime->Overview = false; Restart(); Runtime->Paused = true;
 }
 void AVibeCoasterWorld::Tick(float DeltaSeconds)
@@ -408,12 +410,21 @@ void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
         Active->Cars->BatchUpdateInstancesTransforms(0, Runtime->CarTransforms, false, false, true);
         Runtime->TrainPoseDirty = false;
     }
-    if (Runtime->CameraPoseDirty || (Moved && !Runtime->Overview))
+    if (Runtime->CameraPoseDirty || Moved || Runtime->Overview)
     {
         if (Runtime->Overview)
         {
             const FVector Centre = Runtime->Bounds.GetCenter(); const double Radius = Runtime->Bounds.GetExtent().Size();
-            const FVector Location = Centre + FVector(-.8, .6, .9) * Radius * 1.5;
+            int32 Width = 0, Height = 0;
+            if (auto* PC = GetWorld()->GetFirstPlayerController()) PC->GetViewportSize(Width, Height);
+            const auto* Lens = Camera->GetCameraComponent();
+            const double Aspect = Width > 0 && Height > 0 ? double(Width) / Height : Lens->AspectRatio;
+            const double HalfHorizontal = FMath::DegreesToRadians(Lens->FieldOfView * .5);
+            const double HalfVertical = std::atan(std::tan(HalfHorizontal) / Aspect);
+            // Fit the ride's bounding sphere in both viewport dimensions,
+            // including after a resize. The previous fixed distance clipped it.
+            const double Distance = 1.1 * Radius / std::sin(FMath::Min(HalfHorizontal, HalfVertical));
+            const FVector Location = Centre + FVector(-.8, .6, .9).GetSafeNormal() * Distance;
             Camera->SetActorLocationAndRotation(Location, (Centre - Location).Rotation());
         }
         else

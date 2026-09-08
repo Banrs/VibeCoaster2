@@ -29,6 +29,7 @@ ReversingModule buildReversingModule(const ReversingModuleRequest& request,Cance
     if(!validPose(request.entry)||!std::isfinite(request.height)||!std::isfinite(request.rollLength)||
        !std::isfinite(request.portLength)||!std::isfinite(request.sampleSpacing)||
        !std::isfinite(request.pitchShape)||!std::isfinite(request.rollShape)||
+       !std::isfinite(request.rollOverlap)||request.rollOverlap<0||request.rollOverlap>.4||
        std::abs(request.pitchShape)>.65||std::abs(request.rollShape)>.65||
        request.height<20||request.height>250||request.rollLength<20||request.rollLength>1000||
        request.sampleSpacing<.25||request.sampleSpacing>2||request.portLength<4*request.sampleSpacing||request.portLength>100||
@@ -43,6 +44,8 @@ ReversingModule buildReversingModule(const ReversingModuleRequest& request,Cance
     // the chosen sample spacing. The integrand is smooth and symmetric.
     double normalizedHeight=0;for(int i=0;i<64;++i)normalizedHeight+=pitchIntegral(i/64.,(i+1)/64.,request.pitchShape).z;
     result.pitchLength=request.height/normalizedHeight;
+    const double overlap=result.pitchLength*request.rollOverlap;
+    auto rollAngle=[&](double distance){return request.rollDirection*pi*progress(std::clamp(distance/(request.rollLength+overlap),0.,1.),request.rollShape);};
     int pitchSteps=int(std::ceil(result.pitchLength/request.sampleSpacing));pitchSteps+=pitchSteps%2;
     const int rollSteps=int(std::ceil(request.rollLength/request.sampleSpacing));
     const int portSteps=int(std::ceil(request.portLength/request.sampleSpacing));
@@ -59,8 +62,8 @@ ReversingModule buildReversingModule(const ReversingModuleRequest& request,Cance
         for(int i=first;i<=steps;++i){
             if((i&63)==0&&cancelled())return false;
             double u=double(i)/steps;
-            Vec3 pointUp=rolling?rotate(startUp,direction,request.rollDirection*pi*progress(u,request.rollShape)):startUp;
-            if(i==steps&&rolling)pointUp=startUp*(-1);
+            double angle=rollAngle(length*u+(request.kind==ReversingModuleKind::Immelmann?overlap:0));
+            Vec3 pointUp=rolling?rotate(startUp,direction,angle):startUp;
             append(start+direction*(length*u),direction,{},pointUp,rolling?Element::Inversion:Element::Return);
         }
         return true;
@@ -78,7 +81,9 @@ ReversingModule buildReversingModule(const ReversingModuleRequest& request,Cance
             Vec3 pitchUp=forward*(-std::sin(theta))+up*(sign*std::cos(theta));
             if(i==pitchSteps){tangent=forward*(-1);pitchUp=up*(-sign);}
             Vec3 curvature=pitchUp*(pi*progressDerivative(u,request.pitchShape)/result.pitchLength);
-            append(start+forward*integral.x+up*(sign*integral.z),tangent,curvature,pitchUp,Element::Inversion);
+            double angle=sign>0?rollAngle(u*result.pitchLength-(result.pitchLength-overlap)):
+                rollAngle(request.rollLength+u*result.pitchLength)-request.rollDirection*pi;
+            append(start+forward*integral.x+up*(sign*integral.z),tangent,curvature,rotate(pitchUp,tangent,angle),Element::Inversion);
         }
         return true;
     };
@@ -86,7 +91,7 @@ ReversingModule buildReversingModule(const ReversingModuleRequest& request,Cance
     if(request.kind==ReversingModuleKind::Immelmann){
         result.pitchBeginIndex=result.points.size()-1;
         if(!pitch(result.points.back().position,1))return result;
-        result.pitchEndIndex=result.points.size()-1;result.rollBeginIndex=result.pitchEndIndex;
+        result.pitchEndIndex=result.points.size()-1;result.rollBeginIndex=result.pitchEndIndex-size_t(std::ceil(pitchSteps*request.rollOverlap));
         if(!straight(result.points.back().position,forward*(-1),up*(-1),request.rollLength,rollSteps,true))return result;
         result.rollEndIndex=result.points.size()-1;
     }else{
@@ -95,6 +100,7 @@ ReversingModule buildReversingModule(const ReversingModuleRequest& request,Cance
         result.rollEndIndex=result.points.size()-1;result.pitchBeginIndex=result.rollEndIndex;
         if(!pitch(result.points.back().position,-1))return result;
         result.pitchEndIndex=result.points.size()-1;
+        result.rollEndIndex=result.pitchBeginIndex+size_t(std::ceil(pitchSteps*request.rollOverlap));
     }
     if(!straight(result.points.back().position,forward*(-1),up,request.portLength,portSteps,false))return result;
     result.exit={result.points.back().position,forward*(-1),up};result.geometryBuilt=true;
