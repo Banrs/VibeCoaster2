@@ -11,6 +11,15 @@ using namespace coaster;
 namespace {
 size_t checks=0;
 void require(bool condition,const char* message){++checks;if(!condition)throw std::runtime_error(message);}
+void requireDefaultHeight(const Terrain& terrain,double x,double y,double expected){
+    // The core disables contraction; this test may use FMA and a different libm.
+    // Budget roundoff against the formula's amplitude, including cancellation:
+    // at most 1.1e-12 m, far below any physical terrain/clearance tolerance.
+    const double tolerance=64*std::numeric_limits<double>::epsilon()*(terrain.kind==TerrainKind::Hills?20:77);
+    const double actual=terrain.height(x,y);
+    if(!std::isfinite(actual)||std::abs(actual-expected)>tolerance)std::cerr<<std::setprecision(17)<<"default terrain x="<<x<<" y="<<y<<" actual="<<actual<<" expected="<<expected<<" tolerance="<<tolerance<<'\n';
+    require(std::isfinite(actual)&&std::abs(actual-expected)<=tolerance,"Default analytic terrain changed");
+}
 bool same(const Terrain& a,const Terrain& b){return a.kind==b.kind&&a.verticalScale==b.verticalScale&&a.horizontalScale==b.horizontalScale&&a.offsetX==b.offsetX&&a.offsetY==b.offsetY&&a.headingRadians==b.headingRadians&&a.cliffHeight==b.cliffHeight&&a.cliffWidth==b.cliffWidth;}
 Vec3 world(const Terrain& t,double x,double y){const double c=std::cos(t.headingRadians),s=std::sin(t.headingRadians);return {t.offsetX+t.horizontalScale*(c*x-s*y),t.offsetY+t.horizontalScale*(s*x+c*y),0};}
 uint64_t checksum(const std::string& bytes){uint64_t h=14695981039346656037ull;for(unsigned char c:bytes){h^=c;h*=1099511628211ull;}return h;}
@@ -24,7 +33,13 @@ int main(int argc,char** argv){try{
     Terrain flat;require(flat.valid()&&flat.isDefaultProfile()&&flat.slopeBound()==0,"Default flat profile changed");
     for(auto kind:{TerrainKind::Hills,TerrainKind::Canyon}){
         Terrain base{kind};require(base.valid()&&base.isDefaultProfile(),"Base fixture profile invalid");
-        for(int i=0;i<100;++i){double x=place(random),y=place(random);double expected=kind==TerrainKind::Hills?12*std::sin(x/470)*std::sin(y/390)+8*std::sin((x+y)/720):-65*std::exp(-std::pow((y-120*std::sin(x/850))/210,2))+12*std::sin(x/630);require(base.height(x,y)==expected,"Default analytic terrain changed");}
+        // Independent 100-digit decimal evaluations, rounded to double. Binary-
+        // exact coordinates cover the origin, cancellation and the sampled extent.
+        const double fixtures[][4]={{0,0,0,-65},{470,390,15.936973934518379,2.3899500449468665},{-470,-390,1.0567881040473286,-13.899566918981202},
+            {12000,-12000,2.8102364660439707,2.3612483272294997},{-7319.125,9860.5,-3.2703423064961008,9.751986659905036},
+            {891.25,115.75,11.206924991957404,-52.942856078667276},{-4096,4096,6.8895725783354935,-2.6000382663018802},{-.125,.125,-1.0229132273830759e-6,-65.002350960718758}};
+        for(const auto& fixture:fixtures)requireDefaultHeight(base,fixture[0],fixture[1],fixture[kind==TerrainKind::Hills?2:3]);
+        for(int i=0;i<100;++i){double x=place(random),y=place(random);double expected=kind==TerrainKind::Hills?12*std::sin(x/470)*std::sin(y/390)+8*std::sin((x+y)/720):-65*std::exp(-std::pow((y-120*std::sin(x/850))/210,2))+12*std::sin(x/630);requireDefaultHeight(base,x,y,expected);}
         Terrain previous=base;
         for(uint64_t seed=0;seed<64;++seed){auto t=Terrain::seeded(kind,seed);require(t.valid()&&!t.isDefaultProfile(),"Seeded profile invalid or unchanged");require(same(t,Terrain::seeded(kind,seed)),"Seed does not reproduce profile");require(!same(t,previous),"Adjacent seeds duplicate landscape profile");previous=t;
             if(kind==TerrainKind::Canyon){
@@ -71,5 +86,5 @@ int main(int argc,char** argv){try{
     // A valid extension reaches geometry revalidation, proving fields are parsed before geometry use.
     write(output,payload(extension("0.3 1.2 30 -50 0.7 210 500\n")));require(!loadDesign(output.string(),destination,error)&&error.find("terrain profile")==std::string::npos,"Valid profile rejected by parser");
     Design report;report.request.terrain=extreme;require(reportJson(report).find("\"cliffHeightMeters\":250")!=std::string::npos,"Report omits actual persisted landscape parameters");
-    std::cout<<"PASS "<<checks<<" terrain profile checks: exact default fixtures, seeded variation, physical cliff relief, analytic gradient/full-body bounds and fail-closed persistence\n";return 0;
+    std::cout<<"PASS "<<checks<<" terrain profile checks: independent default fixtures, seeded variation, physical cliff relief, analytic gradient/full-body bounds and fail-closed persistence\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

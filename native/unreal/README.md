@@ -1,5 +1,13 @@
 # VibeCoaster native Unreal game - review checkpoint
 
+Current application and numerical/save identity are **0.8.0-flow.1 / COASTER5**.
+Windows UHT, editor/game build, six UE contracts, cooking and packaging passed;
+complete packaged terrain/seat checks and the scoped visual review are recorded
+in [the current delivery](../DELIVERY.md). Older saves require their older app.
+The independent core now has macOS CI; a Mac/Metal game build remains unverified.
+
+## Preserved 0.7 evidence
+
 Recovery delivery **0.7.3-review.5** adds a 60fps default and a portable Windows EXE bundle; numerical/save identity remains **0.7.2-pacing.2 / COASTER5**. No new performance benchmarks were run while Cities: Skylines 2 was open. [Current download and status](../DELIVERY.md). The review.2 evidence below belongs to that previous package.
 
 Application **0.7.3-review.2** has passed real Windows build/cook/package, five UE contracts and four final complete packaged runs. Numerical geometry and persistence remain **0.7.2-pacing.2 / COASTER5**, with existing p2 save compatibility verified. With Cities: Skylines 2 closed, three complete 1440p timing runs measured 152,697 traversal frames: pooled p95 **4.996ms**, maximum **12.862ms**, zero above 16.667 ms. This is focused Windows performance evidence, not completed foundation acceptance. [Review, exact scope and remaining limits](../artifacts/review-v073-20260908/REPORT.md).
@@ -10,7 +18,7 @@ This continuing C++ UE5 implementation uses the portable G3/C2 numerical core in
 
 **Preserved geometry.2 Windows checkpoint:** real UHT, editor and game compilation, asset creation, cooking and packaging pass. Three engine contracts and six scripted runs across flat/hills/canyon seed42 passed complete playback and accepted save/load. Actual2560×1440 viewport timing has two canyon hitches above 16.667 ms; it is not an every-frame60fps claim. See [integration report](../artifacts/ue58-integration-20260907/REPORT.md). The preserved, user-rejected 0.6 organic revision has [separate acceptance and scoped packaged review](../artifacts/organic-v060-20260907/REPORT.md), including six scripted runtime runs and measured frame times. Full continuous human POV and presentation quality remain unfinished. Strict-record comparison remains unavailable without eligible authentic force recordings.
 
-The last verified archived executable is [run-20260907-222637-901/Windows/VibeCoaster.exe](Packaged/run-20260907-222637-901/Windows/VibeCoaster.exe). For the reviewed canyon example, explicitly select PHYSICS-PROOF, Canyon and seed42. Old packages remain available and must not be confused with this correction.
+The historical executable at [run-20260907-222637-901/Windows/VibeCoaster.exe](Packaged/run-20260907-222637-901/Windows/VibeCoaster.exe) remains preserved. Use the current delivery link above for 0.8. For the reviewed canyon example, explicitly select PHYSICS-PROOF, Canyon and seed42.
 
 ## Build and run
 
@@ -35,7 +43,7 @@ The packaging script creates a **fresh** `Packaged/run-<UTC timestamp>` archive 
 
 To play in the editor after preparation, open `native/unreal/VibeCoaster.uproject`, open `/Game/Maps/Ride`, and select Play. All runtime actors, lighting and HUD are native C++; the map is deliberately minimal. A packaged game uses that same cooked map.
 
-The bootstrap runs `scripts/create_content.py` through Epic's editor Python API. It creates seven real material assets (including the texture-free slope palette) and `Ride.umap`; those generated binaries are ignored by Git. Existing content is preserved. If an existing material needs redesign, edit it in the editor. Python and Editor Scripting Utilities are editor-only plugins. The runtime uses the built-in ProceduralMeshComponent plugin for canonical rails/terrain/supports, original Blender5.2.1 train/station/tie meshes under `/Game/Art/V072/Import1` (train/station) and `/Game/Art/V072/TrackWeb1` (tie/web), and exact cube fallbacks for unsupported station dimensions. The same source `.uasset` models and materials must accompany Mac builds. No paid plugin is required. See [art import and source workflow](../art/README.md); packaging requires all six runtime meshes and all five UE contracts.
+The bootstrap runs `scripts/create_content.py` through Epic's editor Python API. It creates seven real material assets (including the texture-free slope palette) and `Ride.umap`; those generated binaries are ignored by Git. Existing content is preserved. If an existing material needs redesign, edit it in the editor. Python and Editor Scripting Utilities are editor-only plugins. The runtime uses the built-in ProceduralMeshComponent plugin for canonical rails/terrain/supports, original Blender5.2.1 train/station/tie meshes under `/Game/Art/V072/Import1` (train/station) and `/Game/Art/V072/TrackWeb1` (tie/web), and exact cube fallbacks for unsupported station dimensions. The same source `.uasset` models and materials must accompany Mac builds. No paid plugin is required. See [art import and source workflow](../art/README.md); packaging requires all six runtime meshes and all six UE contracts.
 
 Each Windows attempt retains logs, its bootstrap receipt and UE automation reports under `native/unreal/Saved/BuildRuns/<timestamp>`, including failed attempts. Build temporary files use `Saved/Temp`; DDC uses `Saved/DerivedDataCache`. A failed process, missing bootstrap receipt, missing asset, missing named test success, or missing fresh executable stops the packaging script.
 

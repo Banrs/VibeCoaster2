@@ -6,11 +6,17 @@ entry speeds back into FVD authoring. The fixed 18-request proof panel accepts
 18/18 with exact save replay and independent convergence; 15/18 reach terminal
 braking within 180 seconds, with a maximum of 183.231 seconds. Synthetic intensity
 feasibility and impossible-target regressions pass after correcting a helix
-descent that invalidated crossing clearance. All 23 native suites have passed
+descent that invalidated crossing clearance. All 23 CTest suites have passed
 across the full run and focused correction rerun; 178 Python tests were discovered
 (six real-CLI cases execute separately in CTest). Windows packaging, terrain
-tessellation and overview corrections are in final runtime review. Current
+tessellation and overview corrections passed engine and packaged checks. Current
 iteration evidence is local under `artifacts/flow-v080-20260908/`.
+
+Final Windows traversal timing covers 133,697 frames across three terrain/seat
+runs at 1440p: pooled p95 5.021 ms, maximum 20.960 ms and seven frames above
+16.667 ms. The extracted portable ZIP passes all 48 runtime hashes and startup.
+See [delivery scope and controls](DELIVERY.md). This is measured headroom, not
+an every-frame guarantee or a completed foundation.
 
 FVD feedback is one bounded correction, not a converged whole-route force design:
 the largest observed source/final entry-speed mismatch is 8.462 m/s. RFDB imports
@@ -20,6 +26,8 @@ require their preserved older application; the 0.8 generator is an exact-version
 break. Historical release evidence below is not new 0.8 acceptance evidence.
 
 The active repository now contains only the native C++/UE game. Legacy browser source, including uncommitted work, was verified and retired into ignored `artifacts/browser-retired-20260908/`; it is not an active build dependency. A reproduced two-writer save race is fixed by exclusive per-save temporary files.
+
+## Preserved recovery and 0.7 evidence
 
 Recovery delivery **0.7.3-review.5** adds a 60fps default and a portable Windows EXE bundle; numerical/save identity remains **0.7.2-pacing.2 / COASTER5**. No new performance benchmarks were run while Cities: Skylines 2 was open. [Current download and status](DELIVERY.md). The review.2 evidence below belongs to that previous package.
 

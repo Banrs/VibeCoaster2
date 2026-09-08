@@ -1,9 +1,8 @@
 # VibeCoaster native game
 
-Active source is **0.8.0-flow.1 / COASTER5**, undergoing final Windows runtime
-review. The published preview below remains available until that review completes.
+Active source and Windows preview are **0.8.0-flow.1 / COASTER5**.
 
-**Windows preview: 0.7.3-review.5.** [Download and play](https://github.com/Banrs/OpenVibeCoaster/releases/tag/native-v0.7.3-review.5) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
+**Windows preview: 0.8.0-flow.1.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.0-flow.1) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
 
 Extract the entire Windows ZIP, then open **Play VibeCoaster.cmd** or
 **VibeCoaster.exe**. Unreal Editor, Blender and a compiler are not required to
@@ -45,15 +44,12 @@ identity is **0.8.0-flow.1 / COASTER5**; older saves require the preserved older
 
 ## Current verification and limits
 
-The recovery check matched all 50 files of the previous package and all 211
-snapshot source files against their saved hashes. Review.3 adds a 60fps default,
-removes unused Android file-server settings and provides a player distribution.
-No performance benchmark was rerun while Cities: Skylines 2 was open.
-
-Previous review.2 evidence includes five UE contracts, four full packaged runs,
-bit-exact simulation comparisons and three historical 1440p timing runs. Those
-measurements are not new review.3 performance results. Large frozen evidence,
-failed runs and historical binaries remain local under ignored artifact folders.
+The 0.8 panel accepted 18/18 proof rides with exact saved replay and independent
+convergence; 15/18 reach final braking within the soft 180 s target. Windows
+build/cook/package and six UE contracts passed. Complete scripted terrain/seat
+runs exercise ride controls and save/reload. See [DELIVERY.md](DELIVERY.md) for
+timing, source checks and their limits. Large frozen evidence, failed runs and
+historical binaries remain local under ignored artifact folders.
 
 The foundation is not complete: authentic reference data, actual Mac/Metal tests,
 more convincing scenery and continuous human POV/keyboard review remain. No ASTM

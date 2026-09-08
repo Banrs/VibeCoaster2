@@ -1,6 +1,19 @@
 # Native validation - current review and preserved evidence
 
-Recovery delivery **0.7.3-review.4** adds a 60fps default and a portable Windows EXE bundle; numerical/save identity remains **0.7.2-pacing.2 / COASTER5**. No new performance benchmarks were run while Cities: Skylines 2 was open. [Current download and status](DELIVERY.md). The review.2 evidence below belongs to that previous package.
+Current **0.8.0-flow.1 / COASTER5** evidence is in [DELIVERY.md](DELIVERY.md) and
+local `artifacts/flow-v080-20260908/`. The fixed 18-request proof panel accepted
+18/18 with independent exact saved replay and convergence; 15/18 meet the soft
+180 s moving-duration goal. All 23 CTest suites passed across the full local run
+and focused correction rerun; 172 Python tests and six separate real-CLI cases
+passed. Windows compilation, six UE contracts, cooking and packaging passed.
+Three complete final-package 1440p runs measured 133,697 traversal frames: pooled
+p95 5.021 ms, maximum 20.960 ms, seven above 16.667 ms. Hardware, settings and
+excluded lifecycle phases are specified in the current delivery report.
+Strict-reference and complete-foundation acceptance remain unavailable.
+
+## Preserved recovery and 0.7 evidence
+
+Recovery delivery **0.7.3-review.5** adds a 60fps default and a portable Windows EXE bundle; numerical/save identity remains **0.7.2-pacing.2 / COASTER5**. No new performance benchmarks were run while Cities: Skylines 2 was open. [Current download and status](DELIVERY.md). The review.2 evidence below belongs to that previous package.
 
 Application **0.7.3-review.2** has passed real Windows build/cook/package, five UE contracts and four final complete packaged runs. Numerical geometry and persistence remain **0.7.2-pacing.2 / COASTER5**, with existing p2 save compatibility verified. With Cities: Skylines 2 closed, three complete 1440p timing runs measured 152,697 traversal frames: pooled p95 **4.996ms**, maximum **12.862ms**, zero above 16.667 ms. This is focused Windows performance evidence, not completed foundation acceptance. [Review, exact scope and remaining limits](artifacts/review-v073-20260908/REPORT.md).
 
