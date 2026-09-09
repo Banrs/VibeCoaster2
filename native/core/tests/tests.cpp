@@ -17,6 +17,27 @@ static void cancellationContract(){
     check(cancelled.simulation.cancelled&&!cancelled.accepted()&&code(cancelled.report,"CANCELLED"),
         "An observed construction cancellation stays cancelled when the callback subsequently returns false");
 }
+static void sourceFamilyContract(){
+    for(int scenario=0;scenario<3;++scenario){
+        GenerationRequest req;req.targets.requireIntensity=false;req.maxCandidates=64;
+        if(scenario==0)req.targets.height=0;
+        if(scenario==1)req.targets.height=350;
+        if(scenario==2)req.targets.speed=91;
+        check(validateRequest(req).valid(),"General request/persistence domain remains independent of the generator source family");
+        int attempts=0,physicalChecks=0;
+        auto d=generate(req,{},[&](int,const std::string& phase){attempts+=phase=="Solving terrain corridor and circuit";physicalChecks+=phase=="Checking measured targets and clearance";});
+        check(attempts==1&&physicalChecks==0,"Unsupported source stops before physical construction without retrying all64 candidates");
+        check(d.report.errors.size()==1&&code(d.report,"SOURCE_FAMILY"),"Unsupported source has one specific diagnostic");
+        check(!d.accepted()&&d.track.knots.empty()&&d.operations.empty()&&d.simulation.frames.empty(),"Unsupported source cannot become fallback ride geometry");
+        check(d.request.targets.height==req.targets.height&&d.request.targets.speed==req.targets.speed&&d.request.targets.inversionHeight==req.targets.inversionHeight&&d.request.targets.launchSeconds==req.targets.launchSeconds&&d.request.targets.requireIntensity==req.targets.requireIntensity,"Unsupported source preserves every selected target");
+        check(d.planningDiagnostics.find("\"constructed\":false")!=std::string::npos&&d.planningDiagnostics.find("\"candidate\":1")==std::string::npos,"Unsupported source history records one unconstructed attempt");
+        check(d.planningDiagnostics.find("\"errors\":[\"SOURCE_FAMILY\"]")!=std::string::npos,"Source-specific rejection survives history serialization");
+        check(d.report.errors[0].message.find("220..280")!=std::string::npos&&d.report.errors[0].message.find("75..90")!=std::string::npos,"Unsupported source explains its authored domain");
+    }
+    GenerationRequest req;req.targets.height=350;req.targets.requireIntensity=false;
+    auto d=generate(req,[]{return true;});
+    check(d.simulation.cancelled&&d.report.errors.size()==1&&code(d.report,"CANCELLED"),"Cancellation takes precedence over source preparation");
+}
 static void analytical(){
     auto straight=line();auto f=measureSeatForces(straight,50,40,3,0);near(f.vertical,1,1e-9,"Straight vertical gravity");near(f.lateral,0,1e-9,"Straight lateral gravity");near(f.longitudinal,3/gravity,1e-9,"Explicit tangential force");
     auto horizontal=circle(false);double speed=30,r=100;
@@ -161,19 +182,47 @@ static void migration(const Design& current){
 }
 
 
-static std::vector<double> horizontalTurnAngles(const Track& track){
-    std::vector<double> angles;
-    for(size_t i=0;i<track.knots.size();++i)if(track.knots[i].element==Element::Turn){size_t end=i;while(end+1<track.knots.size()&&track.knots[end+1].element==Element::Turn)++end;Vec3 a=track.knots[i].tangent,b=track.knots[end].tangent;a.z=b.z=0;angles.push_back(std::abs(std::atan2(cross(a,b).z,dot(a,b))));i=end;}return angles;
+static std::vector<Vec3> sampledPath(const Track& track){
+    std::vector<Vec3> points;const int count=int(std::ceil(track.length));
+    for(int i=0;i<=count;++i)points.push_back(track.sample(track.length*i/count).position);
+    return points;
+}
+static std::vector<Vec3> horizontalFootprint(const std::vector<Vec3>& path,Vec3 departure){
+    departure.z=0;departure=unit(departure);const Vec3 left{-departure.y,departure.x,0};
+    std::vector<double> distance(path.size());
+    for(size_t i=1;i<path.size();++i){const Vec3 delta=path[i]-path[i-1];distance[i]=distance[i-1]+std::hypot(delta.x,delta.y);}
+    check(distance.back()>0,"Canonical circuit has horizontal travel");
+    std::vector<Vec3> footprint;size_t next=1;
+    for(int i=0;i<=256;++i){
+        const double target=distance.back()*i/256.;
+        while(next+1<path.size()&&distance[next]<target)++next;
+        const double span=distance[next]-distance[next-1];
+        const double u=span>0?(target-distance[next-1])/span:0;
+        const Vec3 local=path[next-1]+(path[next]-path[next-1])*u-path.front();
+        footprint.push_back({dot(local,departure),dot(local,left),0});
+    }
+    return footprint;
 }
 static void planningAndTargets(){
     GenerationRequest req;req.seed=1;req.targets.requireIntensity=false;auto flat=generate(req);check(flat.accepted(),"Variety flat fixture accepted");
     req.terrain.kind=TerrainKind::Hills;auto hills=generate(req);check(hills.accepted(),"Variety hills fixture accepted");
     // Pre-terrain crossing lift left this tail 1.8m below the earlier hill.
     check(hills.candidate==0,"Composed terrain crossing retains candidate zero under complete clearance and force validation");
-    // Added S-connectors can merge adjacent Turn runs. Run count is not
-    // corridor count; different terrain may select a different accepted route.
-    auto flatAngles=horizontalTurnAngles(flat.track),hillAngles=horizontalTurnAngles(hills.track);check(!flatAngles.empty()&&!hillAngles.empty(),"Accepted terrain routes retain turning geometry");
-    double difference=0;for(size_t i=0;i<std::min(flatAngles.size(),hillAngles.size());++i)difference=std::max(difference,std::abs(flatAngles[i]-hillAngles[i]));check(difference>.01,"Terrain changes intrinsic corridor angles, beyond rigid rotation or vertical following");
+    // Equal corner angles can still adapt radii, lengths and source footprints.
+    // Compare actual XY geometry independently of element tags and vertical travel.
+    const auto flatPath=sampledPath(flat.track),hillPath=sampledPath(hills.track);
+    const Vec3 departure=flat.track.sample(0).tangent;
+    const auto flatFootprint=horizontalFootprint(flatPath,departure);
+    auto footprintRms=[&](const std::vector<Vec3>& other){
+        double sum=0;for(size_t i=0;i<flatFootprint.size();++i){const Vec3 delta=flatFootprint[i]-other[i];sum+=dot(delta,delta);}
+        return std::sqrt(sum/flatFootprint.size());
+    };
+    check(footprintRms(horizontalFootprint(hillPath,hills.track.sample(0).tangent))>1.,"Terrain changes metre-scale intrinsic canonical XY geometry beyond rigid pose or vertical following");
+    auto raised=flatPath;for(size_t i=0;i<raised.size();++i)raised[i].z+=200*std::sin(i*.0006);
+    check(footprintRms(horizontalFootprint(raised,departure))<1e-6,"Vertical following alone cannot count as horizontal adaptation");
+    auto rotate=[](Vec3 p){const double c=std::cos(.73),s=std::sin(.73);return Vec3{c*p.x-s*p.y,s*p.x+c*p.y,p.z};};
+    auto moved=flatPath;for(auto& point:moved)point=rotate(point)+Vec3{500,-300,100};
+    check(footprintRms(horizontalFootprint(moved,rotate(departure)))<1e-6,"Rigid translation and heading alone cannot count as horizontal adaptation");
     auto repeated=generate(req);check(repeated.planningDiagnostics==hills.planningDiagnostics,"Deterministic ranked plan and search diagnostics");
     req.seed=2;auto varied=generate(req);check(varied.accepted(),"Second seeded hills profile completes");
     // The folded family deliberately retains its record hill before the full
@@ -228,4 +277,4 @@ static void stationPlacementRepair(){
     check(!loadDesign(fixture.string(),prior,error),"Prior foundation geometry is not silently reinterpreted");check(reportJson(prior)==reportJson(d),"Unsupported schema preserves current design");check(readBytes(fixture)==original,"Prior foundation archive remains byte-identical");
 }
 
-int main(){try{cancellationContract();analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}
+int main(){try{cancellationContract();sourceFamilyContract();analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}

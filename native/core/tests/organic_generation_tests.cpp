@@ -200,6 +200,14 @@ void checkOperationIntent(const Design& design){
     size_t energy=text.find("\"authoringEnergy\":{");check(energy!=std::string::npos,"Whole-route energy convergence is reported");size_t endEnergy=text.find('}',energy);
     check(fieldNumber(text,energy,endEnergy,"\"maximumSpeedResidualMps\":")<=.500001,"Reported loop and reversal energy residuals also meet the authoring tolerance");
 }
+void checkAscentTrimFlow(const Design& design){
+    const auto ascent=moduleInterval(design,"terrain-ascent-launch"),trim=moduleInterval(design,"inversion-entry-brake");
+    check(std::abs(ascent.second-trim.first)<1e-6,"Ascent and trim share their actual physical boundary");
+    const auto start=design.track.sample(trim.first),end=design.track.sample(trim.second);
+    check(start.tangent.z>std::sin(2*pi/180),"Canyon1 climb retains positive pitch through the operation boundary instead of a forced level reset");
+    check(std::abs(end.tangent.z)<std::sin(.01*pi/180)&&end.position.z>start.position.z,"Canyon1 trim finishes the climb at the actual level inversion inlet");
+    check(std::any_of(design.operations.begin(),design.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Brake&&std::abs(op.start-trim.first)<1e-6&&std::abs(op.end-trim.second)<1e-6;}),"Real bounded braking covers the uphill trim; geometry does not move its hardware zone");
+}
 Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
     GenerationRequest request;request.seed=seed;request.terrain.kind=terrain;request.targets.requireIntensity=false;
     if(terrain==TerrainKind::Hills)request.maxCandidates=2;
@@ -227,15 +235,18 @@ int main(){try{
     check(hillsEnergy!=std::string::npos&&selection!=std::string::npos,"Retained route has explicit energy and route-selection evidence");
     check(fieldNumber(hillsPlan,hillsEnergy,selection,"\"corrections\":")<=8,"Optional reranking shares the existing eight-rebuild budget");
     check(fieldNumber(hillsPlan,hillsEnergy,selection,"\"maximumSpeedResidualMps\":")<=.5,"Selected hills route meets the unchanged source energy tolerance");
-    check(hillsPlan.find("\"retainedConvergedProvisional\":true",selection)<selectionEnd,"Unconverged optional alternate cannot replace the converged original route");
-    check(fieldNumber(hillsPlan,selection,selectionEnd,"\"failedAlternateResidualMps\":")>.5,"Failed alternate energy residual remains visible");
+    // The shorter source now lets this fixture's alternate converge. Keep the
+    // first-candidate acceptance and shared-budget contract without requiring
+    // an optimization to fail merely to preserve an old branch outcome.
+    const bool retained=hillsPlan.find("\"retainedConvergedProvisional\":true",selection)<selectionEnd;
+    const bool reselected=hillsPlan.find("\"reselected\":true",selection)<selectionEnd;
     for(const char* key:{"Shape","Placement"}){
-        const std::string provisional="\"provisional"+std::string(key)+"\":",final="\"final"+std::string(key)+"\":";
-        check(fieldNumber(hillsPlan,selection,selectionEnd,provisional)==fieldNumber(hillsPlan,selection,selectionEnd,final),"Retained route diagnostics identify the actual converged source site");
+        const std::string chosen="\""+std::string(retained||!reselected?"provisional":"attempted")+key+"\":",final="\"final"+std::string(key)+"\":";
+        check(fieldNumber(hillsPlan,selection,selectionEnd,chosen)==fieldNumber(hillsPlan,selection,selectionEnd,final),"Selected route diagnostics identify the actual converged source site");
     }
     // The current terrain/source itinerary must complete on its first
     // candidate; its initial loop energy is not required to be deficient.
-    auto canyon=generateChecked(1,TerrainKind::Canyon);classifyGeometry(canyon);checkFoldedGeometry(canyon);checkOperationIntent(canyon);
+    auto canyon=generateChecked(1,TerrainKind::Canyon);classifyGeometry(canyon);checkFoldedGeometry(canyon);checkOperationIntent(canyon);checkAscentTrimFlow(canyon);
     check(canyon.candidate==0,"Adaptive crossing and support placement retain candidate zero under all acceptance gates");checkSupportSpacing(canyon);
     auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkOperationIntent(first);checkLocalTurnLoads(first);
     auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkOperationIntent(second);

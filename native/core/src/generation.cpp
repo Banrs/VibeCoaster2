@@ -11,11 +11,13 @@
 #include "turn_bank_profile.hpp"
 #include "turn_shape.hpp"
 #include <numeric>
+#include <memory>
 #include <stdexcept>
 #include <sstream>
 #include <iomanip>
 
 namespace coaster {
+struct SourceFamilyUnsupported : std::runtime_error {using std::runtime_error::runtime_error;};
 struct Random {
     uint64_t state;
     uint64_t next(){uint64_t z=(state+=0x9e3779b97f4a7c15ull);z=(z^(z>>30))*0xbf58476d1ce4e5b9ull;z=(z^(z>>27))*0x94d049bb133111ebull;return z^(z>>31);}
@@ -116,6 +118,16 @@ static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,
             // ranked from actual terrain; the landscape is never modified.
             q.heading=startingHeading+(placement/3)*pi/6;
             q.origin=stationAnchor+inFrame({0,double(placement%3-1)*180,0},q.heading);
+            if(dramaticTerrain){
+                // Place the departure signature along the actual canyon floor.
+                // Keep the same bounded36 sites: three longitudinal positions,
+                // both travel directions and six nearby tangent orientations.
+                const double stationAlong=stationAnchor.x+600*(placement%3-1);
+                const double stationAcross=120*std::sin(stationAlong/850)+stationAnchor.y*.5;
+                q.origin=Vec3{req.terrain.offsetX,req.terrain.offsetY,0}+inFrame(Vec3{stationAlong,stationAcross,0}*req.terrain.horizontalScale,req.terrain.headingRadians);
+                q.heading=req.terrain.headingRadians+(placement/18)*pi+std::atan((120./850)*std::cos(stationAlong/850))+
+                    (placement/3%6-2.5)*5*pi/180;
+            }
             double station=req.terrain.height(q.origin.x,q.origin.y),lo=1e9,hi=-1e9,totalDeviation=0,slope2=0,valleyNear=0,totalValleyDistance=0;Vec3 previous{};double previousGround=0,previousValley=0;bool first=true;
             for(const auto& local:corridor){
                 Vec3 point=q.origin+inFrame(local,q.heading);double ground=req.terrain.height(point.x,point.y);lo=std::min(lo,ground);hi=std::max(hi,ground);totalDeviation+=std::abs(ground-station);
@@ -164,6 +176,7 @@ struct AuthoringFeedback {
 struct CandidatePorts {
     std::array<double,4> airtimeEntry{},turnBegin{},turnEnd{};
     std::array<bool,4> ordinaryTurn{};
+    double signatureEntry{},signatureExit{},signatureEntrySpeedHint{},signatureExitSpeedHint{};
     double reversalExit{},reversalSpeedHint{},reversalEntry{},reversalBrakeStart{},relaunchEnd{},reversalEntrySpeedHint{},loopApex{},loopBrakeStart{},loopEntry{},loopSupplyEnd{},loopSupplyTarget{},loopSpeedHint{};
     int planShape{-1},planPlacement{-1};
 };
@@ -179,7 +192,7 @@ double movingRideSeconds(const Design& d){
     for(const auto& op:d.operations)if(op.kind==DriveKind::Station)return replayValueAt(d.simulation.frames,op.start,true);
     throw std::runtime_error("Moving duration requires the terminal station brake");
 }
-static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,const AuthoringFeedback& feedback,CandidatePorts& ports){
+static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,const AuthoringFeedback& feedback,CandidatePorts& ports,std::unique_ptr<const FvdTallHillResult>& preparedSignature){
     const int geometryAttempt=attempt/2,placementVariant=attempt%2;
     const bool dramaticTerrain=req.terrain.kind==TerrainKind::Canyon&&!req.terrain.isDefaultProfile();
     Design d;d.request=req;d.candidate=attempt;Random rng{req.seed};rng.next();int sides=4;bool helix=false;
@@ -188,8 +201,36 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     double designNormalG=rng.range(3.2,3.6);if(intensityDesign)designNormalG=std::min(req.limits.maxVerticalG-.5,std::max(designNormalG,exposureGoal/10+.35+geometryAttempt*.10));
     designNormalG=std::max(1.2,designNormalG);double ramp=160+geometryAttempt*15;
     double elevation=req.targets.height+rng.range(8,30),loopHeight=rng.range(55,68);
-    double hillWidth=rng.range(1020,1120)+geometryAttempt*20,loopDrift=rng.range(330,380)+geometryAttempt*10;
-    double topSpeed=std::max(req.targets.speed+rng.range(7,11),std::sqrt(2*gravity*elevation+45*45)),launchAcceleration=sizedLaunchAcceleration(req,rng.range(38,43));
+    rng.range(1020,1120); // Preserve unrelated seeded route choices after replacing geometric hill width.
+    double loopDrift=rng.range(330,380)+geometryAttempt*10;
+    rng.range(7,11); // Source physics now selects supply; retain the route RNG sequence.
+    double launchAcceleration=sizedLaunchAcceleration(req,rng.range(38,43));
+    if(!preparedSignature){
+        if(elevation<220||elevation>280||req.targets.speed>90){
+            std::ostringstream reason;reason<<"Tall signature source family supports selected heights 220..280 m and source speeds 75..90 m/s; selected seeded height "
+                <<elevation<<" m, requested minimum speed "<<req.targets.speed<<" m/s. Choose supported targets; broader source families are not authored.";
+            throw SourceFamilyUnsupported(reason.str());
+        }
+        FvdTallHillRequest signatureRequest;signatureRequest.height=elevation;
+        signatureRequest.rollingAcceleration=gravity*req.train.rollingResistance;
+        signatureRequest.dragAccelerationCoefficient=.5*req.train.airDensity*req.train.dragCdA/(req.train.cars*req.train.carMass);
+        FvdTallHillResult signature;bool signatureFound=false;
+        for(double sourceSpeed=std::max(75.,req.targets.speed);sourceSpeed<=90;sourceSpeed+=.25){
+            signatureRequest.speed=sourceSpeed;auto trial=designFvdTallHill(signatureRequest,cancel);
+            if(trial.section.cancelled)throw std::runtime_error("CANCELLED");
+            if(!trial.section.report.valid()||!trial.section.assessment.passed)continue;
+            double minimumSpeed=INFINITY;for(const auto& sample:trial.section.samples)minimumSpeed=std::min(minimumSpeed,sample.speed);
+            if(minimumSpeed<25)continue;
+            signature=std::move(trial);signatureFound=true;break;
+        }
+        if(!signatureFound)throw std::runtime_error("Tall signature has no bounded source meeting requested speed and 25 m/s traversal intent");
+        preparedSignature=std::make_unique<const FvdTallHillResult>(std::move(signature));
+    }
+    if(cancel&&cancel())throw std::runtime_error("CANCELLED");
+    const auto& signature=*preparedSignature;
+    if(std::abs(signature.height-elevation)>1e-4)throw std::runtime_error("Prepared signature height differs from seeded source request");
+    const double topSpeed=signature.authoring.speed+.5; // Physical motor margin; actual source agreement is checked.
+    const double hillWidth=signature.span;
     int hillSide=0,loopSide=1;
     std::vector<int> module(sides,2);module[hillSide]=0;module[loopSide]=1;
     if(sides==6){module[2]=3;module[5]=3;}
@@ -262,7 +303,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     const double reversalReturnOffset=reversalLane+reversalIslandExit.y;
     const double reversalReturnLength=transferLength(std::abs(reversalReturnOffset),valleySpeed);
     const double reversalNetLength=reversalLead+reversalIslandExit.x+reversalReturnLength;
-    const double hillProfileShape=detail.range(-.05,.05),loopProfileShape=detail.range(-.04,.04);
+    detail.range(-.05,.05); // Preserve unrelated seeded sources after replacing sin^4 shaping.
+    const double loopProfileShape=detail.range(-.04,.04);
     detail.range(1.6,1.85); // Retain the independent shape random sequence.
     std::vector<double> turnRiseScale(sides),turnRiseShape(sides);for(int side=0;side<sides;++side){turnRiseScale[side]=detail.range(.8,1.15);turnRiseShape[side]=detail.range(-.08,.08);}
     std::vector<FvdAirtimeResult> forceHills;
@@ -349,6 +391,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     auto line=[&](double length,Element e){return piece(length,[=](double u){return Vec3{length*u,0,0};},e);};
     auto drive=[&](double length,DriveKind kind,double speed){auto range=line(length,kind==DriveKind::Brake?Element::Brake:Element::Launch);pending.push_back({range.first,range.second,kind,speed});return range;};
     auto record=[&](std::pair<size_t,size_t> range,int side,const std::string& identity){modules.push_back({range.first,range.second,side,identity});};
+    struct SignatureKnot {size_t index;double sourceDistance;Knot source;};
+    std::vector<SignatureKnot> signatureKnots;
     std::array<size_t,4> forceEntryIndices{};size_t reversalExitIndex=0,reversalEntryIndex=0,reversalBrakeStartIndex=0,relaunchEndIndex=0,loopApexIndex=0,loopBrakeStartIndex=0,loopEntryIndex=0;
     auto forceHill=[&](int index,int side){const auto& authored=forceHills[index];const auto& track=authored.section.track;
         Vec3 base=cursor;size_t start=raw.empty()?0:raw.size()-1;
@@ -363,7 +407,16 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         if(side==0){record(line(20,Element::Station),side,"station");record(drive(180,DriveKind::Launch,module[side]==1?62:topSpeed),side,"departure-launch");used=200;}
         if(module[side]==0){
             if(side){record(drive(500,DriveKind::Boost,topSpeed),side,"record-hill-relaunch");used+=500;}
-            record(piece(hillWidth,[=](double u){return Vec3{hillWidth*u,0,elevation*std::pow(std::sin(pi*layoutWarp(u,hillProfileShape)),4)};},Element::Hill),side,"record-hill");used+=hillWidth;
+            const Vec3 base=cursor;const size_t first=raw.size()-1;
+            const int samples=int(std::ceil(signature.section.track.length/1.5));
+            for(int i=0;i<=samples;++i){
+                const double s=signature.section.track.length*i/samples;auto point=signature.section.track.sample(s);
+                const Vec3 position=base+inFrame(point.position,heading),up=inFrame(point.up,heading);
+                append(position,0,Element::Hill,up);
+                signatureKnots.push_back({raw.size()-1,s,{position,inFrame(point.tangent,heading),inFrame(point.curvature,heading),up,0,Element::Hill}});
+            }
+            cursor=base+inFrame(signature.exit.position,heading);
+            record({first,raw.size()-1},side,"record-hill");used+=signature.span;
         }else if(module[side]==1){
             double brakeLength=side?380:300;
             const double trimTarget=std::sqrt(loopShape.idealEntrySpeed*loopShape.idealEntrySpeed+feedback.loopEnergyCorrection);
@@ -516,6 +569,15 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         if(i==inverted)floor=std::max(floor,ground+req.targets.inversionHeight+4-raw[i].position.z);
         required[i]=floor;absoluteFloor[i]=floor+raw[i].position.z;int k=int(std::llround(distance[i]/spacing))%controls;lower[k]=std::max(lower[k],floor);target[k]+=ground+req.limits.minClearance+4;++weight[k];
     }
+    // The first signature shares the departure datum. Preserve its source
+    // shape instead of bending its lower ascent to follow a distant rim.
+    // A site needing a higher datum must still fit the local station budget.
+    int signatureFirst=0,signatureLast=0;
+    for(const auto& run:modules)if(run.identity=="record-hill"&&run.corridor==0){
+        signatureFirst=std::max(0,int(std::floor(distance[run.begin]/spacing)));
+        signatureLast=std::min(controls-1,int(std::ceil(distance[run.end]/spacing)));
+        for(int k=signatureFirst;k<=signatureLast;++k)stationDatum=std::max(stationDatum,lower[k]+.3);
+    }
     const double fixedDeparture=std::ceil((200+trainHalf+12)/spacing)*spacing,fixedReturn=100;
     auto fixedStationBoundary=[&](double s){return s<=fixedDeparture||distance.back()-s<=fixedReturn;};
     // The same local flat datum must clear both the boarding bay and the
@@ -530,6 +592,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     plan.stationFeasible=stationDatum-stationGroundMin<=16;
     if(!plan.stationFeasible)continue;
     for(int k=0;k<controls;++k){target[k]=weight[k]?target[k]/weight[k]:stationDatum;base[k]=std::max(target[k],lower[k]);fixed[k]=fixedStationBoundary(k*spacing);if(fixed[k]){if(lower[k]>stationDatum+1e-8)throw std::runtime_error("Local station datum cannot clear its fixed launch/boarding boundary");base[k]=stationDatum;}}
+    for(int k=signatureFirst;k<=signatureLast;++k){base[k]=stationDatum;fixed[k]=true;}
     // Preserve genuine inversion pitch/roll geometry by translating complete
     // modules rigidly above their terrain envelope. Fixed constant control
     // plateaus extend two cells beyond their ports; the shared C3 baseline
@@ -640,7 +703,12 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     size_t ascentBegin=0,ascentFinish=0;
     for(const auto& run:modules){if(run.corridor==0&&run.identity=="record-hill")ascentBegin=run.end;if(run.identity=="inversion-entry-brake")ascentFinish=run.begin;}
     if(req.terrain.cliffHeight>0&&ascentFinish>ascentBegin&&raw[ascentFinish].position.z-raw[ascentBegin].position.z>12){
-        if(!heightTransfer(ascentBegin,ascentFinish,false,detail::TerrainPortContract::PreserveIncoming))continue;
+        // The preserved force-designed source has a level zero-curvature exit. Use
+        // that authored contract instead of estimating it from one-sided knots.
+        // The operation boundary is not a geometric level-port requirement.
+        // Finish the climb at the actual inversion source inlet, using the
+        // existing straight trim approach for the corner's pitch unwind.
+        if(!heightTransfer(ascentBegin,loopEntryIndex))continue;
         pending.push_back({ascentBegin,ascentFinish,DriveKind::Boost,65});
         // This is one powered ascent, not three independent reset segments.
         // Its entrance join can use the actual available transition length.
@@ -670,9 +738,10 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     for(size_t m=0;m+1<modules.size();++m){
         const auto& left=modules[m];const auto& right=modules[m+1];
         if(left.identity=="station"||left.identity=="departure-launch")continue;
+        if(left.identity=="terrain-ascent-launch"&&right.identity=="inversion-entry-brake")continue;
         // Airtime sections already have level zero-curvature guards. Keep
         // their matching source ports; refitting them can amplify tiny jets.
-        if(left.identity=="fvd-airtime"||right.identity=="fvd-airtime")continue;
+        if(left.identity=="fvd-airtime"||right.identity=="fvd-airtime"||left.identity=="record-hill"||right.identity=="record-hill")continue;
         // Joint FVD sources already meet at their actual pose and zero-load
         // derivative ports. Do not replace their interiors with a join warp.
         if(right.identity=="high-immelmann"||right.identity=="descending-pullout"||right.identity=="reversal-valley-turn")continue;
@@ -698,7 +767,32 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     if(!flowBridgeEnd)throw std::runtime_error("Folded flow family has no returning-S raccord");
     for(size_t i=1;i<raw.size();++i)distance[i]=distance[i-1]+norm(raw[i].position-raw[i-1].position);
     raw.back()=raw.front();try{d.track=compile(raw);}catch(const std::exception& e){throw std::runtime_error("Composed circuit: "+std::string(e.what()));}
+    // Keep exact canonical source tangent/curvature/up after the surrounding
+    // authored polyline compiles. Terrain may rigidly translate this source.
+    const Vec3 signatureShift=raw[signatureKnots.front().index].position-signatureKnots.front().source.position;
+    for(const auto& point:signatureKnots){
+        if(norm(raw[point.index].position-point.source.position-signatureShift)>1e-5)
+            throw std::runtime_error("Tall signature source was warped by terrain or a connector");
+        auto& knot=d.track.knots[point.index];knot.tangent=point.source.tangent;knot.curvature=point.source.curvature;knot.up=point.source.up;knot.bank=0;
+    }
+    d.track.rebuild();
     auto at=[&](size_t index){return index>=d.track.spans.size()?d.track.length:d.track.spans[index].start;};
+    double signaturePositionResidual=0,signatureCurvatureResidual=0;
+    const double signatureBegin=at(signatureKnots.front().index),signatureEnd=at(signatureKnots.back().index);
+    for(const auto& point:signatureKnots){
+        auto q=d.track.sample(signatureBegin+point.sourceDistance);
+        signaturePositionResidual=std::max(signaturePositionResidual,norm(q.position-point.source.position-signatureShift));
+        signatureCurvatureResidual=std::max(signatureCurvatureResidual,norm(q.curvature-point.source.curvature));
+    }
+    std::array<double,2> signaturePortCurvatureS{},signaturePortUpSS{},signatureSourceCurvatureS{},signatureSourceUpSS{};
+    for(int port=0;port<2;++port){
+        auto actual=sampleKinematics(d.track,port?signatureEnd:signatureBegin);
+        auto source=sampleKinematics(signature.section.track,port?signature.section.track.length:0);
+        signaturePortCurvatureS[port]=norm(actual.curvatureS);signaturePortUpSS[port]=norm(actual.upSS);
+        signatureSourceCurvatureS[port]=norm(source.curvatureS);signatureSourceUpSS[port]=norm(source.upSS);
+    }
+    ports.signatureEntry=signatureBegin;ports.signatureExit=signatureEnd;
+    ports.signatureEntrySpeedHint=signature.authoring.speed;ports.signatureExitSpeedHint=signature.exit.speed;
     for(size_t i=0;i<forceEntryIndices.size();++i)ports.airtimeEntry[i]=at(forceEntryIndices[i]);
     ports.reversalExit=at(reversalExitIndex);ports.reversalSpeedHint=reversalSource.section.samples.back().speed;ports.reversalEntry=at(reversalEntryIndex);ports.reversalEntrySpeedHint=reversalEntrySpeed;
     ports.reversalBrakeStart=at(reversalBrakeStartIndex);ports.relaunchEnd=at(relaunchEndIndex);
@@ -791,7 +885,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     for(int i=0;i<sides;++i){if(i)diagnostic<<',';diagnostic<<"{\"length\":"<<plan.lengths[i]<<",\"turnAngle\":"<<plan.angles[i]<<",\"turnSpeedMps\":"<<feedback.turnSpeed[i]<<",\"turnRadiusMeters\":"<<plan.turns[i].radius<<",\"turnRampMeters\":"<<plan.turns[i].ramp<<'}';}diagnostic<<"],\"rankedPlans\":[";
     for(size_t i=0;i<plans.size();++i){if(i)diagnostic<<',';auto& p=plans[i];diagnostic<<"{\"shape\":"<<p.shape<<",\"placement\":"<<p.placement<<",\"score\":"<<p.score<<",\"relief\":"<<p.relief<<",\"deviation\":"<<p.deviation<<",\"grade\":"<<p.grade<<",\"stationGrade\":"<<p.stationGrade<<",\"length\":"<<p.length<<",\"groundMinimum\":"<<p.groundMinimum<<",\"groundMaximum\":"<<p.groundMaximum<<",\"valleyFraction\":"<<p.valleyFraction<<",\"meanValleyDistance\":"<<p.valleyDistance<<",\"valleyCrossings\":"<<p.valleyCrossings<<",\"stationBudgetChecked\":"<<(p.stationChecked?"true":"false")<<",\"stationBudgetFeasible\":"<<(p.stationFeasible?"true":"false")<<",\"stationSelectionEligible\":"<<(p.stationSelectionEligible?"true":"false");if(p.stationChecked)diagnostic<<",\"stationBayMinimum\":"<<p.stationBayMinimum<<",\"stationBayMaximum\":"<<p.stationBayMaximum<<",\"stationRequiredDatum\":"<<p.stationRequiredDatum;diagnostic<<'}';}diagnostic<<"],\"modules\":[";
     for(size_t i=0;i<modules.size();++i){if(i)diagnostic<<',';auto& m=modules[i];diagnostic<<"{\"identity\":\""<<m.identity<<"\",\"corridor\":"<<m.corridor<<",\"start\":"<<at(m.begin)<<",\"end\":"<<at(m.end)<<'}';}diagnostic<<"]}";d.planningDiagnostics=diagnostic.str();
-    d.planningDiagnostics.pop_back();std::ostringstream expansion;expansion<<std::setprecision(12)<<",\"layoutExpansion\":{\"reversingPair\":"<<(reversingPair?"true":"false")<<",\"organicRecoveryCount\":0"<<",\"hillProfileShape\":"<<hillProfileShape<<",\"loopProfileShape\":"<<loopProfileShape;
+    d.planningDiagnostics.pop_back();std::ostringstream expansion;expansion<<std::setprecision(12)<<",\"layoutExpansion\":{\"reversingPair\":"<<(reversingPair?"true":"false")<<",\"organicRecoveryCount\":0"<<",\"loopProfileShape\":"<<loopProfileShape;
+    expansion<<",\"tallHill\":{\"height\":"<<signature.height<<",\"span\":"<<signature.span<<",\"arc\":"<<signature.section.track.length<<",\"sourceInlet\":"<<signature.authoring.speed<<",\"sourceExit\":"<<signature.exit.speed<<",\"rollingAcceleration\":"<<signature.authoring.rollingAcceleration<<",\"dragCoefficient\":"<<signature.authoring.dragAccelerationCoefficient<<",\"maxSourceReplayNormalResidual\":"<<signature.section.assessment.maxNormalResidualG<<",\"positionResidual\":"<<signaturePositionResidual<<",\"curvatureResidual\":"<<signatureCurvatureResidual<<",\"portCurvatureS\":["<<signaturePortCurvatureS[0]<<','<<signaturePortCurvatureS[1]<<"],\"portUpSS\":["<<signaturePortUpSS[0]<<','<<signaturePortUpSS[1]<<"],\"sourcePortCurvatureS\":["<<signatureSourceCurvatureS[0]<<','<<signatureSourceCurvatureS[1]<<"],\"sourcePortUpSS\":["<<signatureSourceUpSS[0]<<','<<signatureSourceUpSS[1]<<"]}";
     if(reversingPair)expansion<<",\"sourceEntrySpeedMps\":"<<reversalRequest.entrySpeed<<",\"sourceInvertedHeightMeters\":"<<reversalSource.highestInvertedHeight<<",\"sourceApexHeightMeters\":"<<reversalSource.geometricApexHeight<<",\"sourceExitHeightMeters\":"<<reversalSource.exit.sample.position.z<<",\"sourceExitSpeedMps\":"<<reversalSource.section.samples.back().speed<<",\"sourceExitPitchRadians\":"<<reversalRequest.exitPitch<<",\"pulloutDurationSeconds\":"<<pulloutSource.duration<<",\"valleyTurnLengthMeters\":"<<valleyTurn.length<<",\"netForwardLength\":"<<reversalNetLength<<",\"entryEnergyCorrection\":"<<feedback.reversalEnergyCorrection<<",\"entrySpeedHint\":"<<reversalEntrySpeed<<",\"leadHorizontalLength\":"<<reversalLead<<",\"returnHorizontalLength\":"<<reversalReturnLength;
     expansion<<",\"returnFlowBridge\":{\"start\":"<<at(flowBridgeBegin)<<",\"end\":"<<at(flowBridgeEnd)<<"},\"flowJoins\":[";
     for(size_t i=0;i<flowJoins.size();++i){if(i)expansion<<',';expansion<<"{\"start\":"<<at(flowJoins[i].first)<<",\"end\":"<<at(flowJoins[i].second)<<'}';}
@@ -871,10 +966,10 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
     if(fastestDeparture>req.targets.launchSeconds){last.report.fail("LAUNCH_FEASIBILITY","Requested departure is below the force-limited flat-station prototype bound",0,fastestDeparture,req.targets.launchSeconds);return last;}
     if(req.targets.requireIntensity&&std::isfinite(req.targets.referenceExposure)&&req.targets.referenceExposure*1.1>10*std::max(0.,req.limits.maxVerticalG)){last.report.fail("INTENSITY_FEASIBILITY","Requested exposure exceeds ten seconds at the selected vertical force ceiling",0,req.targets.referenceExposure*1.1,10*std::max(0.,req.limits.maxVerticalG));return last;}
     std::vector<std::string> history;Design bestIntensity,bestPacing;bool haveBestIntensity=false,haveBestPacing=false;double bestDuration=INFINITY;
-    auto remember=[&](const Design* d,int index){
+    auto remember=[&](const Design* d,int index,const char* failure="CANDIDATE_FAILURE"){
         std::ostringstream h;h<<std::setprecision(12)<<"{\"candidate\":"<<index<<",\"constructed\":"<<(d?"true":"false");
         if(d){h<<",\"completed\":"<<(d->simulation.completed?"true":"false")<<",\"exposure10Seconds\":"<<d->simulation.metrics.exposure10Seconds<<",\"launchSeconds\":";if(std::isfinite(d->simulation.metrics.launchTo180))h<<d->simulation.metrics.launchTo180;else h<<"null";if(d->simulation.completed)h<<",\"movingDurationSeconds\":"<<movingRideSeconds(*d);h<<",\"errors\":[";bool comma=false;for(const auto* report:{&d->report,&d->simulation.report})for(const auto& f:report->errors){if(comma)h<<',';comma=true;h<<'"'<<f.code<<'"';}h<<']';}
-        else h<<",\"errors\":[\"CANDIDATE_FAILURE\"]";h<<'}';history.push_back(h.str());
+        else h<<",\"errors\":[\""<<failure<<"\"]";h<<'}';history.push_back(h.str());
     };
     auto withHistory=[&](Design d,const char* selection){
         if(d.planningDiagnostics.empty())d.planningDiagnostics="{\"generationOnly\":true}";
@@ -888,7 +983,8 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
         if(progress)progress(i,"Solving terrain corridor and circuit");
         try{
             AuthoringFeedback feedback;CandidatePorts ports;
-            Design d=candidate(req,i,cancel,feedback,ports);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);
+            std::unique_ptr<const FvdTallHillResult> preparedSignature;
+            Design d=candidate(req,i,cancel,feedback,ports,preparedSignature);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);
             if(d.simulation.cancelled){d.report.fail("CANCELLED","Generation cancelled");return d;}
             bool feedbackConverged=false;double energyResidual=INFINITY;int energyIterations=0;std::ostringstream energyHistory;energyHistory<<std::setprecision(12);
             // Hold the selected route family/site while solving actual entry
@@ -930,11 +1026,15 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
                         feedback.airtimeSpeed[h]+=.75*(replayValueAt(frames,ports.airtimeEntry[h])-feedback.airtimeSpeed[h]);
                     const double drag=req.train.airDensity*req.train.dragCdA/(req.train.cars*req.train.carMass);
                     feedback.relaunchEnergyCorrection+=.75*deficit*std::exp(drag*(ports.reversalEntry-ports.relaunchEnd));
-                    d=candidate(req,i,cancel,feedback,ports);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);++energyIterations;
+                    d=candidate(req,i,cancel,feedback,ports,preparedSignature);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);++energyIterations;
                     if(d.simulation.cancelled){d.report.fail("CANCELLED","Generation cancelled");return d;}
                     continue;
                 }
-                std::array<double,4> measured{},measuredTurn{};energyResidual=0;
+                std::array<double,4> measured{},measuredTurn{};
+                const double signatureEntrySpeed=replayValueAt(d.simulation.frames,ports.signatureEntry);
+                const double signatureExitSpeed=replayValueAt(d.simulation.frames,ports.signatureExit);
+                energyResidual=std::max(std::abs(signatureEntrySpeed-ports.signatureEntrySpeedHint),
+                    std::abs(signatureExitSpeed-ports.signatureExitSpeedHint));
                 // Use the maximum speed while any car occupies the turn, not
                 // an average weakened by its crest. This bounds the source
                 // lateral demand; final rider loads remain independently gated.
@@ -963,7 +1063,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
                 const double loopDeficit=std::max(0.,ports.loopSpeedHint*ports.loopSpeedHint-loopPassive.speed*loopPassive.speed);
                 const bool upstreamStarved=upstreamDeficit>0;
                 if(correction)energyHistory<<',';
-                energyHistory<<"{\"iteration\":"<<correction<<",\"maximumResidualMps\":"<<energyResidual<<",\"brakeStartSpeedMps\":"<<brakeStartSpeed<<",\"brakeTargetMps\":"<<ports.reversalEntrySpeedHint<<",\"reversalEntryMps\":"<<replayValueAt(d.simulation.frames,ports.reversalEntry)<<",\"reversalExitMps\":"<<exitSpeed<<",\"loopApexMps\":"<<loopSpeed<<",\"loopPassiveApexMps\":"<<loopPassive.speed<<",\"loopSupplyTargetMps\":"<<ports.loopSupplyTarget<<",\"loopSupplyEndMeters\":"<<ports.loopSupplyEnd<<",\"loopUpstreamDeficitM2ps2\":"<<loopDeficit<<",\"upstreamStarved\":"<<(upstreamStarved?"true":"false")<<'}';
+                energyHistory<<"{\"iteration\":"<<correction<<",\"maximumResidualMps\":"<<energyResidual<<",\"signatureEntryMps\":"<<signatureEntrySpeed<<",\"signatureExitMps\":"<<signatureExitSpeed<<",\"brakeStartSpeedMps\":"<<brakeStartSpeed<<",\"brakeTargetMps\":"<<ports.reversalEntrySpeedHint<<",\"reversalEntryMps\":"<<replayValueAt(d.simulation.frames,ports.reversalEntry)<<",\"reversalExitMps\":"<<exitSpeed<<",\"loopApexMps\":"<<loopSpeed<<",\"loopPassiveApexMps\":"<<loopPassive.speed<<",\"loopSupplyTargetMps\":"<<ports.loopSupplyTarget<<",\"loopSupplyEndMeters\":"<<ports.loopSupplyEnd<<",\"loopUpstreamDeficitM2ps2\":"<<loopDeficit<<",\"upstreamStarved\":"<<(upstreamStarved?"true":"false")<<'}';
                 // A provisional route supplies actual source energy first. Rank once
                 // with those converged dimensions, then keep the final route
                 // fixed. Both stages share this same eight-rebuild budget.
@@ -987,7 +1087,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
                 feedback.loopSupplyEnergyCorrection+=.75*loopDeficit*std::exp(drag*(ports.loopApex-ports.loopSupplyEnd));
                 if(reselectRoute){feedback.planShape=-1;feedback.planPlacement=-1;routeReselected=true;routeReselectionIteration=correction+1;}
                 ++energyIterations;
-                try{d=candidate(req,i,cancel,feedback,ports);}
+                try{d=candidate(req,i,cancel,feedback,ports,preparedSignature);}
                 catch(const std::runtime_error& error){
                     if(std::string(error.what())=="CANCELLED"||(cancel&&cancel())){
                         Design cancelled;cancelled.request=req;cancelled.candidate=i;cancelled.simulation.cancelled=true;
@@ -1028,6 +1128,18 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
             d.report=validateGeometry(d.track,req.terrain,req.limits,req.train,d.supports,cancel);
             auto structures=validateDesignStructures(d,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());
             evaluateTargets(d);
+            if(d.simulation.completed){
+                const double entry=replayValueAt(d.simulation.frames,ports.signatureEntry),exit=replayValueAt(d.simulation.frames,ports.signatureExit);
+                const double entryResidual=std::abs(entry-ports.signatureEntrySpeedHint),exitResidual=std::abs(exit-ports.signatureExitSpeedHint);
+                if(std::max(entryResidual,exitResidual)>.5)d.report.fail("AUTHORING_SIGNATURE",
+                    "Actual finite-train signature inlet/exit differs from its force-source energy intent",ports.signatureEntry,std::max(entryResidual,exitResidual),.5);
+                d.planningDiagnostics.pop_back();std::ostringstream intent;intent<<std::setprecision(12)
+                    <<",\"signatureIntent\":{\"sourceInletMps\":"<<ports.signatureEntrySpeedHint<<",\"actualInletMps\":"<<entry
+                    <<",\"sourceExitMps\":"<<ports.signatureExitSpeedHint<<",\"actualExitMps\":"<<exit
+                    <<",\"inletResidualMps\":"<<entryResidual<<",\"exitResidualMps\":"<<exitResidual
+                    <<",\"toleranceMps\":0.5,\"minimumSourceTraversalMps\":25,\"preparedSourceReused\":true}}";
+                d.planningDiagnostics+=intent.str();
+            }
             if(d.simulation.completed&&!feedbackConverged)d.report.fail("AUTHORING_ENERGY","Joined ride did not converge to its element entry/apex energy intent",0,energyResidual,.5);
             if(d.report.valid()&&d.simulation.completed&&d.simulation.report.valid()&&!d.simulation.cancelled){
                 if(progress)progress(i,"Checking independent half-step simulation");
@@ -1045,6 +1157,9 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
             // Missing reference data cannot be repaired by searching other seeds.
             bool onlyMissing=last.simulation.completed&&last.simulation.report.valid()&&last.report.errors.size()==1&&last.report.errors.front().code=="REFERENCE_UNAVAILABLE";
             if(onlyMissing)return withHistory(std::move(last),"reference-unavailable");
+        }catch(const SourceFamilyUnsupported& e){
+            remember(nullptr,i,"SOURCE_FAMILY");last.report.fail("SOURCE_FAMILY",e.what());
+            return withHistory(std::move(last),"unsupported-source-family");
         }catch(const std::exception& e){if(std::string(e.what())=="CANCELLED"||(cancel&&cancel())){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}remember(nullptr,i);last.report.fail("CANDIDATE_FAILURE",e.what());if(progress)progress(i,std::string("Candidate rejected: ")+e.what());}
     }if(haveBestPacing)return withHistory(std::move(bestPacing),"best-accepted-moving-duration-shortfall");if(haveBestIntensity)return withHistory(std::move(bestIntensity),"best-physically-valid-intensity-shortfall");return withHistory(std::move(last),"last-constructed-rejection");
 }
