@@ -1,18 +1,15 @@
 # VibeCoaster native game
 
-Active development is **0.8.1-intent.1 / COASTER5**, undergoing generator and hardware review. The latest released Windows preview is still **0.8.0-flow.1**; use the download below for that verified package. See [work in progress](WORK_IN_PROGRESS.md) for the distinction.
+The current Windows engineering preview uses **0.8.1-intent.1 / COASTER5**, built from commit `ae09f02`. Generator flow and hardware feasibility remain under review. The commit-qualified delivery name distinguishes preserved intermediate bundles. See [work in progress](WORK_IN_PROGRESS.md).
 
-The unreleased source defaults to desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off. Saved player settings remain respected, and newly built distribution launchers forward command-line options. The published 0.8.0 launcher retains its original settings described below; it is not the current engineering build.
+Fresh profiles use desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off. Saved player settings remain respected, and distribution launchers forward command-line options.
 
 
-Released Windows preview: **0.8.0-flow.1 / COASTER5**.
-
-**Windows preview: 0.8.0-flow.1.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.0-flow.1) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
+**Windows engineering preview: 0.8.1-intent.1-ae09f02.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.1-intent.1-ae09f02) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
 
 Extract the entire Windows ZIP, then open **Play VibeCoaster.cmd** or
 **VibeCoaster.exe**. Unreal Editor, Blender and a compiler are not required to
-play. The launcher uses a 1600×900 window capped at 60fps. Keep the Engine and
-VibeCoaster folders alongside the EXE.
+play. Keep the Engine and VibeCoaster folders alongside the EXE.
 
 Choose **PHYSICS-PROOF**, **Canyon**, seed **42**, press Enter to generate, then
 Space to ride. Up/Down selects a setting; Left/Right changes it. Tab shows setup,
@@ -28,12 +25,12 @@ targets; it does not claim an intensity record or silently substitute a benchmar
 
 This is the single active C++/UE5 game. The obsolete TypeScript/browser
 implementation was archived and removed at the user's request. Source geometry/save
-identity is **0.8.0-flow.1 / COASTER5**; older saves require the preserved older app.
+identity is **0.8.1-intent.1 / COASTER5**; older releases' saves require the preserved older app.
 
 - Canonical G3 septic centreline and C2 orientation shared by dynamics, rendering,
   rider forces, clearance and saved geometry.
-- Seeded folded circuits with crossings, a record hill, full pitch loop, true
-  Immelmann/dive reversals, banked turns and force-authored crest sections.
+- Seeded folded circuits with crossings, a loss-aware force-authored tall signature,
+  full pitch loop, joint-force reversal/pullout, banked turns and force-authored crests.
 - Flat, hills and canyon landscapes; canyon shelf settings vary from 195–225 m.
   Actual local-ground height, terrain relief and station-relative height are
   distinct measurements.
@@ -49,16 +46,18 @@ identity is **0.8.0-flow.1 / COASTER5**; older saves require the preserved older
 
 ## Current verification and limits
 
-The 0.8 panel accepted 18/18 proof rides with exact saved replay and independent
-convergence; 15/18 reach final braking within the soft 180 s target. Windows
-build/cook/package and six UE contracts passed. Complete scripted terrain/seat
-runs exercise ride controls and save/reload. See [DELIVERY.md](DELIVERY.md) for
-timing, source checks and their limits. Large frozen evidence, failed runs and
-historical binaries remain local under ignored artifact folders.
+All 26 local CTest suites and three-platform core/Python CI passed for `ae09f02`.
+Eleven targeted circuits passed exact saved replay and independent convergence,
+reaching final braking in 137.708–147.896 s. Windows build/cook/package and seven
+UE contracts passed. Three complete packaged terrain/seat runs also passed
+traversal and save/load; extracted startup and all 48 runtime hashes were verified.
+See [DELIVERY.md](DELIVERY.md) for scope. Frozen evidence, failed runs and older
+binaries remain preserved. This package has no new performance acceptance claim.
 
 The foundation is not complete: authentic reference data, actual Mac/Metal tests,
-more convincing scenery and continuous human POV/keyboard review remain. No ASTM
-compliance, structural certification or telemetry calibration is claimed.
+coherent terrain-directed layout/flow, drive/support engineering and continuous human
+POV/keyboard review remain. No ASTM compliance, structural certification or
+telemetry calibration is claimed.
 
 [Numerics](core/NUMERICS.md) · [FVD scope](core/FVD.md) ·
 [Force guideline scope](core/FORCE_GUIDELINES.md) · [Unreal setup](unreal/README.md) ·

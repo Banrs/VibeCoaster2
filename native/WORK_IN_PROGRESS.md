@@ -1,6 +1,6 @@
 # Native foundation status
 
-## Active review — 0.8.1-intent.1 (not yet released)
+## Engineering preview — 0.8.1-intent.1, source ae09f02
 
 The numerical checkpoint contains a loss-aware force-authored tall signature, an energy-authored full loop, a joint-force Immelmann with a rolling descent and pullout, bounded finite-train energy feedback, terrain-aware element placement and composed crossing clearance. The canyon climb now unwinds through the trim approach instead of imposing a level reset at the motor/brake boundary. Conventional-train presentation, persisted operation hardware and uncapped native-display defaults have separate committed checkpoints. The current review covers whole-route terrain use, source preservation, physical supply and coherent element/transition forces; passing peak caps alone is insufficient.
 
@@ -8,9 +8,11 @@ The tall-hill/climb integration's targeted eleven-case panel accepts all eleven 
 
 A real editor-game traversal of production canyon0 completed in 171.013542 s, reaching final braking at 144.397043 s. Nine actual rendered captures were inspected. The source crest pacing and continuous climb improved, but long approaches, a sparse macro footprint and the very high powered turn/support scale still need engineering work. This load-only run verifies neither ordinary save nor keyboard input or packaged FPS. A separate terrain-led itinerary remains an artifact experiment, not the seeded production generator. [Production visual review](artifacts/generator-intent-v081/tall-hill-integration-v1/editor-canyon0-front/REVIEW.md), [experimental itinerary review](artifacts/generator-intent-v081/macro-editor-v8/REVIEW.md), and [earlier integration review](artifacts/generator-intent-v081/REVIEW.md) keep those scopes separate.
 
-GitHub checkpoints are on `main`. The [numerical-source](https://github.com/Banrs/VibeCoaster2/actions/runs/34409644136), [display/launcher](https://github.com/Banrs/VibeCoaster2/actions/runs/34410362411), and [hardware/train](https://github.com/Banrs/VibeCoaster2/actions/runs/34410760281) checkpoints passed Windows, Linux and macOS CI. [Exact-rate enforcement CI](https://github.com/Banrs/VibeCoaster2/actions/runs/34412505706) is in progress. These jobs build/test the portable core and Python tooling; they do not build UE or establish Mac/Metal runtime support.
+GitHub checkpoints are on `main`. The [numerical-source](https://github.com/Banrs/VibeCoaster2/actions/runs/34409644136), [display/launcher](https://github.com/Banrs/VibeCoaster2/actions/runs/34410362411), [hardware/train](https://github.com/Banrs/VibeCoaster2/actions/runs/34410760281), [exact-rate enforcement](https://github.com/Banrs/VibeCoaster2/actions/runs/34412505706), and [tall-hill/climb integration](https://github.com/Banrs/VibeCoaster2/actions/runs/34413788049) checkpoints all passed Windows, Linux and macOS CI. These jobs build/test the portable core and Python tooling; they do not build UE or establish Mac/Metal runtime support.
 
-The released Windows preview remains **0.8.0-flow.1**. Its evidence below is preserved and must not be presented as 0.8.1 verification. ALL RECORDS still requires eligible authentic benchmark recordings; full current F2291 clauses and a Mac/Metal build remain unavailable.
+The current [Windows engineering package](DELIVERY.md) is **0.8.1-intent.1-ae09f02**. Seven UE contracts, actual build/cook/package and three complete packaged generation/traversal/save/load runs passed. Its extracted startup and all 48 runtime hashes were verified. The runtime visual review still finds excessive approaches and support heights, including a nearly level late return above a falling canyon shelf. Source and package verification do not close whole-ride feel or terrain coherence. The next planner change must solve source placement with actual approach/return headings and curvature, avoiding fixed-corridor filler; [the bounded terrain study](artifacts/generator-intent-v081/tall-hill-integration-v1/terrain-anchor-v3/REPORT.md) records useful component placement and rejected whole-circuit closures.
+
+Older 0.8.0 evidence below remains preserved and must not be presented as 0.8.1 verification. ALL RECORDS still requires eligible authentic benchmark recordings; full current F2291 clauses and a Mac/Metal build remain unavailable.
 
 ## Released 0.8.0 checkpoint
 
