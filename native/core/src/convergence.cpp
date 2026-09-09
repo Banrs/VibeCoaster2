@@ -87,6 +87,7 @@ void verifyConvergence(Design& design,Cancel cancel){
     design.convergence.coarseStep=design.request.simulationStep;
     design.convergence.fineStep=design.request.simulationStep*.5;
     if(cancel&&cancel()){design.simulation.cancelled=true;design.report.fail("CANCELLED","Convergence verification cancelled");return;}
+    if(design.request.simulationStep!=1./960){design.report.fail("CONVERGENCE_RATE","Ride acceptance requires 960 Hz simulation and 1920 Hz verification");return;}
     if(!design.report.valid()||!design.simulation.completed||!design.simulation.report.valid()||design.simulation.cancelled)return;
     try{
         const auto fine=simulate(design.track,design.operations,design.request.train,design.convergence.fineStep,cancel);

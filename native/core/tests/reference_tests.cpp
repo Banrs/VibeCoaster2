@@ -35,9 +35,14 @@ int main(){try{
     auto constrained=d;constrained.request.limits.maxLongitudinalRateGps=.00001;constrained.report={};evaluateTargets(constrained);check(code(constrained.report,"LONGITUDINAL_FORCE_RATE"),"Explicit provisional longitudinal gate rejects");check(!code(d.report,"LONGITUDINAL_FORCE_RATE"),"Unset axis gate unassessed, no fabricated threshold");
     req.limits.maxLateralRateGps=INFINITY;check(code(validateRequest(req),"AXIS_RATE_CONFIG"),"Infinite axis gate invalid");req.limits.maxLateralRateGps=0;check(code(validateRequest(req),"AXIS_RATE_CONFIG"),"Zero axis gate invalid");
     auto rateAssessed=d;rateAssessed.request.limits.maxLateralRateGps=1000;verifyConvergence(rateAssessed);check(rateAssessed.accepted(),"Improved canonical frame has an actually converged assessed lateral profile");
-    auto underresolved=rateAssessed;underresolved.request.simulationStep=1./30;underresolved.simulation=simulate(underresolved.track,underresolved.operations,underresolved.request.train,underresolved.request.simulationStep);underresolved.report={};verifyConvergence(underresolved);
-    check(!underresolved.accepted()&&underresolved.convergence.performed&&!underresolved.convergence.passed&&code(underresolved.report,"CONVERGENCE_METRIC"),"An underresolved actual simulation cannot commit acceptance");
-    check(std::count_if(underresolved.convergence.metrics.begin(),underresolved.convergence.metrics.end(),[](const auto& metric){return metric.name.find(".lateral.maxRateGps")!=std::string::npos;})==3,"Explicit lateral rates remain assessed at every seat even when this geometry converges for that component");
+    // Smooth geometry can agree even at30/60Hz. Research comparisons remain
+    // available, but that agreement can never substitute for acceptance rates.
+    auto underresolved=rateAssessed;underresolved.request.simulationStep=1./30;underresolved.simulation=simulate(underresolved.track,underresolved.operations,underresolved.request.train,underresolved.request.simulationStep);
+    auto finer=simulate(underresolved.track,underresolved.operations,underresolved.request.train,1./60);ConvergenceAssessment researchComparison;
+    compareSimulationConvergence(underresolved.simulation,finer,underresolved.request.limits,researchComparison);
+    check(researchComparison.performed&&std::count_if(researchComparison.metrics.begin(),researchComparison.metrics.end(),[](const auto& metric){return metric.name.find(".lateral.maxRateGps")!=std::string::npos;})==3,"Independent coarse comparison still assesses the actual lateral rate at every seat");
+    underresolved.report={};verifyConvergence(underresolved);
+    check(!underresolved.accepted()&&!underresolved.convergence.performed&&code(underresolved.report,"CONVERGENCE_RATE"),"Coarse replay cannot qualify for ride acceptance even when its paired comparison agrees");
     d.request.targets=t;d.request.targets.requireIntensity=false; // Synthetic metadata only; uncalibrated horizontal rates remain unassessed.
     verifyConvergence(d);check(d.accepted(),"Typed metadata fixture retains actual half-step verification");
     const auto folder=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()/"test-artifacts";std::filesystem::create_directories(folder);auto good=folder/"typed.coaster",bad=folder/"bad.coaster";

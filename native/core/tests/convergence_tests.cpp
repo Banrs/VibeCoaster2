@@ -79,6 +79,22 @@ int main(){try{
     require(has(validateSimulationTargets(b,targets,limits),"NONFINITE_METRIC"),"NaN comparison bypasses force validation");
     Design design;design.simulation=result();design.request.targets.requireIntensity=false;
     require(!design.accepted(),"Coarse-only design is rideable without convergence");
+    // Synthetic acceptance-state fixture: agreement flags cannot substitute
+    // for the exact production rates, independently of any particular route.
+    design.convergence.performed=design.convergence.passed=true;
+    design.convergence.coarseStep=1./960;design.convergence.fineStep=1./1920;
+    require(design.accepted(),"Complete acceptance state at production rates must be recognized");
+    for(double step:{1./30,1./480,1./1920,std::nextafter(1./960,0.),std::numeric_limits<double>::quiet_NaN()}){
+        auto substituted=design;substituted.request.simulationStep=step;
+        require(!substituted.accepted(),"A substituted requested rate cannot trust stale passing flags");
+        verifyConvergence(substituted);
+        require(!substituted.accepted()&&!substituted.convergence.performed&&has(substituted.report,"CONVERGENCE_RATE"),"Wrong rate fails explicitly before attempting finer replay");
+    }
+    auto substituted=design;substituted.convergence.coarseStep=1./480;
+    require(!substituted.accepted(),"Passing comparison at a substituted coarse rate cannot qualify");
+    substituted=design;substituted.convergence.fineStep=1./960;
+    require(!substituted.accepted(),"Passing comparison at a substituted fine rate cannot qualify");
+    design.convergence={};
     verifyConvergence(design,[]{return true;});
     require(!design.accepted()&&design.simulation.cancelled&&has(design.report,"CANCELLED"),"Cancellation loses failed-closed state");
     require(design.simulation.frames.size()==2&&design.simulation.frames.back().distance==5000,"Cancelled verification mutates coarse presentation trace");

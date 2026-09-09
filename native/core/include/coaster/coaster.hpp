@@ -223,7 +223,7 @@ struct Design {
     std::string planningDiagnostics; // Derived generation-only sidecar.
     std::vector<InversionDimensions> inversionDimensions; // Recomputed canonical bounds, not persisted.
     ConvergenceAssessment convergence; // Recomputed; persisted telemetry is never trusted.
-    bool accepted() const {return report.valid()&&simulation.completed&&simulation.report.valid()&&!simulation.cancelled&&convergence.performed&&convergence.passed;}
+    bool accepted() const {return report.valid()&&simulation.completed&&simulation.report.valid()&&!simulation.cancelled&&request.simulationStep==1./960&&convergence.coarseStep==1./960&&convergence.fineStep==1./1920&&convergence.performed&&convergence.passed;}
 };
 SimulationResult simulate(const Track&,const std::vector<Operation>&,const TrainConfig&,double step=1./960,Cancel cancel={});
 ValidationReport validateGeometry(const Track&,const Terrain&,const Limits&,const TrainConfig&,const std::vector<Support>&,Cancel cancel={});
