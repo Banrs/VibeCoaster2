@@ -2,6 +2,8 @@
 
 Active development is **0.8.1-intent.1 / COASTER5**, undergoing generator and hardware review. The latest released Windows preview is still **0.8.0-flow.1**; use the download below for that verified package. See [work in progress](WORK_IN_PROGRESS.md) for the distinction.
 
+The unreleased source defaults to desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off. Saved player settings remain respected, and newly built distribution launchers forward command-line options. The published 0.8.0 launcher retains its original settings described below; it is not the current engineering build.
+
 
 Released Windows preview: **0.8.0-flow.1 / COASTER5**.
 

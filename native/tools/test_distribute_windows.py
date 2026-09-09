@@ -43,6 +43,10 @@ class DistributionTests(unittest.TestCase):
         result = distribute(self.package, self.root / 'output', 'test')
         archive = Path(result['archive'])
         before = archive.read_bytes()
+        launcher = (Path(result['folder']) / 'Play VibeCoaster.cmd').read_text()
+        self.assertIn('"%~dp0VibeCoaster.exe" %*', launcher)
+        for forced_option in ('-ResX', '-ResY', '-windowed', 't.MaxFPS', 'r.VSync'):
+            self.assertNotIn(forced_option, launcher)
         with zipfile.ZipFile(archive) as zipped:
             for name in self.files:
                 key = 'VibeCoaster-test-Windows/' + name
