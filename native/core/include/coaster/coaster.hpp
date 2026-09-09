@@ -13,7 +13,7 @@
 namespace coaster {
 constexpr double pi=3.14159265358979323846, gravity=9.80665;
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
-constexpr const char* generatorVersion="0.8.0-flow.1";
+constexpr const char* generatorVersion="0.8.1-intent.1";
 struct Vec3 {
     double x{},y{},z{};
     Vec3 operator+(Vec3 b) const { return {x+b.x,y+b.y,z+b.z}; }

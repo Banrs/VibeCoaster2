@@ -25,21 +25,36 @@ template<class T,size_t N>inline T flowValue(const std::array<T,N>& c,double u){
 // correction still operates on the same physical representation.
 inline void blendAuthoredJoin(std::vector<AuthoredPoint>& points,size_t first,size_t last,Cancel cancel={}){
     if(first<4||last+5>=points.size()||last<=first)throw std::invalid_argument("Flow join requires four authored guards at each end");
-    std::vector<AuthoredPoint> local(points.begin()+first-4,points.begin()+last+5);
-    Track source=compile(local,false);const size_t right=last-first+4;
-    const double begin=source.spans[4].start,end=source.spans[right].start,span=end-begin;
-    auto bankJet=[&](size_t index){const auto& p=source.spans[index];double q=norm(p.c[1]),qu=dot(p.c[1],p.c[2]*2)/q;
+    // The interior may be precisely the corner this bridge must repair. Read
+    // each port from its own derivative stencil, without first compiling that
+    // unrepaired interior. Chord distance supplies a monotone authoring parameter;
+    // the completed bridge still passes the normal canonical compile and replay.
+    auto guard=[&](size_t index){
+        return compile(std::vector<AuthoredPoint>(points.begin()+index-4,points.begin()+index+5),false);
+    };
+    if(cancel&&cancel())throw std::runtime_error("CANCELLED");
+    Track left=guard(first),right=guard(last);
+    std::vector<double> distance(last-first+1);
+    for(size_t i=first+1;i<=last;++i){
+        const double chord=norm(points[i].position-points[i-1].position);
+        if(!std::isfinite(chord)||chord<1e-5)throw std::invalid_argument("Flow join requires distinct finite authored points");
+        distance[i-first]=distance[i-first-1]+chord;
+    }
+    const double span=distance.back();
+    auto bankJet=[](const Track& source){const auto& p=source.spans[4];double q=norm(p.c[1]),qu=dot(p.c[1],p.c[2]*2)/q;
         return std::array<double,3>{p.bank[0],p.bank[1]/q,2*p.bank[2]/(q*q)-p.bank[1]*qu/(q*q*q)};};
-    const auto ba=bankJet(4),bb=bankJet(right);
+    const auto ba=bankJet(left),bb=bankJet(right);
     const auto bank=flowFramePolynomial(ba[0],ba[1],ba[2],bb[0],bb[1],bb[2],span);
-    for(auto& knot:source.knots)knot.bank=0;
-    rebuildFramePolynomials(source);
-    const auto a=sampleKinematics(source,begin),b=sampleKinematics(source,end);
+    for(auto* source:{&left,&right}){
+        for(auto& knot:source->knots)knot.bank=0;
+        rebuildFramePolynomials(*source);
+    }
+    const auto a=sampleSpanKinematics(left,4,0),b=sampleSpanKinematics(right,4,0);
     const auto position=flowBridgePolynomial(a,b,span);
     const auto up=flowFramePolynomial(a.sample.up,a.upS,a.upSS,b.sample.up,b.upS,b.upSS,span);
     for(size_t i=first;i<=last;++i){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
-        double u=(source.spans[i-first+4].start-begin)/span;
+        double u=distance[i-first]/span;
         points[i].position=flowValue(position,u);points[i].upHint=flowValue(up,u);points[i].bank=flowValue(bank,u);
         if(!finite(points[i].position)||!finite(points[i].upHint)||!std::isfinite(points[i].bank)||norm(points[i].upHint)<.5)
             throw std::runtime_error("Flow join left its finite reference-frame domain");

@@ -1,5 +1,16 @@
 # Native foundation status
 
+## Active review — 0.8.1-intent.1 (not yet released)
+
+The numerical checkpoint contains an energy-authored full loop, a joint-force Immelmann with a rolling descent and pullout, bounded finite-train energy feedback, terrain-aware element placement and composed crossing clearance. Conventional-train presentation and additional runtime changes remain in the working tree for a separate checkpoint. The current review covers whole-route terrain use, source preservation, physical supply and coherent element/transition forces; passing peak caps alone is insufficient.
+
+The composed crossing correction passed all 26 CTest suites. The subsequent explicit-loss FVD core and asymmetric tall-hill adapter pass all 5,329 FVD checks; their whole-generator integration is being reviewed. A separate terrain-led itinerary is still an artifact experiment, not the seeded production generator. Intermediate editor-game traversal and save/load evidence is in `artifacts/generator-intent-v081/joint-editor-v6/`. Final-source regression, representative POV review and a new package remain outstanding. See [the review](artifacts/generator-intent-v081/REVIEW.md) and [loss-aware source evidence](artifacts/generator-intent-v081/loss-aware-production-v1/REPORT.md).
+
+The released Windows preview remains **0.8.0-flow.1**. Its evidence below is preserved and must not be presented as 0.8.1 verification. ALL RECORDS still requires eligible authentic benchmark recordings; full current F2291 clauses and a Mac/Metal build remain unavailable.
+
+## Released 0.8.0 checkpoint
+
+
 Active source is **0.8.0-flow.1 / COASTER5**. This iteration blends module joins,
 overlaps inversion pitch/roll, sizes transfers from energy, and feeds measured
 entry speeds back into FVD authoring. The fixed 18-request proof panel accepts

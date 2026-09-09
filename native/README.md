@@ -1,6 +1,9 @@
 # VibeCoaster native game
 
-Active source and Windows preview are **0.8.0-flow.1 / COASTER5**.
+Active development is **0.8.1-intent.1 / COASTER5**, undergoing generator and hardware review. The latest released Windows preview is still **0.8.0-flow.1**; use the download below for that verified package. See [work in progress](WORK_IN_PROGRESS.md) for the distinction.
+
+
+Released Windows preview: **0.8.0-flow.1 / COASTER5**.
 
 **Windows preview: 0.8.0-flow.1.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.0-flow.1) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
 

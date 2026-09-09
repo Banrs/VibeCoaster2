@@ -1,4 +1,5 @@
 #include "coaster/layout_modules.hpp"
+#include "coaster/fvd.hpp"
 #include <stdexcept>
 
 namespace coaster {
@@ -120,4 +121,100 @@ ReversingModule buildReversingModule(const ReversingModuleRequest& request,Cance
     if(cancelled())result.canonicalBuilt=false;
     return result;
 }
+ReversingModule buildEnergyReversingModule(const EnergyReversingModuleRequest& input,Cancel cancel){
+    const auto& r=input.geometry;ReversingModule result;result.kind=r.kind;result.entry=r.entry;result.track.closed=false;
+    auto fail=[&](const char* code,const char* message){result.report.fail(code,message);};
+    if(!validPose(r.entry)||std::abs(r.entry.forward.z)>1e-9||norm(r.entry.up-Vec3{0,0,1})>1e-9||
+        r.pitchShape!=0||!std::isfinite(r.rollLength)||r.rollLength<20||r.rollLength>1000||
+        !std::isfinite(r.rollShape)||std::abs(r.rollShape)>.65||!std::isfinite(r.rollOverlap)||r.rollOverlap<0||r.rollOverlap>.4||
+        !std::isfinite(r.sampleSpacing)||r.sampleSpacing<.25||r.sampleSpacing>2||
+        !std::isfinite(r.portLength)||r.portLength<4*r.sampleSpacing||r.portLength>100||
+        (r.rollDirection!=1&&r.rollDirection!=-1)||(r.kind!=ReversingModuleKind::Immelmann&&r.kind!=ReversingModuleKind::DiveLoop)){
+        fail("LAYOUT_MODULE_INPUT","Unsupported energy-authored module pose, roll or sampling");return result;}
+    if(r.maxSamples<12||r.maxSamples>50000){fail("LAYOUT_MODULE_BUDGET","Unsupported module sample budget");return result;}
+    auto cancelled=[&]{if(cancel&&cancel()){result.cancelled=true;fail("CANCELLED","Energy-authored module cancelled");return true;}return false;};
+    if(cancelled())return result;
+    auto pitch=designFvdPitch({r.height,input.apexSpeed,input.normalG,input.pushRampSeconds},cancel);
+    result.report=pitch.section.report;result.cancelled=pitch.section.cancelled;
+    if(!result.report.valid()||!pitch.section.assessment.passed)return result;
+    result.pitchLength=pitch.section.track.length;result.height=pitch.height;result.rollLength=r.rollLength;
+    result.pitchForwardDisplacement=pitch.forwardDisplacement;result.idealApexSpeed=input.apexSpeed;
+    result.idealEntrySpeed=pitch.authoring.speed;
+    const double overlap=result.pitchLength*r.rollOverlap;
+    const int pitchSteps=int(std::ceil(result.pitchLength/r.sampleSpacing)),rollSteps=int(std::ceil(r.rollLength/r.sampleSpacing)),portSteps=int(std::ceil(r.portLength/r.sampleSpacing));
+    if(size_t(pitchSteps)+rollSteps+2*portSteps+1>r.maxSamples){fail("LAYOUT_MODULE_BUDGET","Energy-authored module exceeds its sample budget");return result;}
+    std::vector<AuthoredPoint> local;
+    auto append=[&](Vec3 p,Vec3 up,Element e){local.push_back({p,0,e,up});};
+    for(int i=0;i<=portSteps;++i)append({r.portLength*i/portSteps,0,0},{0,0,1},Element::Return);
+    result.pitchBeginIndex=local.size()-1;Vec3 start=local.back().position;
+    for(int i=1;i<=pitchSteps;++i){if((i&63)==0&&cancelled())return result;
+        double s=result.pitchLength*i/pitchSteps;auto p=pitch.section.track.sample(s);
+        double angle=r.rollDirection*pi*progress(std::clamp((s-result.pitchLength+overlap)/(r.rollLength+overlap),0.,1.),r.rollShape);
+        append(start+p.position,rotate(p.up,p.tangent,angle),Element::Inversion);}
+    result.pitchEndIndex=local.size()-1;
+    result.rollBeginIndex=result.pitchBeginIndex+size_t(std::floor(pitchSteps*(1-r.rollOverlap)));
+    auto top=pitch.section.track.sample(result.pitchLength);start=local.back().position;
+    for(int i=1;i<=rollSteps;++i){if((i&63)==0&&cancelled())return result;
+        double s=r.rollLength*i/rollSteps,angle=r.rollDirection*pi*progress((overlap+s)/(r.rollLength+overlap),r.rollShape);
+        append(start+top.tangent*s,rotate(top.up,top.tangent,angle),Element::Inversion);}
+    result.rollEndIndex=local.size()-1;start=local.back().position;Vec3 endUp=local.back().upHint;
+    for(int i=1;i<=portSteps;++i)append(start+top.tangent*(r.portLength*i/portSteps),endUp,Element::Return);
+    if(r.kind==ReversingModuleKind::DiveLoop){Vec3 end=local.back().position;std::reverse(local.begin(),local.end());for(auto& p:local)p.position=p.position-end;
+        const size_t last=local.size()-1;size_t a=result.pitchBeginIndex,b=result.rollBeginIndex;
+        result.pitchBeginIndex=last-result.pitchEndIndex;result.pitchEndIndex=last-a;
+        result.rollBeginIndex=last-result.rollEndIndex;result.rollEndIndex=last-b;
+        result.idealEntrySpeed=input.apexSpeed;
+    }
+    const Vec3 right=cross(r.entry.forward,r.entry.up);
+    auto transform=[&](Vec3 p){return r.entry.forward*p.x+right*(-p.y)+r.entry.up*p.z;};
+    result.points.reserve(local.size());for(auto p:local){p.position=r.entry.position+transform(p.position);p.upHint=transform(p.upHint);result.points.push_back(p);}
+    result.geometryBuilt=true;if(cancelled())return result;
+    try{result.track=compile(result.points,false);result.canonicalBuilt=true;
+        auto exit=result.track.sample(result.track.length);result.exit={exit.position,exit.tangent,exit.up};
+        for(size_t span=0;span<result.track.spans.size();++span){if((span&63)==0&&cancelled())return result;
+            for(double u:{0.,.5,1.}){auto k=sampleSpanKinematics(result.track,span,u);
+                result.sampledMaxCurvature=std::max(result.sampledMaxCurvature,norm(k.sample.curvature));
+                result.sampledMaxFrameTwistPerMeter=std::max(result.sampledMaxFrameTwistPerMeter,std::abs(dot(k.upS,k.sample.right)));}}
+    }catch(const std::exception& e){fail("LAYOUT_MODULE_CANONICAL",e.what());}
+    return result;
+}
+
+EnergyLoopModule buildEnergyLoopModule(const EnergyLoopModuleRequest& r,Cancel cancel){
+    EnergyLoopModule result;result.entry=r.entry;result.track.closed=false;
+    auto fail=[&](const char* code,const char* message){result.report.fail(code,message);};
+    if(!validPose(r.entry)||std::abs(r.entry.forward.z)>1e-9||norm(r.entry.up-Vec3{0,0,1})>1e-9||
+        !std::isfinite(r.lateralOffset)||std::abs(r.lateralOffset)>100||!std::isfinite(r.apexNormalG)||r.apexNormalG<0||r.apexNormalG>1.5||
+        !std::isfinite(r.sampleSpacing)||r.sampleSpacing<.25||r.sampleSpacing>2||
+        !std::isfinite(r.portLength)||r.portLength<4*r.sampleSpacing||r.portLength>100){
+        fail("LAYOUT_MODULE_INPUT","Unsupported energy-authored full-loop pose, offset or sampling");return result;}
+    if(r.maxSamples<12||r.maxSamples>50000){fail("LAYOUT_MODULE_BUDGET","Unsupported loop sample budget");return result;}
+    auto cancelled=[&]{if(cancel&&cancel()){result.cancelled=true;fail("CANCELLED","Energy-authored full loop cancelled");return true;}return false;};
+    if(cancelled())return result;
+    auto pitch=designFvdPitch({r.height,r.apexSpeed,r.normalG,r.pushRampSeconds,r.apexNormalG},cancel);
+    result.report=pitch.section.report;result.cancelled=pitch.section.cancelled;
+    if(!result.report.valid()||!pitch.section.assessment.passed)return result;
+    result.height=pitch.height;result.pitchForwardDisplacement=pitch.forwardDisplacement;
+    result.idealEntrySpeed=pitch.authoring.speed;result.idealApexSpeed=r.apexSpeed;
+    const double L=pitch.section.track.length,D=pitch.forwardDisplacement;
+    const int steps=int(std::ceil(L/r.sampleSpacing)),guards=int(std::ceil(r.portLength/r.sampleSpacing));
+    if(2*size_t(steps)+2*guards+1>r.maxSamples){fail("LAYOUT_MODULE_BUDGET","Energy-authored full loop exceeds sample budget");return result;}
+    const Vec3 right=cross(r.entry.forward,r.entry.up);
+    auto transform=[&](Vec3 p){return r.entry.forward*p.x-right*p.y+r.entry.up*p.z;};
+    auto append=[&](Vec3 p,Vec3 up,Element e){result.points.push_back({r.entry.position+transform(p),0,e,transform(up)});};
+    for(int i=0;i<=guards;++i)append({r.portLength*i/guards,0,0},{0,0,1},Element::Return);
+    for(int i=1;i<=2*steps;++i){if((i&63)==0&&cancelled())return result;
+        double s=L*i/steps,u=double(i)/(2*steps);bool descending=i>steps;
+        auto q=pitch.section.track.sample(descending?2*L-s:s);
+        Vec3 p=descending?Vec3{2*D-q.position.x,q.position.y,q.position.z}:q.position;
+        Vec3 up=descending?Vec3{-q.up.x,q.up.y,q.up.z}:q.up;
+        p.x+=r.portLength;p.y+=r.lateralOffset*u*u*u*u*(35+u*(-84+u*(70-20*u)));
+        append(p,up,Element::Inversion);
+    }
+    for(int i=1;i<=guards;++i)append({r.portLength+2*D+r.portLength*i/guards,r.lateralOffset,0},{0,0,1},Element::Return);
+    result.geometryBuilt=true;if(cancelled())return result;
+    try{result.track=compile(result.points,false);result.canonicalBuilt=true;auto end=result.track.sample(result.track.length);result.exit={end.position,end.tangent,end.up};}
+    catch(const std::exception& e){fail("LAYOUT_MODULE_CANONICAL",e.what());}
+    return result;
+}
+
 }

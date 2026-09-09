@@ -179,7 +179,7 @@ void buildSupportLayout(Design& d,Cancel cancel){
     size_t totalMembers=0;
     for(double distance=0;distance<d.track.length;){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
-        const auto q=d.track.sample(distance);Vec3 right=unit({q.right.x,q.right.y,0});
+        auto q=d.track.sample(distance);Vec3 right=unit({q.right.x,q.right.y,0});
         if(norm(right)<.5)right=unit(Vec3{q.tangent.y,-q.tangent.x,0});
         Vec3 attachment=q.position-q.up*(spineDepth+spineRadius);bool placed=false;
         const auto tryPlace=[&](Support support){
@@ -194,6 +194,7 @@ void buildSupportLayout(Design& d,Cancel cancel){
             if(totalMembers>maxTotalSupportMembers)throw std::runtime_error("SUPPORT_MEMBER_BUDGET");
             d.supports.push_back(std::move(support));return true;
         };
+        const auto tryFamilies=[&](){
         // The narrow single-post family is tried only within its low/upright
         // domain, then a paired bent. Station platforms, banked train envelopes
         // and other tracks may reject either; tall cantilever towers remain the
@@ -224,7 +225,28 @@ void buildSupportLayout(Design& d,Cancel cancel){
             }
             if(placed)break;
         }
-        if(!placed)throw std::runtime_error("No validated connected tower placement at distance "+std::to_string(distance));
+        };
+        tryFamilies();
+        // Preserve every valid nominal placement. An obstructed lattice site
+        // may move locally; the original families and complete collision gates
+        // still decide, and subsequent spacing starts at the actual attachment.
+        const double nominal=distance;
+        if(!placed&&!d.supports.empty()){
+            const double previous=d.supports.back().trackDistance;
+            const auto p=d.track.sample(previous);const Vec3 joint=p.position-p.up*(spineDepth+spineRadius);
+            const double previousMinimum=joint.z-d.request.terrain.height(joint.x,joint.y)>90?32.:24.;
+            for(double offset:{-1.,1.,-2.,2.,-4.,4.,-6.,6.,-8.,8.}){
+                const double candidate=nominal+offset;
+                if(candidate<=previous||candidate>=d.track.length||candidate-previous<previousMinimum||candidate-previous>40)continue;
+                auto sample=d.track.sample(candidate);const Vec3 contact=sample.position-sample.up*(spineDepth+spineRadius);
+                const double minimum=contact.z-d.request.terrain.height(contact.x,contact.y)>90?32.:24.;
+                if(candidate-previous<minimum)continue;
+                distance=candidate;q=sample;attachment=contact;right=unit({q.right.x,q.right.y,0});
+                if(norm(right)<.5)right=unit(Vec3{q.tangent.y,-q.tangent.x,0});
+                tryFamilies();if(placed)break;
+            }
+        }
+        if(!placed)throw std::runtime_error("No validated connected tower placement at distance "+std::to_string(nominal));
         // Layout density follows the strongest nearby curvature/frame change,
         // including look-ahead so an approaching roll does not inherit the long
         // span of its straight entry. Keep the old 40 m maximum. This is a

@@ -1,5 +1,10 @@
 # Native validation - current review and preserved evidence
 
+Active **0.8.1-intent.1** validation is in progress under `artifacts/generator-intent-v081/`. The composed-crossing source passed all 26 CTest suites; the later explicit-loss FVD integration passed its complete 5,329-check suite. These are separate source checkpoints. The terrain-led whole-route experiment and generator integration of the new tall hill remain under review. Do not combine intermediate numerical or editor-render results with the released package results below. Final-source regression, representative POV review and packaged verification are pending.
+
+## Released 0.8.0 evidence
+
+
 Current **0.8.0-flow.1 / COASTER5** evidence is in [DELIVERY.md](DELIVERY.md) and
 local `artifacts/flow-v080-20260908/`. The fixed 18-request proof panel accepted
 18/18 with independent exact saved replay and convergence; 15/18 meet the soft

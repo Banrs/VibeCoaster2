@@ -24,6 +24,7 @@ struct ReversingModule {
     Track track;
     size_t pitchBeginIndex{},pitchEndIndex{},rollBeginIndex{},rollEndIndex{};
     double pitchLength{},height{},rollLength{};
+    double pitchForwardDisplacement{},idealEntrySpeed{},idealApexSpeed{}; // Energy-authored source diagnostics only.
     double sampledMaxCurvature{},sampledMaxFrameTwistPerMeter{}; // Diagnostics, not continuous bounds.
     bool geometryBuilt{},canonicalBuilt{},cancelled{};
     ValidationReport report;
@@ -47,4 +48,36 @@ struct ReversingModule {
 // circuit. Recompiling those points still requires all full-ride acceptance
 // gates; this function does not size drives or certify finite-train forces.
 ReversingModule buildReversingModule(const ReversingModuleRequest&,Cancel cancel={});
+// Force-designed alternative; legacy geometric authoring above is unchanged.
+// geometry.pitchShape must be zero: normalG and pushRampSeconds redistribute
+// pitch curvature through gravity-coupled FVD instead. Entry is level/upright.
+// Height is a source climb, not height above terrain. Consume the actual exit
+// position: Immelmann netX = pitchForwardDisplacement - rollLength; dive is its
+// reverse. Full finite-train replay must determine final entry/apex forces.
+struct EnergyReversingModuleRequest {
+    ReversingModuleRequest geometry;
+    double apexSpeed{24},normalG{3.5},pushRampSeconds{1.2};
+};
+ReversingModule buildEnergyReversingModule(const EnergyReversingModuleRequest&,Cancel cancel={});
+struct EnergyLoopModuleRequest {
+    LayoutModulePose entry;
+    double height{60},apexSpeed{20},normalG{3.5},apexNormalG{.5},pushRampSeconds{1.2};
+    double lateralOffset{36},portLength{8},sampleSpacing{1.5};
+    size_t maxSamples{20000};
+};
+struct EnergyLoopModule {
+    LayoutModulePose entry,exit;
+    std::vector<AuthoredPoint> points;
+    Track track;
+    double height{},pitchForwardDisplacement{},idealEntrySpeed{},idealApexSpeed{};
+    bool geometryBuilt{},canonicalBuilt{},cancelled{};
+    ValidationReport report;
+};
+// Two energy-authored pitches meet at a positive-load inverted crest. The
+// reflected descent restores heading and height, with actual netX=2*pitchX+2*portLength.
+// A smooth caller-selected lateral offset separates the loop's crossing arms.
+// No frame roll or endpoint displacement correction is used to fake closure.
+EnergyLoopModule buildEnergyLoopModule(const EnergyLoopModuleRequest&,Cancel cancel={});
+
+
 }

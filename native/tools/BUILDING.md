@@ -1,6 +1,6 @@
 # Build the native game and numerical tools
 
-Current source: application and geometry/save identity 0.8.0-flow.1 / COASTER5.
+Current source: application and geometry/save identity 0.8.1-intent.1 / COASTER5.
 Windows UE5.8.2 builds and packages successfully. Mac/Metal still needs a Mac.
 
 ## Current source build
@@ -13,7 +13,7 @@ cmake --build native/build-cmake --config Release --parallel 2
 ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2
 ```
 
-CMake registers 22 C++ suites, plus real CLI argument tests when Python is available. Historical rejection fixtures under
+CMake registers 25 C++ suites, plus real CLI argument tests when Python is available. Historical rejection fixtures under
 `core/tests/fixtures/historical/artifacts` are required committed test inputs.
 The separate convergence CLI is built but does not run a matrix automatically.
 
@@ -24,7 +24,7 @@ to bound memory use. Build into a fresh timestamped package:
 
 ```powershell
 & .\native\unreal\scripts\package.ps1 -UnrealRoot 'D:\Games\Epic Games\UE_5.8'
-python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.8.0-flow.1
+python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.8.1-intent.1
 ```
 
 The distribution helper requires Python 3.11+, verifies copied runtime files and

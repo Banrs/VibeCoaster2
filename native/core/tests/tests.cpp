@@ -11,6 +11,12 @@ static void near(double a,double b,double tolerance,const std::string& what){che
 static bool code(const ValidationReport& r,const std::string& c){return std::any_of(r.errors.begin(),r.errors.end(),[&](const Finding& f){return f.code==c;});}
 static Track line(double length=150){std::vector<AuthoredPoint> p;for(int i=0;i<=int(length);++i)p.push_back({{double(i),0,20},0,Element::Launch,{0,0,1}});return compile(p,false);}
 static Track circle(bool vertical,double radius=100,double bank=0){std::vector<AuthoredPoint> p;int n=int(std::ceil(2*pi*radius));for(int i=0;i<=n;++i){double a=2*pi*i/n;if(vertical)p.push_back({{radius*std::sin(a),0,20+radius*(1-std::cos(a))},bank,Element::Inversion,{-std::sin(a),0,std::cos(a)}});else p.push_back({{radius*std::sin(a),radius*(1-std::cos(a)),20},bank,Element::Turn,{0,0,1}});}p.back()=p.front();return compile(p,true);}
+static void cancellationContract(){
+    GenerationRequest request;request.targets.requireIntensity=false;request.maxCandidates=1;
+    int polls=0;auto cancelled=generate(request,[&]{return ++polls==3;});
+    check(cancelled.simulation.cancelled&&!cancelled.accepted()&&code(cancelled.report,"CANCELLED"),
+        "An observed construction cancellation stays cancelled when the callback subsequently returns false");
+}
 static void analytical(){
     auto straight=line();auto f=measureSeatForces(straight,50,40,3,0);near(f.vertical,1,1e-9,"Straight vertical gravity");near(f.lateral,0,1e-9,"Straight lateral gravity");near(f.longitudinal,3/gravity,1e-9,"Explicit tangential force");
     auto horizontal=circle(false);double speed=30,r=100;
@@ -162,6 +168,8 @@ static std::vector<double> horizontalTurnAngles(const Track& track){
 static void planningAndTargets(){
     GenerationRequest req;req.seed=1;req.targets.requireIntensity=false;auto flat=generate(req);check(flat.accepted(),"Variety flat fixture accepted");
     req.terrain.kind=TerrainKind::Hills;auto hills=generate(req);check(hills.accepted(),"Variety hills fixture accepted");
+    // Pre-terrain crossing lift left this tail 1.8m below the earlier hill.
+    check(hills.candidate==0,"Composed terrain crossing retains candidate zero under complete clearance and force validation");
     // Added S-connectors can merge adjacent Turn runs. Run count is not
     // corridor count; different terrain may select a different accepted route.
     auto flatAngles=horizontalTurnAngles(flat.track),hillAngles=horizontalTurnAngles(hills.track);check(!flatAngles.empty()&&!hillAngles.empty(),"Accepted terrain routes retain turning geometry");
@@ -220,4 +228,4 @@ static void stationPlacementRepair(){
     check(!loadDesign(fixture.string(),prior,error),"Prior foundation geometry is not silently reinterpreted");check(reportJson(prior)==reportJson(d),"Unsupported schema preserves current design");check(readBytes(fixture)==original,"Prior foundation archive remains byte-identical");
 }
 
-int main(){try{analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}
+int main(){try{cancellationContract();analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}

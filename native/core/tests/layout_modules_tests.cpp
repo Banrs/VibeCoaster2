@@ -1,4 +1,5 @@
 #include "coaster/layout_modules.hpp"
+#include "coaster/fvd.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -129,6 +130,56 @@ int main(){try{
     request=ReversingModuleRequest{};request.maxSamples=15;reject(request,"LAYOUT_MODULE_BUDGET");
     auto cancelled=buildReversingModule(ReversingModuleRequest{},[]{return true;});check(cancelled.cancelled&&!cancelled.geometryBuilt&&!cancelled.canonicalBuilt&&!cancelled.report.valid(),"Cancelled authoring cannot be mistaken for completed geometry");
     int polls=0;cancelled=buildReversingModule(ReversingModuleRequest{},[&]{return ++polls>=3;});check(cancelled.cancelled&&!cancelled.geometryBuilt&&!cancelled.report.valid(),"Cancellation during geometry authoring");
+    // Force-designed geometry must solve actual energy and asymmetric ports,
+    // not recover a desired load by enlarging the legacy symmetric half-loop.
+    for(double height:{80.,95.,120.})for(double apex:{23.,26.}){
+        EnergyReversingModuleRequest energy;energy.geometry.height=height;energy.geometry.rollLength=60;
+        energy.geometry.rollOverlap=.23;energy.apexSpeed=apex;
+        auto up=buildEnergyReversingModule(energy);good(up);checkJoins(up.track);
+        check(up.pitchForwardDisplacement>10,"Energy pitch retains its nonzero forward displacement");
+        near(up.exit.position.x,up.pitchForwardDisplacement-energy.geometry.rollLength,1e-5,"Immelmann uses actual force-authored netX");
+        near(up.exit.position.z,height,1e-5,"Force shoot closes requested height without scaling");
+        nearVector(up.exit.forward,Vec3{-1,0,0},1e-7,"Energy pitch reverses forward");
+        nearVector(up.exit.up,Vec3{0,0,1},1e-7,"Energy roll restores upright frame");
+        near(up.idealEntrySpeed*up.idealEntrySpeed-apex*apex,2*gravity*height,1e-8,"Energy metadata retains the actual source climb");
+        double normalMax=-100,lateralMax=0,minimumSpeed=1000;
+        for(double at=0;at<up.track.length;at+=.4){auto q=up.track.sample(at);double v=std::sqrt(up.idealEntrySpeed*up.idealEntrySpeed-2*gravity*q.position.z);
+            auto force=measureSeatForces(up.track,at,v,-gravity*q.tangent.z,0);
+            normalMax=std::max(normalMax,force.vertical);lateralMax=std::max(lateralMax,std::abs(force.lateral));minimumSpeed=std::min(minimumSpeed,v);}
+        check(normalMax<3.51&&normalMax>3.45,"Canonical source retains ordinary 3.5g pitch intent");
+        check(lateralMax<1.5&&minimumSpeed>apex-.01,"Compound roll preserves bounded point forces and nonstalled apex");
+        for(int hand:{-1,1}){energy.geometry.kind=ReversingModuleKind::DiveLoop;energy.geometry.rollDirection=hand;
+            auto down=buildEnergyReversingModule(energy);good(down);checkJoins(down.track);
+            near(down.exit.position.x,-up.exit.position.x,1e-5,"Dive consumes reversed asymmetric displacement");
+            near(down.exit.position.z,-height,1e-5,"Dive restores the real source height");
+            nearVector(down.exit.forward,Vec3{-1,0,0},1e-7,"Dive reverses heading");}
+    }
+    for(double height:{55.,60.,68.}){
+        EnergyLoopModuleRequest loop;loop.height=height;loop.lateralOffset=0;
+        auto full=buildEnergyLoopModule(loop);
+        check(full.geometryBuilt&&full.canonicalBuilt&&full.report.valid(),"Energy full loop builds from shared force source");checkJoins(full.track);
+        near(full.exit.position.x,2*full.pitchForwardDisplacement+2*loop.portLength,1e-5,"Full-loop displacement includes both forward guards");
+        nearVector(full.exit.forward,Vec3{1,0,0},1e-7,"Full pitch loop restores forward heading");
+        nearVector(full.exit.up,Vec3{0,0,1},1e-7,"Full pitch loop restores upright without frame roll");
+        double apexDistance=full.track.length*.5;auto q=full.track.sample(apexDistance);
+        near(q.position.z,height,1e-4,"Loop apex retains requested source height");
+        nearVector(q.up,Vec3{0,0,-1},1e-6,"Full loop crest is inverted");
+        auto force=measureSeatForces(full.track,apexDistance,loop.apexSpeed,0,0);
+        near(force.vertical,loop.apexNormalG,.003,"Full-loop apex preserves positive support instead of a flat hanging reset");
+        loop.lateralOffset=36;auto offset=buildEnergyLoopModule(loop);
+        check(offset.canonicalBuilt&&offset.report.valid(),"Laterally separated full-loop source builds");checkJoins(offset.track);
+        near(offset.exit.position.y,36,1e-9,"Actual loop endpoint retains caller lateral separation");
+    }
+    EnergyReversingModuleRequest invalidEnergy;invalidEnergy.geometry.pitchShape=.1;
+    check(!buildEnergyReversingModule(invalidEnergy).report.valid(),"Legacy pitch shape is not silently ignored by energy authoring");
+    invalidEnergy={};invalidEnergy.apexSpeed=NAN;check(!buildEnergyReversingModule(invalidEnergy).report.valid(),"Nonfinite force source speed rejected");
+    auto unavailable=designFvdPitch({55,24,3.5,1.2,.5});check(!unavailable.section.report.valid(),"Unsolved force and energy intent remains a failure");
+    auto cancelledEnergy=buildEnergyReversingModule(EnergyReversingModuleRequest{},[]{return true;});
+    check(cancelledEnergy.cancelled&&!cancelledEnergy.geometryBuilt,"Energy module propagates early cancellation");
+    polls=0;cancelledEnergy=buildEnergyReversingModule(EnergyReversingModuleRequest{},[&]{return ++polls>20;});
+    check(cancelledEnergy.cancelled&&!cancelledEnergy.geometryBuilt,"Energy shooting propagates cancellation");
+    auto cancelledLoop=buildEnergyLoopModule(EnergyLoopModuleRequest{},[]{return true;});
+    check(cancelledLoop.cancelled&&!cancelledLoop.geometryBuilt,"Full-loop authoring propagates cancellation");
     std::cout<<"PASS "<<checks<<" reversing-module checks: genuine pitch/roll order, endpoint poses, inverted apex, canonical G3/C2 joins, deterministic variation, invalid input and cancellation\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

@@ -47,8 +47,18 @@ int main(int argc,char** argv){try{
     GenerationRequest bankedRequest;bankedRequest.seed=24;bankedRequest.terrain.kind=TerrainKind::Canyon;bankedRequest.targets.requireIntensity=false;
     auto banked=generate(bankedRequest);check(banked.accepted(),"Banked canyon outreach regression accepted under unchanged gates");
     check(validateDesignStructures(banked).valid(),"Banked outreach clears canonical station and train");
-    for(const auto& tower:banked.supports){auto frame=banked.track.sample(tower.trackDistance);
-        const double standoff=-dot(tower.top-tower.attachment,frame.up);check(std::abs(standoff-2)<1e-8||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Tower cap uses a bounded canonical under-spine stand-off across banking");}
+    for(const auto& support:banked.supports){auto frame=banked.track.sample(support.trackDistance);
+        const Vec3 offset=support.top-support.attachment;const double standoff=-dot(offset,frame.up);
+        const auto feet=std::count_if(support.members.begin(),support.members.end(),[](const auto& member){return member.kind==SupportMemberKind::Footing;});
+        if(feet==1||feet==2){
+            check(support.members.size()==size_t(feet*2+1),"Compact cap belongs to a connected post or paired bent");
+            check(norm(offset+frame.up*standoff)<1e-8,"Compact cap has no lateral or tangential outreach");
+            check(feet==1?(standoff>=.6-1e-8&&standoff<=2+1e-8):std::abs(standoff-2)<1e-8,"Compact cap uses its height-adaptive canonical under-spine neck");
+            check(support.top.z-banked.request.terrain.height(support.top.x,support.top.y)>=3-1e-8,"Compact cap retains its actual terrain clearance");
+        }else{
+            check(feet==4,"Other banked supports are four-foot towers");
+            check(std::abs(standoff-2)<1e-8||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Tower cap uses a bounded canonical under-spine stand-off across banking");
+        }}
     const auto bankedPath=out/"banked-outreach.coaster";check(saveDesign(banked,bankedPath.string(),error),"Banked outreach saves after independent validation: "+error);Design bankedReplay;
     check(loadDesign(bankedPath.string(),bankedReplay,error),"Banked outreach normally replays: "+error);
     const std::string pacingWarning="Moving ride exceeds the 180-second pacing goal; physical acceptance is unchanged.";

@@ -15,6 +15,24 @@ SimulationResult result(){
 }
 }
 int main(){try{
+    // Production generation and persistence share this request validator.
+    // Standalone simulation remains available at other resolutions for tests.
+    GenerationRequest request;request.targets.requireIntensity=false;
+    require(validateRequest(request).valid(),"Production request accepts exactly 960 Hz");
+    for(double step:{1./30,1./480,1./1920,std::nextafter(1./960,0.),std::nextafter(1./960,1.)}){
+        request.simulationStep=step;
+        require(has(validateRequest(request),"REQUEST_RANGE"),"Production request rejects a substituted simulation rate");
+        bool started=false;auto rejected=generate(request,{},[&](int,const std::string&){started=true;});
+        require(!started&&!rejected.accepted()&&rejected.track.spans.empty()&&has(rejected.report,"REQUEST_RANGE"),"Unsupported rate rejects before candidate work");
+    }
+    std::vector<AuthoredPoint> straight;
+    for(int i=0;i<=100;++i)straight.push_back({{double(i),0,20},0,Element::Launch,{0,0,1}});
+    const auto track=compile(straight,false);TrainConfig train;train.cars=1;
+    const Operation launch{0,99,DriveKind::Launch,20,train.carMass*4,train.carMass*400,.1};
+    for(double step:{1./30,1./480,1./1920}){
+        const auto replay=simulate(track,{launch},train,step);
+        require(replay.completed&&replay.report.valid(),"Standalone simulation retains independent resolution controls");
+    }
     Limits limits;Targets targets;targets.requireIntensity=false;
     auto a=result(),b=a;ConvergenceAssessment assessment;
     auto equal=compareSimulationConvergence(a,b,limits,assessment);
@@ -32,11 +50,13 @@ int main(){try{
     require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Tolerance boundary must be strictly below two percent");
     b=a;b.metrics.maxSpeed=80.81;
     require(!compareSimulationConvergence(a,b,limits,assessment).valid()&&assessment.maxSpeedRelativeError>.01,"One-percent speed limit ignored");
-    b=a;b.metrics.seats[2].axes[2].maxRateGps=1e9;
-    require(compareSimulationConvergence(a,b,limits,assessment).valid(),"Unassessed longitudinal rate silently gated");
-    limits.maxLongitudinalRateGps=10;
-    require(!compareSimulationConvergence(a,b,limits,assessment).valid()&&assessment.metrics.size()==79,"Configured longitudinal rate not checked at every seat");
-    require(has(validateSimulationTargets(b,targets,limits),"LONGITUDINAL_FORCE_RATE"),"Configured fine rate gate omitted");
+    for(int axis:{1,2}){
+        limits={};b=a;b.metrics.seats[2].axes[axis].maxRateGps=1e9;
+        require(compareSimulationConvergence(a,b,limits,assessment).valid(),"Unassessed component rate silently gated");
+        (axis==1?limits.maxLateralRateGps:limits.maxLongitudinalRateGps)=10;
+        require(!compareSimulationConvergence(a,b,limits,assessment).valid()&&assessment.metrics.size()==79,"Configured component rate not checked at every seat");
+        require(has(validateSimulationTargets(b,targets,limits),axis==1?"LATERAL_FORCE_RATE":"LONGITUDINAL_FORCE_RATE"),"Configured fine component rate gate omitted");
+    }
     limits={};b=a;b.metrics.seats[0].axes[2].mean10sMax=NAN;
     require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Missing required statistic accepted");
     b=a;b.completed=false;

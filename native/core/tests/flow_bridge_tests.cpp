@@ -68,6 +68,22 @@ int main(){try{
             check(error[metric]<previousError[metric]*.75+1e-8,"Halving authored spacing reduces outside rider disturbance");
         previousError=error;
     }
+    // An unbuildable corner inside a permitted transition is not an invalid
+    // port. The repair must not require canonical compilation of that corner.
+    std::vector<AuthoredPoint> corner;
+    for(int i=0;i<=120;++i){double x=i*1.5,z=20+std::max(0.,x-90)*.18;
+        corner.push_back({{x,0,z},0,Element::Return,{0,0,1}});
+    }
+    bool sourceRejected=false;try{compile(corner,false);}catch(const std::runtime_error&){sourceRejected=true;}
+    check(sourceRejected,"Sharp transition fixture fails original canonical bounds");
+    const auto untouched=corner;
+    detail::blendAuthoredJoin(corner,30,90);const auto repaired=compile(corner,false);
+    check(!repaired.spans.empty(),"Independent smooth ports repair an unbuildable interior");
+    for(size_t i=0;i<corner.size();++i)if(i<30||i>90)close(corner[i].position,untouched[i].position);
+    for(size_t i=1;i<repaired.spans.size();++i){auto a=sampleSpanKinematics(repaired,i-1,1),b=sampleSpanKinematics(repaired,i,0);
+        close(a.sample.position,b.sample.position);close(a.sample.tangent,b.sample.tangent);close(a.sample.curvature,b.sample.curvature);close(a.curvatureS,b.curvatureS);
+        close(a.sample.up,b.sample.up);close(a.upS,b.upS);close(a.upSS,b.upSS);
+    }
     bool cancelled=false;try{detail::blendAuthoredJoin(points,32,126,[]{return true;});}catch(const std::runtime_error&){cancelled=true;}check(cancelled,"Join cancellation is retained");
     for(double span:{0.,-1.,std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()}){bool rejected=false;try{detail::flowBridgePolynomial(port,port,span);}catch(const std::invalid_argument&){rejected=true;}check(rejected,"Invalid physical span rejected explicitly");}
     port.curvatureS.x=std::numeric_limits<double>::quiet_NaN();bool rejected=false;try{detail::flowBridgePolynomial(port,port,100);}catch(const std::invalid_argument&){rejected=true;}check(rejected,"Nonfinite endpoint jet rejected explicitly");

@@ -137,7 +137,7 @@ if ($Test) {
 # Independent experiment suites preserve the scientific/property tests from each input.
 $AdapterInclude = Join-Path $NativeDir "unreal/Source/VibeCoaster/Public"
 $Historical = Join-Path $TestsDir "fixtures/historical"
-foreach ($Name in @("persistence_cancel", "baseline_jets", "flow_bridge", "connector_profile", "reference", "support", "support_family", "layout_modules", "organic_generation", "terrain_profile", "fvd", "dimensions", "clearance", "track_web", "station", "structures", "geometry", "frame_force", "terrain", "convergence", "drive_profile")) {
+foreach ($Name in @("terrain_transfer", "passive_transfer", "terrain_module_placement", "persistence_cancel", "baseline_jets", "flow_bridge", "connector_profile", "reference", "support", "support_family", "layout_modules", "organic_generation", "terrain_profile", "fvd", "dimensions", "clearance", "track_web", "station", "structures", "geometry", "frame_force", "terrain", "convergence", "drive_profile")) {
   $Source = Join-Path $TestsDir ($Name + "_tests.cpp")
   $Binary = Join-Path $BuildDir ($Name + "_tests.exe")
   $SuiteSources = $CoreSources

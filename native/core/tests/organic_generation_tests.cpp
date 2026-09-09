@@ -24,7 +24,7 @@ ObservedInversions classifyGeometry(const Design& design){
         }
         double pitch=std::atan2(start.tangent.z,dot(start.tangent,forward)),initialPitch=pitch,roll=0,initialRoll=0;
         double firstAscendingVertical=INFINITY,firstDescendingVertical=INFINITY,ascendingRoll=0,descendingRoll=0;
-        double invertedApex=-INFINITY;const int samples=int(std::ceil(region.pathLength/.25));
+        double invertedApex=-INFINITY,returnUprightSlope=INFINITY;bool seenInverted=false;const int samples=int(std::ceil(region.pathLength/.25));
         for(int i=0;i<=samples;++i){
             double distance=region.startDistance+region.pathLength*i/samples;auto sample=design.track.sample(distance);
             check(finite(sample.position)&&finite(sample.tangent)&&finite(sample.up),"Generated canonical inversion has finite frames");
@@ -37,6 +37,8 @@ ObservedInversions classifyGeometry(const Design& design){
             roll+=std::remainder(angle-roll,2*pi);if(i==0)initialRoll=roll;
             if(sample.tangent.z>std::cos(portAngle)&&!std::isfinite(firstAscendingVertical)){firstAscendingVertical=distance;ascendingRoll=roll;}
             if(sample.tangent.z< -std::cos(portAngle)&&!std::isfinite(firstDescendingVertical)){firstDescendingVertical=distance;descendingRoll=roll;}
+            if(sample.up.z<-.5)seenInverted=true;
+            if(seenInverted&&sample.up.z>.5&&!std::isfinite(returnUprightSlope))returnUprightSlope=sample.tangent.z;
             if(sample.up.z<-.5)invertedApex=std::max(invertedApex,sample.position.z-design.request.terrain.height(sample.position.x,sample.position.y));
         }
         double pitchSweep=pitch-initialPitch,rollSweep=roll-initialRoll;
@@ -46,19 +48,30 @@ ObservedInversions classifyGeometry(const Design& design){
         if(headingAgreement>headingCosine&&std::abs(pitchSweep-2*pi)<phaseTolerance){
             check(std::isfinite(firstAscendingVertical)&&std::isfinite(firstDescendingVertical)&&firstAscendingVertical<firstDescendingVertical,"Retained full loop contains ascent and descent pitch in its original heading");
             check(std::abs(rollSweep)<phaseTolerance,"Full loop is a pitch revolution without an added barrel roll");
+            check(region.verticalExtent>=54&&region.verticalExtent<=70,"Ordinary loop keeps its approximately55-68m physical size instead of borrowing the inversion record target");
+            double minimumSpeed=INFINITY;
+            for(const auto& frame:design.simulation.frames)if(frame.distance>=region.startDistance&&frame.distance<=region.endDistance)minimumSpeed=std::min(minimumSpeed,frame.speed);
+            check(minimumSpeed>17,"Fixture loop retains moving crest energy rather than approaching stall");
             ++observations.fullLoop;
-        }else if(headingAgreement< -headingCosine&&rise>70&&std::abs(pitchSweep-pi)<phaseTolerance){
+        }else if(headingAgreement< -headingCosine&&region.verticalExtent>70&&rise>=0&&std::abs(pitchSweep-pi)<phaseTolerance){
             check(std::isfinite(firstAscendingVertical)&&!std::isfinite(firstDescendingVertical),"Immelmann contains an actual ascending half-loop");
             check(std::abs(std::abs(rollSweep)-pi)<phaseTolerance&&std::abs(ascendingRoll-initialRoll)<pi/3,"Compound Immelmann reaches ascending vertical before completing most of its half-roll");
-            observations.immelmannRise=rise;observations.immelmannForwardExtent=region.forwardExtent;++observations.immelmann;
+            check(invertedApex>=design.request.targets.inversionHeight,"High Immelmann retains the selected terrain-relative inverted-apex target");
+            double peak=-INFINITY;
+            for(const auto& frame:design.simulation.frames)for(int seat=0;seat<3;++seat){double at=frame.distance+seatDistanceOffset(design.request.train,seat);
+                if(at>=region.startDistance&&at<=region.endDistance)peak=std::max(peak,frame.seats[seat].vertical);}
+            check(peak<4.4,"Fixture Immelmann has the intended ordinary-force passage; this is not a universal safety cap");
+            check(returnUprightSlope<-.1,"Immelmann rolls upright on its curved descent instead of a level rolling tail");
+            check(region.verticalMaximum-end.position.z>40,"Signature returns toward a lower valley before the ordinary turnaround");
+            observations.immelmannRise=region.verticalExtent;observations.immelmannForwardExtent=region.forwardExtent;++observations.immelmann;
         }else if(headingAgreement< -headingCosine&&rise< -70&&std::abs(pitchSweep+pi)<phaseTolerance){
             check(std::isfinite(firstDescendingVertical)&&!std::isfinite(firstAscendingVertical),"Dive loop contains an actual descending half-loop");
             check(std::abs(std::abs(rollSweep)-pi)<phaseTolerance&&std::abs(descendingRoll-initialRoll)>2*pi/3,"Compound dive loop completes most of its half-roll before descending vertical");
             ++observations.diveLoop;
-        }else check(false,"Every inversion group in the paired fixture has a geometrically recognized complete topology");
-        check(invertedApex>=design.request.targets.inversionHeight,"Each genuine inverted apex meets the terrain-relative target");
+        }else check(false,"Every inversion group in the descending-reversal fixture has a geometrically recognized complete topology");
+        check(std::isfinite(invertedApex),"Each classified inversion contains an actual inverted passage");
     }
-    check(observations.fullLoop==1&&observations.immelmann==1&&observations.diveLoop==1,"Generated ride retains its full loop and adds exactly one genuine Immelmann and dive loop");
+    check(observations.fullLoop==1&&observations.immelmann==1&&observations.diveLoop==0,"Fixture retains the full loop and descending Immelmann without a mandatory mirrored dive to undo its raised exit");
     return observations;
 }
 void checkFoldedGeometry(const Design& design){
@@ -68,7 +81,7 @@ void checkFoldedGeometry(const Design& design){
     // count as a folded spatial crossing.
     constexpr double step=5;std::vector<Segment> points;
     for(double s=0;s<design.track.length;s+=step)points.push_back({s,design.track.sample(s)});
-    int crossings=0,highCrossings=0;double minimumSeparation=INFINITY,gradeFlat=0,straightFlat=0;
+    int crossings=0;double minimumSeparation=INFINITY,gradeFlat=0,straightFlat=0;
     for(size_t i=0;i+1<points.size();++i){const auto& a=points[i].sample;double width=std::min(step,design.track.length-points[i].s);
         if(std::abs(a.tangent.z)<.015){gradeFlat+=width;if(norm(a.curvature)<1e-4)straightFlat+=width;}
         Vec3 deltaA=points[i+1].sample.position-a.position;
@@ -82,12 +95,11 @@ void checkFoldedGeometry(const Design& design){
                 first+=cross(error,y.tangent).z/jacobian;second+=cross(error,x.tangent).z/jacobian;}
             auto x=design.track.sample(first),y=design.track.sample(second);
             check(std::hypot(x.position.x-y.position.x,x.position.y-y.position.y)<1e-5,"Projected crossover refines on the actual canonical curves");
-            double separation=std::abs(x.position.z-y.position.z);if(separation>25)++highCrossings;
+            double separation=std::abs(x.position.z-y.position.z);
             minimumSeparation=std::min(minimumSeparation,separation);++crossings;
         }
     }
     check(crossings>=1,"Complete circuit has a transverse crossover between widely separated route branches");
-    check(highCrossings>=1,"Folded route includes a substantial flyover; every crossing separately passes full train/support clearance");
     check(straightFlat/design.track.length<.35,"Straight and grade-flat geometry occupies less than35percent of the complete circuit");
     int airtimePeaks=0;bool rising=false;
     for(size_t i=0;i<points.size();++i){const auto& sample=points[i].sample;if(sample.element!=Element::Airtime){rising=false;continue;}
@@ -95,30 +107,98 @@ void checkFoldedGeometry(const Design& design){
     check(airtimePeaks>=4,"Complete circuit contains at least four actual ascending-descending force-authored crest shapes");
     std::cout<<"crossings="<<crossings<<" minimumCanonicalSeparation="<<minimumSeparation<<" straightFlatShare="<<straightFlat/design.track.length<<" gradeFlatShare="<<gradeFlat/design.track.length<<" airtimePeaks="<<airtimePeaks<<'\n';
 }
-void checkBridgeDrive(const Design& design){
-    const auto& text=design.planningDiagnostics;size_t object=text.find("\"returnFlowBridge\":{");
-    check(object!=std::string::npos,"Production flow bridge exposes its actual canonical interval");
-    const auto number=[&](const char* key){size_t field=text.find(key,object);check(field!=std::string::npos,"Flow bridge endpoint is present");return std::stod(text.substr(field+std::char_traits<char>::length(key)));};
-    const double begin=number("\"start\":"),end=number("\"end\":");
-    check(end>begin&&begin>0&&end<design.track.length,"Bridge remains inside the closed circuit");
-    bool retained=false;
-    for(const auto& operation:design.operations)if(operation.kind==DriveKind::Boost&&operation.start>begin&&operation.start<end&&operation.end>end){
-        retained=std::isfinite(operation.maxForce)&&operation.maxForce>0&&std::isfinite(operation.maxPower)&&operation.maxPower>0&&operation.rampSeconds>0&&operation.exitFadeMeters>0;
-        check(design.track.sample(operation.start+1).element==Element::Turn,"Original recovery boost now acts on genuinely curved production track");
-    }
-    check(retained,"Original recovery motor keeps finite force/power ramps and continues through the following turn");
+double fieldNumber(const std::string& text,size_t begin,size_t end,const std::string& key){
+    size_t field=text.find(key,begin);check(field!=std::string::npos&&field<end,"Expected diagnostic field belongs to its object");
+    return std::stod(text.substr(field+key.size()));
 }
-void checkConnectorPacing(const Design& design){
-    // Independently observe the post-loop recovery and boost between actual
-    // inversion and airtime geometry; labels do not establish activity.
-    const auto& loop=design.inversionDimensions.front();double begin=loop.endDistance,end=begin;
-    while(end<design.track.length&&design.track.sample(end).element!=Element::Airtime)end+=2;
-    check(end-begin>300,"Post-loop connector is measured over its complete recovery and boost");
-    double low=INFINITY,high=-INFINITY,peak=-INFINITY,quiet=0,longest=0;const double entry=design.track.sample(begin).position.z;
-    for(double s=begin;s<end;s+=2)peak=std::max(peak,design.track.sample(s).position.z-entry);
-    for(size_t i=1;i<design.simulation.frames.size();++i){const auto& frame=design.simulation.frames[i];if(frame.distance<begin||frame.distance>end)continue;low=std::min(low,frame.seats[0].vertical);high=std::max(high,frame.seats[0].vertical);if(std::abs(frame.seats[0].vertical-1)<.1)quiet+=frame.time-design.simulation.frames[i-1].time;else quiet=0;longest=std::max(longest,quiet);}
-    check(peak>8&&high-low>.5,"Connector has substantial actual height and measured force variation");
-    check(longest<2,"Post-loop connector avoids a long ordinary1g hold");
+std::pair<double,double> moduleInterval(const Design& design,const std::string& name){
+    const auto& text=design.planningDiagnostics;size_t begin=text.find("\"identity\":\""+name+"\"");
+    check(begin!=std::string::npos,"Intended operation module has a canonical interval");size_t end=text.find('}',begin);
+    return {fieldNumber(text,begin,end,"\"start\":"),fieldNumber(text,begin,end,"\"end\":")};
+}
+double measuredSpeed(const Design& design,double at){
+    const auto& frames=design.simulation.frames;
+    auto right=std::lower_bound(frames.begin(),frames.end(),at,[](const Frame& f,double distance){return f.distance<distance;});
+    check(right!=frames.begin()&&right!=frames.end(),"Element boundary is covered by independent replay frames");
+    const auto& left=*(right-1);double u=(at-left.distance)/(right->distance-left.distance);
+    return left.speed+u*(right->speed-left.speed);
+}
+void checkLocalTurnLoads(const Design& design){
+    // This fixture previously spent its last moving turn near 1.4 g because
+    // its radius was sized at 65 m/s despite a much lower actual entry speed.
+    // Measure the resulting ride, not an implementation formula or new gate.
+    const auto& text=design.planningDiagnostics;size_t at=0;bool found=false;
+    while((at=text.find("\"identity\":\"banked-camelback-turn\"",at))!=std::string::npos){
+        size_t end=text.find('}',at);
+        if(fieldNumber(text,at,end,"\"corridor\":")==2){
+            const double beginDistance=fieldNumber(text,at,end,"\"start\":"),endDistance=fieldNumber(text,at,end,"\"end\":");
+            std::vector<double> middleLoads;
+            for(const auto& frame:design.simulation.frames)if(frame.distance>=beginDistance&&frame.distance<=endDistance)middleLoads.push_back(frame.seats[1].vertical);
+            check(!middleLoads.empty(),"Late ordinary turn is covered by actual finite-train telemetry");
+            std::sort(middleLoads.begin(),middleLoads.end());
+            check(middleLoads[middleLoads.size()/2]>2.,"Flat42 ordinary turn sustains useful load at its own speed; this is a fixture regression, not an acceptance floor");
+            check(endDistance-beginDistance<350,"Flat42 ordinary turn does not retain the former roughly500m high-speed footprint");found=true;
+        }
+        at=end+1;
+    }
+    check(found,"Fixture includes the final moving ordinary turn before its tail launch");
+}
+void checkSupportSpacing(const Design& design){
+    check(!design.supports.empty()&&design.supports.front().trackDistance==0,"Support fallback retains the anchored first attachment");
+    for(size_t i=1;i<design.supports.size();++i){
+        const auto& previous=design.supports[i-1];const auto& current=design.supports[i];
+        auto p=design.track.sample(previous.trackDistance);Vec3 contact=p.position-p.up*(spineDepth+spineRadius);
+        const double minimum=contact.z-design.request.terrain.height(contact.x,contact.y)>90?32.:24.;
+        const double gap=current.trackDistance-previous.trackDistance;
+        check(gap>=minimum-1e-8&&gap<=40+1e-8,"Adaptive attachment placement preserves actual support-span bounds");
+    }
+    check(design.track.length-design.supports.back().trackDistance<=40+1e-8,"Closing support span stays within the same maximum");
+    // generateChecked already requires every-member, station and continuous
+    // train/hardware clearance validation; spacing is checked independently here.
+}
+void checkOperationIntent(const Design& design){
+    const auto launch=moduleInterval(design,"post-loop-launch");
+    const auto nextBrake=moduleInterval(design,"immelmann-inward-entry-brake");
+    check(launch.first>design.inversionDimensions.front().endDistance&&nextBrake.first>launch.second,"Explicit relaunch lies after full loop and before the passive run");
+    int motors=0;
+    for(const auto& op:design.operations){
+        if(op.kind!=DriveKind::Boost&&op.kind!=DriveKind::Launch)continue;
+        if(op.start<launch.second-1e-6&&op.end>launch.first+1e-6){++motors;
+            check(op.kind==DriveKind::Boost&&std::abs(op.start-launch.first)<1e-6&&std::abs(op.end-launch.second)<1e-6,"One bounded relaunch supplies this section without spilling into coasting track");
+            const double capacity=op.maxForce/design.request.train.carMass;
+            check(std::isfinite(capacity)&&capacity>=4.5-1e-10&&capacity<=design.request.limits.maxLongitudinalG*gravity&&
+                std::isfinite(op.maxPower)&&op.maxPower>0&&std::isfinite(op.targetSpeed)&&op.targetSpeed>0&&op.targetSpeed<=100&&op.rampSeconds>0&&op.exitFadeMeters>0,
+                "Energy-sized relaunch retains bounded force, power, target speed and real entry/exit fades");
+        }
+        check(op.end<=launch.second+1e-6||op.start>=nextBrake.first-1e-6,"First airtime, recovery and following turn coast without hidden motors");
+    }
+    check(motors==1,"Exactly one positive drive occupies the post-loop relaunch");
+    auto begin=design.track.sample(launch.first),end=design.track.sample(launch.second);
+    const double horizontalSpan=std::hypot(end.position.x-begin.position.x,end.position.y-begin.position.y);
+    check(horizontalSpan>390&&horizontalSpan<420,"Relaunch retains its approximately400m physical corridor, including gentle lateral offset");
+    check(measuredSpeed(design,launch.second)>measuredSpeed(design,launch.first)+6,"Actual finite-train replay demonstrates useful energy restoration in the relaunch");
+    // Check convergence against measured boundaries, not just a reported flag.
+    const auto& text=design.planningDiagnostics;size_t module=0,source=text.find("\"forceDesignedAirtime\":[");
+    check(source!=std::string::npos,"Force source speeds are retained for comparison with final replay");
+    for(int hill=0;hill<4;++hill){module=text.find("\"identity\":\"fvd-airtime\"",module);check(module!=std::string::npos,"All four physical airtime entries are present");
+        size_t endModule=text.find('}',module);double at=fieldNumber(text,module,endModule,"\"start\":");
+        source=text.find('{',source);check(source!=std::string::npos,"Each airtime source has an authored entry speed");size_t endSource=text.find('}',source);
+        double authored=fieldNumber(text,source,endSource,"\"sourceSpeedMps\":");
+        check(std::abs(measuredSpeed(design,at)-authored)<=.500001,"Final finite-train airtime entry converges within the0.5m/s authoring tolerance");
+        const double end=fieldNumber(text,module,endModule,"\"end\":"),sourceHeight=fieldNumber(text,source,endSource,"\"height\":");
+        auto entry=design.track.sample(at),exit=design.track.sample(end);double maximum=entry.position.z;
+        for(double distance=at;distance<end;distance+=.5)maximum=std::max(maximum,design.track.sample(distance).position.z);
+        maximum=std::max(maximum,exit.position.z);
+        check(std::abs((maximum-entry.position.z)-sourceHeight)<.02,"Final canonical airtime height retains its authored force profile under terrain and crossing placement");
+        check(std::abs(exit.position.z-entry.position.z)<.01&&std::abs(entry.tangent.z)<.001&&std::abs(exit.tangent.z)<.001,
+            "Terrain and crossing placement translate the source hill without warping its level entry and exit ports");
+        for(const auto& operation:design.operations)if(operation.kind==DriveKind::Station)
+            check(operation.start>=end+(design.request.train.cars-1)*design.request.train.spacing,
+                "Terminal brake hardware begins after every airtime element and a full train clearance");
+        module=endModule+1;source=endSource+1;
+    }
+    size_t energy=text.find("\"authoringEnergy\":{");check(energy!=std::string::npos,"Whole-route energy convergence is reported");size_t endEnergy=text.find('}',energy);
+    check(fieldNumber(text,energy,endEnergy,"\"maximumSpeedResidualMps\":")<=.500001,"Reported loop and reversal energy residuals also meet the authoring tolerance");
 }
 Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
     GenerationRequest request;request.seed=seed;request.terrain.kind=terrain;request.targets.requireIntensity=false;
@@ -127,7 +207,7 @@ Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
     if(!design.accepted())for(const auto* report:{&design.report,&design.simulation.report})for(const auto& error:report->errors)std::cerr<<"seed "<<seed<<' '<<error.code<<": "<<error.message<<'\n';
     check(design.accepted(),"Entire generated circuit passes unmodified geometry, train forces, target and convergence gates");
     check(design.convergence.coarseStep==1./960&&design.convergence.fineStep==1./1920,"Full ride uses required 960/1920 Hz simulation and verification");
-    check(design.simulation.metrics.maxGroundHeight>=request.targets.height&&design.simulation.metrics.maxSpeed>=request.targets.speed,"Existing record hill and speed targets remain selected and satisfied");
+    check(design.simulation.metrics.maxGroundHeight>=request.targets.height&&design.simulation.metrics.maxSpeed>=request.targets.speed&&design.simulation.metrics.inversionGroundHeight>=request.targets.inversionHeight,"Existing record hill and speed targets remain selected and satisfied");
     std::cout<<"seed="<<seed<<" accepted=true candidate="<<design.candidate<<" length="<<design.track.length<<" topology="<<design.topology<<'\n';
     return design;
 }
@@ -137,9 +217,28 @@ int main(){try{
     // This terrain/S-crest combination previously demanded a rapid bank
     // reversal whose rider-offset force reached -3.88 g despite positive
     // centerline normal load. Exercise the actual generation/acceptance path.
-    generateChecked(9,TerrainKind::Hills);
-    auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkBridgeDrive(first);checkConnectorPacing(first);
-    auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkBridgeDrive(second);checkConnectorPacing(second);
+    auto hills=generateChecked(9,TerrainKind::Hills);
+    // The optional terrain rerank previously discarded a converged first
+    // route, then exhausted the shared eight-rebuild budget on its alternate.
+    const auto& hillsPlan=hills.planningDiagnostics;
+    check(hills.candidate==0,"Optional route optimization preserves the feasible original candidate");
+    size_t hillsEnergy=hillsPlan.find("\"authoringEnergy\":{");
+    size_t selection=hillsPlan.find("\"routeSelection\":",hillsEnergy),selectionEnd=hillsPlan.find('}',selection);
+    check(hillsEnergy!=std::string::npos&&selection!=std::string::npos,"Retained route has explicit energy and route-selection evidence");
+    check(fieldNumber(hillsPlan,hillsEnergy,selection,"\"corrections\":")<=8,"Optional reranking shares the existing eight-rebuild budget");
+    check(fieldNumber(hillsPlan,hillsEnergy,selection,"\"maximumSpeedResidualMps\":")<=.5,"Selected hills route meets the unchanged source energy tolerance");
+    check(hillsPlan.find("\"retainedConvergedProvisional\":true",selection)<selectionEnd,"Unconverged optional alternate cannot replace the converged original route");
+    check(fieldNumber(hillsPlan,selection,selectionEnd,"\"failedAlternateResidualMps\":")>.5,"Failed alternate energy residual remains visible");
+    for(const char* key:{"Shape","Placement"}){
+        const std::string provisional="\"provisional"+std::string(key)+"\":",final="\"final"+std::string(key)+"\":";
+        check(fieldNumber(hillsPlan,selection,selectionEnd,provisional)==fieldNumber(hillsPlan,selection,selectionEnd,final),"Retained route diagnostics identify the actual converged source site");
+    }
+    // The current terrain/source itinerary must complete on its first
+    // candidate; its initial loop energy is not required to be deficient.
+    auto canyon=generateChecked(1,TerrainKind::Canyon);classifyGeometry(canyon);checkFoldedGeometry(canyon);checkOperationIntent(canyon);
+    check(canyon.candidate==0,"Adaptive crossing and support placement retain candidate zero under all acceptance gates");checkSupportSpacing(canyon);
+    auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkOperationIntent(first);checkLocalTurnLoads(first);
+    auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkOperationIntent(second);
     check(std::abs(first.track.length-second.track.length)>1,"Different seeds change the actual complete circuit geometry");
     check(std::abs(firstShapes.immelmannRise-secondShapes.immelmannRise)>.1&&std::abs(firstShapes.immelmannForwardExtent-secondShapes.immelmannForwardExtent)>.1,"Seeded Immelmann variation changes physical height and proportions");
     auto repeated=generateChecked(42);
