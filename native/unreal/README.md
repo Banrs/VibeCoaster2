@@ -1,5 +1,12 @@
 # VibeCoaster native Unreal game - review checkpoint
 
+Active source identity is **0.8.1-intent.1 / COASTER5**. Seven UE contracts and a complete editor-game hardware traversal have passed on an intermediate 0.8.1 snapshot; final-source cooking, packaging and representative rendered verification are pending. The released package and preserved results below remain **0.8.0-flow.1**.
+
+Stators, brake fins and station equipment follow the saved operation zones. The active Conventional2 open train and its import/build evidence are described in [the integration checkpoint](../art/review/20260909-train-v005-open/INTEGRATION.md), including the preserved failed first import and remaining mechanical/artwork limits.
+
+## Released package
+
+
 Current application and numerical/save identity are **0.8.0-flow.1 / COASTER5**.
 Windows UHT, editor/game build, six UE contracts, cooking and packaging passed;
 complete packaged terrain/seat checks and the scoped visual review are recorded

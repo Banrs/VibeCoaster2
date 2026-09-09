@@ -1,0 +1,8 @@
+{
+  "run": "v072_20260909_trainv005_open_v2",
+  "destinationRoot": "/Game/Art/V072/Conventional2",
+  "trainManifest": "D:/Coding/Codex/Vibecoasterjs/native/art/review/20260909-train-v005-open/train-manifest.json",
+  "environmentManifest": "D:/Coding/Codex/Vibecoasterjs/native/art/review/20260907-2/environment-manifest.json",
+  "exportCoordinatePreparation": "Same preserved v005 FBX and metre units, FBX basis and explicit UE yaw +90. Full editor startup supplies StaticMeshEditorSubsystem. Fresh asymmetric coordinate witness must pass before the open train imports. Failed Conventional1 assets and receipt remain preserved.",
+  "opticalReviewRequired": "Open train has no windshield or translucent material. Actual front, side and 1.2m rider-eye renders reviewed; all prior assets stay preserved."
+}

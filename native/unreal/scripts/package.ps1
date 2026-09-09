@@ -67,15 +67,20 @@ $ContentScript = Join-Path $ProjectRoot 'scripts/create_content.py'
 # Full editor startup ensures the level subsystem is ready.
 Invoke-HiddenEditor -Arguments @("`"$Project`"", '/Engine/Maps/Entry', "-ExecutePythonScript=`"$ContentScript`"", '-unattended', '-nop4', '-NullRHI', '-nosplash', '-stdout', '-FullStdOutLogOutput') -LogName 'ContentBootstrap'
 if (-not (Test-Path -LiteralPath $Receipt -PathType Leaf)) { throw 'Editor did not produce its content bootstrap receipt. Inspect the bootstrap log.' }
-foreach ($Asset in @('Content/Maps/Ride.umap', 'Content/Materials/M_Rail.uasset', 'Content/Materials/M_Ground.uasset', 'Content/Materials/M_Ground_Plain.uasset', 'Content/Materials/M_Ground_Relief.uasset', 'Content/Materials/M_Structure.uasset', 'Content/Materials/M_Train.uasset', 'Content/Materials/M_Footing.uasset', 'Content/Art/V072/Import1/SM_TrainCar.uasset', 'Content/Art/V072/TrackWeb1/SM_TrackTieWeb.uasset', 'Content/Art/V072/Import1/SM_StationPlatformPanel.uasset', 'Content/Art/V072/Import1/SM_StationPlatformEndPanel.uasset', 'Content/Art/V072/Import1/SM_StationRoofPanel.uasset', 'Content/Art/V072/Import1/SM_StationPost.uasset')) {
+foreach ($Asset in @('Content/Maps/Ride.umap', 'Content/Materials/M_Rail.uasset', 'Content/Materials/M_Ground.uasset', 'Content/Materials/M_Ground_Plain.uasset', 'Content/Materials/M_Ground_Relief.uasset', 'Content/Materials/M_Structure.uasset', 'Content/Materials/M_Train.uasset', 'Content/Materials/M_Footing.uasset', 'Content/Art/V072/Conventional2/SM_TrainCar.uasset', 'Content/Art/V072/TrackWeb1/SM_TrackTieWeb.uasset', 'Content/Art/V072/Import1/SM_StationPlatformPanel.uasset', 'Content/Art/V072/Import1/SM_StationPlatformEndPanel.uasset', 'Content/Art/V072/Import1/SM_StationRoofPanel.uasset', 'Content/Art/V072/Import1/SM_StationPost.uasset')) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $Asset))) { throw "Generated asset missing: $Asset" }
 }
 if (-not $SkipAutomation) {
-    Write-Host 'Running Unreal coordinate, mesh and terrain contract automation...'
+    Write-Host 'Running Unreal coordinate, hardware, mesh and terrain contract automation...'
     Invoke-HiddenEditor -Arguments @("`"$Project`"", '-unattended', '-nop4', '-NullRHI', '-nosplash', '-stdout', '-FullStdOutLogOutput', '-ExecCmds="Automation RunTests VibeCoaster"', '-TestExit="Automation Test Queue Empty"', "-ReportExportPath=`"$RunLogs/Automation`"") -LogName 'Automation'
     $AutomationLog = Get-Content -LiteralPath (Join-Path $RunLogs 'Automation.stdout.log') -Raw
-    if ($AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.CoordinateContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.MeshContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.TerrainBackdropContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.StationArtContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.ImportedArtContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.SeedInputContract\}' -or $AutomationLog -match 'Result=\{Fail') {
+    if ($AutomationLog -match 'Result=\{Fail') {
         throw "Automation success was not confirmed. Inspect $RunLogs/Automation and $RunLogs/Automation.stdout.log."
+    }
+    foreach ($Contract in @('CoordinateContract', 'MeshContract', 'TerrainBackdropContract', 'StationArtContract', 'ImportedArtContract', 'SeedInputContract', 'OperationHardware')) {
+        if ($AutomationLog -notmatch ('Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.' + $Contract + '\}')) {
+            throw "Automation success missing for VibeCoaster.$Contract. Inspect $RunLogs/Automation.stdout.log."
+        }
     }
 }
 if ($PrepareOnly) { Write-Host "Prepared Unreal project: $Project"; return }
@@ -89,4 +94,3 @@ $Executables = Get-ChildItem -LiteralPath $RunArchive -Filter 'VibeCoaster.exe' 
 if (-not $Executables) { throw 'BuildCookRun returned success but no packaged VibeCoaster.exe was found.' }
 $Executables | ForEach-Object { Write-Host "Packaged executable: $($_.FullName)" }
 Write-Host 'Packaging does not verify rendering. Complete README manual acceptance checks on the target GPU.'
-

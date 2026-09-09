@@ -344,16 +344,24 @@ def main():
     environment_path = bounded_file(spec["environmentManifest"], ART)
     train = json.loads(train_path.read_text(encoding="utf-8"))
     environment = json.loads(environment_path.read_text(encoding="utf-8"))
-    if train.get("build") != "20260908-train-v004":
-        raise RuntimeError("This importer requires the actual v004 staged-build manifest")
-    if SHIELD_SLOT not in train.get("runtime_material_slots", []):
+    open_train = train.get("build") == "20260909-train-v005-open"
+    if not open_train and train.get("build") != "20260908-train-v004":
+        raise RuntimeError("This importer requires the inspected v004 or open v005 manifest")
+    if open_train and (train.get("base_build") != "20260908-train-v004" or
+                       len(train.get("removed_cosmetics", [])) != 13 or
+                       SHIELD_SLOT in train.get("runtime_material_slots", [])):
+        raise RuntimeError("Open train must retain v004 provenance and remove the reviewed cosmetics/shield")
+    if not open_train and SHIELD_SLOT not in train.get("runtime_material_slots", []):
         raise RuntimeError("v004 train manifest is missing the explicit shield slot")
     environment_items = {item["name"]: item for item in environment["assets"]}
+    # The open train revision needs its own independent coordinate witness;
+    # station and TrackWeb1 assets stay at their existing validated paths.
+    asset_names = ("REVIEW_CoordinateWitness",) if open_train else ASSET_NAMES
     overrides = spec.get("fbxOverrides", {})
-    if overrides and set(overrides) != set(ASSET_NAMES) | {"SM_TrainCar"}:
+    if overrides and set(overrides) != set(asset_names) | {"SM_TrainCar"}:
         raise RuntimeError("Explicit UE export overrides must cover every imported asset")
     items = []
-    for name in ASSET_NAMES:
+    for name in asset_names:
         source = environment_items[name]
         fbx = bounded_file(overrides.get(name, source["fbx"]), ART / "exports")
         if name != "REVIEW_CoordinateWitness" and source["status"] != "ENVELOPE_FIT_REQUIRES_IMPORT_REVIEW":

@@ -93,7 +93,7 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     PlatformEnds = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("PlatformEnds"));
     RoofPanels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("RoofPanels"));
     StationPosts = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationPosts"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrainCar(TEXT("/Game/Art/V072/Import1/SM_TrainCar.SM_TrainCar"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrainCar(TEXT("/Game/Art/V072/Conventional2/SM_TrainCar.SM_TrainCar"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> TrackTie(TEXT("/Game/Art/V072/TrackWeb1/SM_TrackTieWeb.SM_TrackTieWeb"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Platform(TEXT("/Game/Art/V072/Import1/SM_StationPlatformPanel.SM_StationPlatformPanel"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformEnd(TEXT("/Game/Art/V072/Import1/SM_StationPlatformEndPanel.SM_StationPlatformEndPanel"));
@@ -320,7 +320,12 @@ void AVibeCoasterWorld::CommitChunks()
         // Populate the hidden component before registration so its first scene
         // proxy already has the final section and material.
         Mesh->CreateMeshSection(0, Chunk.Vertices, Chunk.Indices, Chunk.Normals, Chunk.UV, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
-        Mesh->SetMaterial(0, Chunk.Terrain ? GroundMaterial : Chunk.Footing ? FootingMaterial : Chunk.Structure ? StructureMaterial : RailMaterial);
+        UMaterialInterface* Material = Chunk.Terrain ? GroundMaterial : Chunk.Footing ? FootingMaterial : Chunk.Structure ? StructureMaterial : RailMaterial;
+        // Shared with the imported conventional train; hardware faces are exposed
+        // metal, while the running rails retain their painted finish.
+        if (Chunk.Hardware != VibeMesh::EDriveHardwareKind::None && !Chunk.Structure)
+            Material = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Art/V072/Conventional2/Materials/M_VCTrain4_Metal_BrushedAluminium.M_VCTrain4_Metal_BrushedAluminium"));
+        Mesh->SetMaterial(0, Material);
         Mesh->RegisterComponent();
         Staging->Chunks.Add(Mesh);
         Chunk = VibeMesh::FChunk{}; // Release CPU vertex copies once committed.

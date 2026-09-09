@@ -169,6 +169,91 @@ bool FCoasterCoordinateTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterOperationHardwareTest, "VibeCoaster.OperationHardware", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCoasterOperationHardwareTest::RunTest(const FString& Parameters)
+{
+    using Kind = VibeMesh::EDriveHardwareKind;
+    using Drive = coaster::DriveKind;
+    const auto Forward = coaster::unit(coaster::Vec3{1,0,.3});
+    const auto Up = coaster::rotate(coaster::unit(coaster::cross({0,1,0}, Forward)), Forward, .6);
+    coaster::Track Track; Track.closed = false;
+    for (double S : {0.,25.,50.,75.,100.}) Track.knots.push_back({Forward * S,Forward,{},Up});
+    Track.rebuild();
+    const std::vector<coaster::Operation> Operations{
+        {10,25,Drive::Launch,60,1000,100000}, {10,25,Drive::Brake,60,1000,100000},
+        {40,50,Drive::Brake,25,1000,100000}, {90,10,Drive::Station,0,1000,100000},
+        {95,Track.length,Drive::Boost,24,1000,100000}, {60,70,Drive::Boost,24,0,100000}};
+    const auto Runs = VibeMesh::OperationHardwareRuns(Track, Operations);
+    const VibeMesh::FDriveHardwareRun Expected[]{
+        {10,25,Kind::Stator}, {95,Track.length,Kind::Stator}, {40,50,Kind::Brake},
+        {90,Track.length,Kind::Brake}, {0,10,Kind::Station}};
+    bool ExactRuns = Runs.Num() == UE_ARRAY_COUNT(Expected);
+    for (int32 I = 0; ExactRuns && I < Runs.Num(); ++I)
+        ExactRuns &= Runs[I].Begin == Expected[I].Begin && Runs[I].End == Expected[I].End && Runs[I].Kind == Expected[I].Kind;
+    TestTrue(TEXT("Exact paired controls share stators; unlike terminal overlap keeps motor and brake; station wraps; zero force has no hardware"), ExactRuns);
+    TestTrue(TEXT("Unpowered track has no hardware"), VibeMesh::OperationHardwareRuns(Track, {}).IsEmpty());
+    auto DifferentTarget = Operations; DifferentTarget[1].targetSpeed = 55;
+    const auto DifferentRuns = VibeMesh::OperationHardwareRuns(Track, DifferentTarget);
+    TestTrue(TEXT("Different overlapping targets are not mistaken for one mutually exclusive controller pair"),
+        DifferentRuns.ContainsByPredicate([](const auto& R) { return R.Kind == Kind::Brake && R.Begin == 10 && R.End == 25; }));
+    auto Reordered = Operations; std::reverse(Reordered.begin(), Reordered.end());
+    const auto ReorderedRuns = VibeMesh::OperationHardwareRuns(Track, Reordered);
+    bool SameRuns = ReorderedRuns.Num() == Runs.Num();
+    for (int32 I = 0; SameRuns && I < Runs.Num(); ++I)
+        SameRuns &= Runs[I].Begin == ReorderedRuns[I].Begin && Runs[I].End == ReorderedRuns[I].End && Runs[I].Kind == ReorderedRuns[I].Kind;
+    TestTrue(TEXT("Physical hardware does not duplicate or depend on controller ordering"), SameRuns);
+
+    coaster::Track TerminalTrack; TerminalTrack.closed = false;
+    for (int I = 0; I <= 8; ++I) TerminalTrack.knots.push_back({{25.*I,0,0},{1,0,0},{},{0,0,1}});
+    TerminalTrack.rebuild();
+    const std::vector<coaster::Operation> TerminalOperations{{60,20,Drive::Station,0,1000,100000}};
+    const auto TerminalRuns = VibeMesh::OperationHardwareRuns(TerminalTrack, TerminalOperations);
+    TestTrue(TEXT("A long terminal zone keeps fins before the final level 100 m and friction across the station seam"),
+        TerminalRuns.Num() == 3 && TerminalRuns[0].Kind == Kind::Brake && TerminalRuns[0].Begin == 60 && TerminalRuns[0].End == TerminalTrack.length - 100 &&
+        TerminalRuns[1].Kind == Kind::Station && TerminalRuns[1].Begin == 0 && TerminalRuns[1].End == 20 &&
+        TerminalRuns[2].Kind == Kind::Station && TerminalRuns[2].Begin == TerminalTrack.length - 100 && TerminalRuns[2].End == TerminalTrack.length);
+    auto ShortZone = TerminalOperations; ShortZone[0].start = 175;
+    const auto ShortRuns = VibeMesh::OperationHardwareRuns(TerminalTrack, ShortZone);
+    TestTrue(TEXT("Station approach rendering never extends outside a shorter actual operation"),
+        ShortRuns.Num() == 2 && ShortRuns[1].Kind == Kind::Station && ShortRuns[1].Begin == 175 && ShortRuns[1].End == TerminalTrack.length);
+    auto SlopingApproach = TerminalTrack; SlopingApproach.knots[4].position.z = .25; SlopingApproach.rebuild();
+    const auto SlopedRuns = VibeMesh::OperationHardwareRuns(SlopingApproach, TerminalOperations);
+    TestTrue(TEXT("Friction starts after the last sloping span, not a fixed distance into terrain transfer"),
+        SlopedRuns.Num() == 3 && SlopedRuns[2].Kind == Kind::Station && SlopedRuns[2].Begin > SlopingApproach.length - 100 && SlopedRuns[2].Begin < SlopingApproach.length);
+    auto BankedApproach = TerminalTrack; BankedApproach.knots[3].bank = .1; BankedApproach.rebuild();
+    const auto BankedRuns = VibeMesh::OperationHardwareRuns(BankedApproach, TerminalOperations);
+    TestTrue(TEXT("Frame polynomial bank between upright knots remains magnetic approach track"),
+        BankedRuns.Num() == 3 && BankedRuns[2].Kind == Kind::Station && BankedRuns[2].Begin > BankedApproach.length - 100 && BankedRuns[2].Begin < BankedApproach.length);
+
+    VibeMesh::FPreparedRide Prepared;
+    if (!TestTrue(TEXT("Banked pitched operation hardware prepares without a generated ride fixture"),
+        VibeMesh::AppendOperationHardware(Prepared, Track, Operations, [] { return false; }))) return false;
+    const auto Right = Track.sample(0).right;
+    bool Contained = true, Facing = true; int64 Triangles = 0; int32 Kinds[4]{};
+    for (const auto& Chunk : Prepared.Chunks)
+    {
+        ++Kinds[int(Chunk.Hardware)];
+        Facing &= HasEngineFrontFaces(Chunk.Vertices, Chunk.Normals, Chunk.Indices, Triangles);
+        Contained &= Chunk.Vertices.Num() <= 960 && Chunk.Vertices.Num() == Chunk.Normals.Num() && Chunk.Vertices.Num() == Chunk.UV.Num();
+        for (const auto& Vertex : Chunk.Vertices)
+        {
+            const auto P = VibeCoordinates::CorePosition({Vertex.X,Vertex.Y,Vertex.Z});
+            const coaster::Vec3 Local = P;
+            const double S = coaster::dot(Local,Forward), Y = coaster::dot(Local,Right), Z = coaster::dot(Local,Up);
+            Contained &= std::abs(Y) <= .451 && Z >= -.091 && Z <= .076;
+            Contained &= Runs.ContainsByPredicate([&](const auto& R)
+                { return R.Kind == Chunk.Hardware && S >= R.Begin - 1e-7 && S <= R.End + 1e-7; });
+        }
+    }
+    TestTrue(TEXT("Every hardware vertex remains inside its true zone and banked in-rail lane, below the car and above the ties"), Contained);
+    TestTrue(TEXT("Stators, braking fins and terminal friction/roller assemblies are all represented"), Kinds[1] > 0 && Kinds[2] > 0 && Kinds[3] > 0);
+    TestTrue(TEXT("Operation meshes retain correct facing under coordinate reflection"), Facing && Triangles > 0);
+    VibeMesh::FPreparedRide Cancelled;
+    TestFalse(TEXT("Operation preparation honors cancellation"), VibeMesh::AppendOperationHardware(Cancelled, Track, Operations, [] { return true; }));
+    TestTrue(TEXT("Cancelled operation preparation creates no chunks"), Cancelled.Chunks.IsEmpty());
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterMeshTest, "VibeCoaster.MeshContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FCoasterMeshTest::RunTest(const FString& Parameters)
 {
@@ -217,12 +302,13 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
     bool RailAttributesMatch = true;
     const VibeMesh::FChunk* FirstRailChunk = nullptr;
     int64 TotalVertices = 0; int32 TerrainChunks = 0, RailChunks = 0;
-    bool FacingValid[4] = {true, true, true, true};
-    int64 FacingTriangles[4] = {0, 0, 0, 0}; // Terrain, rail/spine, steel, footing.
+    bool FacingValid[5] = {true, true, true, true, true};
+    int64 FacingTriangles[5] = {0, 0, 0, 0, 0}; // Terrain, rail/spine, steel, footing, operation hardware.
     for (const auto& Chunk : Prepared.Chunks)
     {
         TotalVertices += Chunk.Vertices.Num();
-        const int32 FacingKind = Chunk.Terrain ? 0 : Chunk.Footing ? 3 : Chunk.Structure ? 2 : 1;
+        const bool Hardware = Chunk.Hardware != VibeMesh::EDriveHardwareKind::None;
+        const int32 FacingKind = Hardware ? 4 : Chunk.Terrain ? 0 : Chunk.Footing ? 3 : Chunk.Structure ? 2 : 1;
         FacingValid[FacingKind] &= HasEngineFrontFaces(Chunk.Vertices, Chunk.Normals, Chunk.Indices, FacingTriangles[FacingKind]);
         ValidIndices &= Chunk.Indices.Num() % 3 == 0;
         for (int32 Index : Chunk.Indices) ValidIndices &= Chunk.Vertices.IsValidIndex(Index);
@@ -237,6 +323,7 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
                 ValidGround &= std::abs(Q.z - D->request.terrain.height(Q.x, Q.y)) < 1e-8;
             }
         }
+        else if (Hardware) continue;
         else if (Chunk.Structure || Chunk.Footing)
         {
             auto& Vertices = Chunk.Footing ? FootingVertices : SteelVertices;
@@ -269,6 +356,7 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Every rail/spine triangle follows Epic's front-face convention"), FacingValid[1] && FacingTriangles[1] > 0);
     TestTrue(TEXT("Every tapered steel side/cap follows Epic's front-face convention"), FacingValid[2] && FacingTriangles[2] > 0);
     TestTrue(TEXT("Every footing side/cap follows Epic's front-face convention"), FacingValid[3] && FacingTriangles[3] > 0);
+    TestTrue(TEXT("All accepted operation hardware faces follow Epic's convention"), FacingValid[4] && FacingTriangles[4] > 0);
     TestTrue(TEXT("Every triangle references a valid vertex"), ValidIndices);
     TestTrue(TEXT("Every vertex has its normal and UV"), ValidAttributes);
     TestTrue(TEXT("Terrain vertices use the unchanged canonical height query"), ValidGround && TerrainChunks > 0);
@@ -442,7 +530,7 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
     // deliberately have 4 mm end seams; module placement still uses 3 m / 1 m.
     const TArray<FAssetContract> Contracts = {
         {TEXT("SM_TrainCar"), FVector(-127.5, -85, 10), FVector(127.5, 85, 151),
-            {TEXT("VCTrain4_Trim_IceCyan"), TEXT("VCTrain4_StructuralCarbon"), TEXT("VCTrain4_WindDeflector_ClearCyan"),
+            {TEXT("VCTrain4_Trim_IceCyan"), TEXT("VCTrain4_StructuralCarbon"),
              TEXT("VCTrain4_Metal_BrushedAluminium"), TEXT("VCTrain4_Shell_PearlTitanium"), TEXT("VCTrain4_Padding_Graphite"),
              TEXT("VCTrain4_Restraint_Ceramic"), TEXT("VCTrain4_Rubber_GripAndTyre"), TEXT("VCTrain4_Shell_DeepPetrol"), TEXT("VCTrain4_Metal_DarkChassis")}},
         {TEXT("SM_TrackTieWeb"), FVector(-7, -82.5, -27.55840421), FVector(7, 82.5, 8),
@@ -460,7 +548,8 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
     for (const auto& Contract : Contracts)
     {
         const FString Label(Contract.Name);
-        const FString AssetRoot = Label == TEXT("SM_TrackTieWeb") ? TEXT("/Game/Art/V072/TrackWeb1") : TEXT("/Game/Art/V072/Import1");
+        const FString AssetRoot = Label == TEXT("SM_TrainCar") ? TEXT("/Game/Art/V072/Conventional2") :
+            Label == TEXT("SM_TrackTieWeb") ? TEXT("/Game/Art/V072/TrackWeb1") : TEXT("/Game/Art/V072/Import1");
         const FString Path = FString::Printf(TEXT("%s/%s.%s"), *AssetRoot, Contract.Name, Contract.Name);
         UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Path);
         if (!TestNotNull(Label + TEXT(" loads the actual current imported asset"), Mesh)) continue;
@@ -478,8 +567,8 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
             MaterialContract &= Contract.MaterialNames.Contains(SourceName) && !Found.Contains(SourceName) && Material != nullptr;
             if (Material) MaterialContract &= Material->GetPathName().StartsWith(AssetRoot + TEXT("/Materials/"));
             if (Material)
-                TestTrue(Label + TEXT(" clear shield uses translucent shading; structure stays opaque"),
-                    Material->GetBlendMode() == (SourceName == FName(TEXT("VCTrain4_WindDeflector_ClearCyan")) ? BLEND_Translucent : BLEND_Opaque));
+                TestTrue(Label + TEXT(" conventional train and structure materials stay opaque"),
+                    Material->GetBlendMode() == BLEND_Opaque);
             Found.Add(SourceName);
         }
         TestTrue(Label + TEXT(" preserves distinct authored material roles without a default-material fallback"), MaterialContract && Found.Num() == Contract.MaterialNames.Num());
