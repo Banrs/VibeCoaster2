@@ -1,5 +1,7 @@
 # VibeCoaster native game
 
+Active source is **0.8.2-terrain.1**. Terrain routing and source cleanup passed native and UE checks; the published package below remains the preserved 0.8.1 build.
+
 The current Windows engineering preview uses **0.8.1-intent.1 / COASTER5**, built from commit `ae09f02`. Generator flow and hardware feasibility remain under review. The commit-qualified delivery name distinguishes preserved intermediate bundles. See [work in progress](WORK_IN_PROGRESS.md).
 
 Fresh profiles use desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off. Saved player settings remain respected, and distribution launchers forward command-line options.
@@ -25,7 +27,7 @@ targets; it does not claim an intensity record or silently substitute a benchmar
 
 This is the single active C++/UE5 game. The obsolete TypeScript/browser
 implementation was archived and removed at the user's request. Source geometry/save
-identity is **0.8.1-intent.1 / COASTER5**; older releases' saves require the preserved older app.
+identity is **0.8.2-terrain.1 / COASTER5**; older releases' saves require the preserved older app.
 
 - Canonical G3 septic centreline and C2 orientation shared by dynamics, rendering,
   rider forces, clearance and saved geometry.

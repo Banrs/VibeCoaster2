@@ -1,6 +1,6 @@
 # Build the native game and numerical tools
 
-Current source: application and geometry/save identity 0.8.1-intent.1 / COASTER5.
+Current source: application and geometry/save identity 0.8.2-terrain.1 / COASTER5.
 Windows UE5.8.2 builds and packages successfully. Mac/Metal still needs a Mac.
 
 ## Current source build
@@ -24,7 +24,7 @@ to bound memory use. Build into a fresh timestamped package:
 
 ```powershell
 & .\native\unreal\scripts\package.ps1 -UnrealRoot 'D:\Games\Epic Games\UE_5.8'
-python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.8.1-intent.1
+python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.8.2-terrain.1
 ```
 
 The distribution helper requires Python 3.11+, verifies copied runtime files and

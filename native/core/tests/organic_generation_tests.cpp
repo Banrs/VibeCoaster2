@@ -201,12 +201,39 @@ void checkOperationIntent(const Design& design){
     check(fieldNumber(text,energy,endEnergy,"\"maximumSpeedResidualMps\":")<=.500001,"Reported loop and reversal energy residuals also meet the authoring tolerance");
 }
 void checkAscentTrimFlow(const Design& design){
-    const auto ascent=moduleInterval(design,"terrain-ascent-launch"),trim=moduleInterval(design,"inversion-entry-brake");
-    check(std::abs(ascent.second-trim.first)<1e-6,"Ascent and trim share their actual physical boundary");
-    const auto start=design.track.sample(trim.first),end=design.track.sample(trim.second);
-    check(start.tangent.z>std::sin(2*pi/180),"Canyon1 climb retains positive pitch through the operation boundary instead of a forced level reset");
-    check(std::abs(end.tangent.z)<std::sin(.01*pi/180)&&end.position.z>start.position.z,"Canyon1 trim finishes the climb at the actual level inversion inlet");
-    check(std::any_of(design.operations.begin(),design.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Brake&&std::abs(op.start-trim.first)<1e-6&&std::abs(op.end-trim.second)<1e-6;}),"Real bounded braking covers the uphill trim; geometry does not move its hardware zone");
+    const auto ascent=moduleInterval(design,"terrain-ascent-launch"),trim=moduleInterval(design,"inversion-entry-brake"),loop=moduleInterval(design,"record-inversion");
+    check(std::abs(ascent.second-trim.first)<1e-6&&std::abs(trim.second-loop.first)<1e-6,"Ascent, trim and retained full loop share their actual physical boundaries");
+    check(std::abs(design.track.sample(trim.second).tangent.z)<std::sin(.01*pi/180),"Terrain ascent reaches the actual level inversion inlet");
+    for(double boundary:{trim.first,trim.second}){
+        const auto before=design.track.sample(boundary-.01),after=design.track.sample(boundary+.01);
+        check(norm(after.tangent-before.tangent)<.001,"Ascent, trim and inversion inlet have no abrupt tangent change across their physical joins");
+        check(norm(after.curvature-before.curvature)<1e-4,"Ascent, trim and inversion inlet retain smooth curvature across their physical joins");
+    }
+    check(std::any_of(design.operations.begin(),design.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Brake&&std::abs(op.start-trim.first)<1e-6&&std::abs(op.end-trim.second)<1e-6;}),"Real bounded braking covers exactly the authored trim interval");
+    double maximumHeight=0;
+    for(double at=ascent.first;at<=trim.second;at+=.5){const auto point=design.track.sample(at).position;
+        maximumHeight=std::max(maximumHeight,point.z-design.request.terrain.height(point.x,point.y));}
+    check(maximumHeight<60,"Canyon1 ascent follows the escarpment without the former elevated approach towers");
+    const auto& text=design.planningDiagnostics;const size_t tail=text.rfind("\"identity\":\"fvd-airtime\"");
+    check(tail!=std::string::npos,"Canyon fixture retains its final rigid airtime source");
+    const auto point=design.track.sample(fieldNumber(text,tail,text.find('}',tail),"\"end\":")).position;
+    const auto& terrain=design.request.terrain;
+    const double dx=(point.x-terrain.offsetX)/terrain.horizontalScale,dy=(point.y-terrain.offsetY)/terrain.horizontalScale;
+    const double x=std::cos(terrain.headingRadians)*dx+std::sin(terrain.headingRadians)*dy,y=-std::sin(terrain.headingRadians)*dx+std::cos(terrain.headingRadians)*dy;
+    check(std::abs(y-120*std::sin(x/850))>=260+terrain.cliffWidth-1e-5,"Final rigid airtime source exits on the actual seeded cliff rim before the adaptive descent");
+}
+void checkTerminalTurnSpeed(const Design& design){
+    const auto& text=design.planningDiagnostics;size_t turn=text.rfind("\"identity\":\"banked-camelback-turn\"");
+    check(turn!=std::string::npos,"Terminal turn has a measured canonical interval");const size_t end=text.find('}',turn);
+    check(fieldNumber(text,turn,end,"\"corridor\":")==3,"Measured terminal turn belongs to the final corridor");
+    const double beginDistance=fieldNumber(text,turn,end,"\"start\":"),endDistance=fieldNumber(text,turn,end,"\"end\":");
+    size_t corridor=text.find("\"corridors\":[");check(corridor!=std::string::npos,"Final corridor retains its source speed hint");
+    for(int side=0;side<4;++side){corridor=text.find('{',corridor);check(corridor!=std::string::npos,"Each physical corridor has a source speed hint");if(side<3)corridor=text.find('}',corridor)+1;}
+    const double authored=fieldNumber(text,corridor,text.find('}',corridor),"\"turnSpeedMps\":");
+    double maximumSpeed=0;const double halfTrain=(design.request.train.cars-1)*design.request.train.spacing*.5;
+    for(const auto& frame:design.simulation.frames)if(frame.distance+halfTrain>=beginDistance&&frame.distance-halfTrain<=endDistance)
+        maximumSpeed=std::max(maximumSpeed,frame.speed);
+    check(maximumSpeed>0&&std::abs(maximumSpeed-authored)<=.500001,"Terminal turn is authored at the maximum actual speed while any car occupies it, within0.5m/s");
 }
 Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
     GenerationRequest request;request.seed=seed;request.terrain.kind=terrain;request.targets.requireIntensity=false;
@@ -229,15 +256,15 @@ int main(){try{
     // The optional terrain rerank previously discarded a converged first
     // route, then exhausted the shared eight-rebuild budget on its alternate.
     const auto& hillsPlan=hills.planningDiagnostics;
-    check(hills.candidate==0,"Optional route optimization preserves the feasible original candidate");
+    check(hills.candidate==0,"Ordinary turn feedback converges the first hills9 candidate without a terrain/energy limit cycle");
     size_t hillsEnergy=hillsPlan.find("\"authoringEnergy\":{");
     size_t selection=hillsPlan.find("\"routeSelection\":",hillsEnergy),selectionEnd=hillsPlan.find('}',selection);
     check(hillsEnergy!=std::string::npos&&selection!=std::string::npos,"Retained route has explicit energy and route-selection evidence");
     check(fieldNumber(hillsPlan,hillsEnergy,selection,"\"corrections\":")<=8,"Optional reranking shares the existing eight-rebuild budget");
     check(fieldNumber(hillsPlan,hillsEnergy,selection,"\"maximumSpeedResidualMps\":")<=.5,"Selected hills route meets the unchanged source energy tolerance");
-    // The shorter source now lets this fixture's alternate converge. Keep the
-    // first-candidate acceptance and shared-budget contract without requiring
-    // an optimization to fail merely to preserve an old branch outcome.
+    // Geometry may select another bounded candidate. A converged provisional
+    // route still must survive an unsuccessful optional rerank, and diagnostics
+    // must identify the route that actually supplied the accepted telemetry.
     const bool retained=hillsPlan.find("\"retainedConvergedProvisional\":true",selection)<selectionEnd;
     const bool reselected=hillsPlan.find("\"reselected\":true",selection)<selectionEnd;
     for(const char* key:{"Shape","Placement"}){
@@ -246,9 +273,9 @@ int main(){try{
     }
     // The current terrain/source itinerary must complete on its first
     // candidate; its initial loop energy is not required to be deficient.
-    auto canyon=generateChecked(1,TerrainKind::Canyon);classifyGeometry(canyon);checkFoldedGeometry(canyon);checkOperationIntent(canyon);checkAscentTrimFlow(canyon);
+    auto canyon=generateChecked(1,TerrainKind::Canyon);classifyGeometry(canyon);checkFoldedGeometry(canyon);checkOperationIntent(canyon);checkAscentTrimFlow(canyon);checkTerminalTurnSpeed(canyon);
     check(canyon.candidate==0,"Adaptive crossing and support placement retain candidate zero under all acceptance gates");checkSupportSpacing(canyon);
-    auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkOperationIntent(first);checkLocalTurnLoads(first);
+    auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkOperationIntent(first);checkLocalTurnLoads(first);checkTerminalTurnSpeed(first);
     auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkOperationIntent(second);
     check(std::abs(first.track.length-second.track.length)>1,"Different seeds change the actual complete circuit geometry");
     check(std::abs(firstShapes.immelmannRise-secondShapes.immelmannRise)>.1&&std::abs(firstShapes.immelmannForwardExtent-secondShapes.immelmannForwardExtent)>.1,"Seeded Immelmann variation changes physical height and proportions");

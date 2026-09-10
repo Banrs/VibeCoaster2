@@ -68,7 +68,19 @@ int main(){try{
     }
     near(detail::forceAxisBank(gravity,.7*gravity,0),std::atan2(.7,1.),1e-12,"Positive-load bank target remains unchanged");
     near(detail::forceAxisBank(0,0,.4),.4,0,"Zero resultant retains authored bank");
-    near(detail::forceAxisBank(0,0,2),1.5,0,"Zero resultant retains the existing turn-bank bound");
+    near(detail::forceAxisBank(0,0,2),2,0,"Zero resultant retains an authored overbank");
+    // The grounded canyon climb combines pitch unwind with horizontal turn
+    // force. Its resultant passes below horizontal while remaining positive
+    // in the rider frame; an85-degree cap leaves over1.6g lateral force.
+    for(double hand:{-1.,1.})for(double degrees:{88.,90.,92.,118.}){
+        const double angle=hand*degrees*pi/180,authored=hand*70*pi/180;
+        const double normal=3.1*gravity*std::cos(angle),lateral=3.1*gravity*std::sin(angle);
+        const double bank=detail::forceAxisBank(normal,lateral,authored);
+        near(bank,angle,1e-12,"Curved crest bank follows its force axis through ninety degrees");
+        near(lateral*std::cos(bank)-normal*std::sin(bank),0,1e-12,"Overbanked crest cancels its lateral force");
+        near(normal*std::cos(bank)+lateral*std::sin(bank),3.1*gravity,1e-12,"Overbanked crest retains its positive rider load");
+        near(detail::forceAxisBank(-normal,-lateral,authored),bank,1e-12,"Overbank axis is invariant when resultant force reverses");
+    }
     {
         Track source;source.closed=false;
         for(int i=0;i<=50;++i){double angle=i*6./150;

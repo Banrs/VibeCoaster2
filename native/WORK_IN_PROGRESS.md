@@ -1,5 +1,11 @@
 # Native foundation status
 
+## Terrain routing and complexity reduction — 0.8.2-terrain.1
+
+Active source jointly places the canyon climb/return against the actual terrain, preserves clear underpasses, gives the station a real straight arrival, sizes the terminal turn from measured speed, and accounts for passive energy when trimming the loop. Ordinary-turn feedback damping removes a demonstrated geometry/energy limit cycle without expanding the eight-rebuild budget. Two obsolete reversing adapters and the unused terrain-jet path were removed; AGENTS.md applies the user's complexity and realism requirements to all future work.
+
+The final six-request panel accepts all six on candidate zero, saves and independently replays every ride, and passes 960/1920 Hz convergence. Moving times are 140.027–172.440 s, with complete stops at 164.755–207.575 s. Canyon9 still has a local ascent height of about91 m above terrain, and long approaches remain. This is useful terrain engineering, not completed macro-flow, reference calibration or structural validation. All26 native suites passed across the full run and targeted fixture rerun;178 Python tests were discovered (six CLI cases run through CTest), and all seven UE contracts passed. A fresh Windows package is undergoing actual riding/save-load verification; the published ae09f02 package remains preserved until an explicitly verified replacement is promoted. [Current evidence](artifacts/terrain-routing-v082-20260910/REPORT.md).
+
 ## Focused optimization checkpoint (2026-09-10)
 
 The 0.8.1 generator stores compact placement parameters instead of copying sampled turns for every site, and unreachable old grammar branches are removed without changing seeded random draws. HUD parsing, rail trigonometry and plot grouping avoid repeated work. Three terrain cases have byte-identical plans, traces and saves before/after; observed peak process memory is 3–4 MB lower, with no substantial latency claim. All 26 CTest suites, 20 plot tests and seven UE contracts passed. Six actual editor-game HUD captures were inspected during a complete flat42 traversal. [Evidence and precise scope](artifacts/optimization-v081-20260910/REPORT.md).

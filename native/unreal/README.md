@@ -1,6 +1,6 @@
 # VibeCoaster native Unreal game - review checkpoint
 
-Active source identity is **0.8.1-intent.1 / COASTER5**. The **ae09f02 engineering package** passed seven UE contracts, Windows build/cook/package and three complete generated terrain/seat traversal/save/load runs. Extracted startup and all 48 runtime hashes passed. [Current delivery and visual limits](../DELIVERY.md) distinguish this from preserved 0.8.0 results and from whole-ride design approval. No new FPS acceptance or Mac/Metal runtime claim is made.
+Active source identity is **0.8.2-terrain.1 / COASTER5**. The published package below remains 0.8.1; its evidence does not validate new terrain source. The **ae09f02 engineering package** passed seven UE contracts, Windows build/cook/package and three complete generated terrain/seat traversal/save/load runs. Extracted startup and all 48 runtime hashes passed. [Current delivery and visual limits](../DELIVERY.md) distinguish this from preserved 0.8.0 results and from whole-ride design approval. No new FPS acceptance or Mac/Metal runtime claim is made.
 
 Stators, brake fins and station equipment follow the saved operation zones. The active Conventional2 open train and its import/build evidence are described in [the integration checkpoint](../art/review/20260909-train-v005-open/INTEGRATION.md), including the preserved failed first import and remaining mechanical/artwork limits.
 

@@ -206,8 +206,8 @@ static std::vector<Vec3> horizontalFootprint(const std::vector<Vec3>& path,Vec3 
 static void planningAndTargets(){
     GenerationRequest req;req.seed=1;req.targets.requireIntensity=false;auto flat=generate(req);check(flat.accepted(),"Variety flat fixture accepted");
     req.terrain.kind=TerrainKind::Hills;auto hills=generate(req);check(hills.accepted(),"Variety hills fixture accepted");
-    // Pre-terrain crossing lift left this tail 1.8m below the earlier hill.
-    check(hills.candidate==0,"Composed terrain crossing retains candidate zero under complete clearance and force validation");
+    // The accepted result must pass complete swept crossing clearance.
+    // A candidate index from an older routing family is not that contract.
     // Equal corner angles can still adapt radii, lengths and source footprints.
     // Compare actual XY geometry independently of element tags and vertical travel.
     const auto flatPath=sampledPath(flat.track),hillPath=sampledPath(hills.track);
