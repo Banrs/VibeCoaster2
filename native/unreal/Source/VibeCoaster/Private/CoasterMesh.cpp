@@ -2,6 +2,7 @@
 #include "CoasterTerrainBackdrop.h"
 #include "coaster/support_mesh.hpp"
 #include "Math/RotationMatrix.h"
+#include <array>
 
 namespace VibeMesh
 {
@@ -20,6 +21,17 @@ void EngineTriangle(FChunk& Chunk, int32 A, int32 B, int32 C)
 }
 void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double Begin, double End, double Side, double Height, double Radius)
 {
+    struct FCircleDirection { double Cos, Sin; };
+    static const auto Circle = []
+    {
+        std::array<FCircleDirection, RingSides> Directions{};
+        for (int32 J = 0; J < RingSides; ++J)
+        {
+            const double Angle = 2 * coaster::pi * J / RingSides;
+            Directions[J] = {std::cos(Angle), std::sin(Angle)};
+        }
+        return Directions;
+    }();
     const int32 Rings = Samples.Num();
     const int32 Base = Chunk.Vertices.Num();
     for (int32 I = 0; I < Rings; ++I)
@@ -29,8 +41,7 @@ void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double 
         const auto Centre = P.position + P.right * Side + P.up * Height;
         for (int32 J = 0; J < RingSides; ++J)
         {
-            const double Angle = 2 * coaster::pi * J / RingSides;
-            const auto Normal = P.right * std::cos(Angle) + P.up * std::sin(Angle);
+            const auto Normal = P.right * Circle[J].Cos + P.up * Circle[J].Sin;
             Chunk.Vertices.Add(Position(Centre + Normal * Radius));
             Chunk.Normals.Add(Direction(Normal));
             Chunk.UV.Add(FVector2D(S / 4, double(J) / RingSides));

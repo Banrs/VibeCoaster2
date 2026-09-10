@@ -162,10 +162,14 @@ void AVibeCoasterHUD::DrawHUD()
     const float Scale = FMath::Clamp(Canvas->SizeY / 900.f, .65f, 1.35f);
     const float X = 24 * Scale, Width = FMath::Min(850 * Scale, Canvas->SizeX - X * 2);
     float Y = 20 * Scale;
+    auto DrawLines = [&](const TArray<FString>& Lines, FLinearColor Colour = FLinearColor(.9f, .94f, 1.f))
+    {
+        for (const FString& Value : Lines) { DrawText(Value, Colour, X + 16 * Scale, Y, GEngine->GetSmallFont(), Scale * 1.15f); Y += 23 * Scale; }
+    };
     auto Line = [&](const FString& Text, FLinearColor Colour = FLinearColor(.9f, .94f, 1.f))
     {
         TArray<FString> Lines; Text.ParseIntoArrayLines(Lines, false);
-        for (const FString& Value : Lines) { DrawText(Value, Colour, X + 16 * Scale, Y, GEngine->GetSmallFont(), Scale * 1.15f); Y += 23 * Scale; }
+        DrawLines(Lines, Colour);
     };
     const FLinearColor Accent(.25f, .85f, .92f), Amber(1.f, .72f, .3f);
     // At kilometre-scale overview distances, correctly sized steel is subpixel.
@@ -269,13 +273,13 @@ void AVibeCoasterHUD::DrawHUD()
         TelemetryText.ParseIntoArrayLines(TelemetryLines, false);
         const int32 PanelLines = StatusLines.Num() + TelemetryLines.Num() + (PC->Ride->HasRide() ? 1 : 0);
         DrawRect(FLinearColor(.012f, .025f, .044f, .82f), X, Y - 8 * Scale, Width, (PanelLines * 23 + 16) * Scale);
-        Line(StatusText, Amber);
+        DrawLines(StatusLines, Amber);
         if (const auto* D = PC->Ride->ActiveDesign())
         {
             Line(FString::Printf(TEXT("Active accepted seed %llu | %s | %s"), static_cast<unsigned long long>(D->request.seed), UTF8_TO_TCHAR(D->request.terrain.name().c_str()),
                 D->request.targets.requireIntensity ? TEXT("configured all-record comparison") : TEXT("PHYSICS-PROOF; intensity untested")));
         }
-        if (PC->ShowTelemetry) Line(TelemetryText);
+        if (PC->ShowTelemetry) DrawLines(TelemetryLines);
     }
 }
 AVibeCoasterGameMode::AVibeCoasterGameMode()

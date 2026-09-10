@@ -119,6 +119,8 @@ class AxisMappingTests(unittest.TestCase):
     def test_plotted_line_data_uses_plan_xy_elevation_sz(self):
         import matplotlib.pyplot as plt
         tr = ir.validate_trace(synth_rect_trace())
+        for row, element in zip(tr["geometry"], (7, -2, 7, 3, -2)):
+            row[7] = element
         fig, mapped, _ = ir.figure_for_ride(
             tr, Path("rect.trace.json"), "0" * 64, "unknown", None)
         try:
@@ -132,11 +134,16 @@ class AxisMappingTests(unittest.TestCase):
             self.assertEqual(elev_x, [0.0, 5.0, 10.0, 15.0, 20.0])
             self.assertEqual(elev_y, [50.0, 55.0, 60.0, 65.0, 50.0])
             self.assertGreaterEqual(min(elev_y), 50.0)
-            # 3D path keeps (x, y ground, z up) ordering.
-            p3 = mapped["paths3d"][0]
-            self.assertEqual(p3["x"], [0.0, 100.0, 100.0, 0.0, 0.0])
-            self.assertEqual(p3["y"], [0.0, 0.0, 50.0, 50.0, 0.0])
-            self.assertEqual(p3["z"], [50.0, 55.0, 60.0, 65.0, 50.0])
+            # Sort element IDs, preserving input point order within each ID
+            # and the (x, y ground, z up) mapping for noncontiguous points.
+            self.assertEqual(mapped["paths3d"], [
+                {"element": -2, "x": [100.0, 0.0], "y": [0.0, 0.0], "z": [55.0, 50.0]},
+                {"element": 3, "x": [0.0], "y": [50.0], "z": [65.0]},
+                {"element": 7, "x": [0.0, 100.0], "y": [0.0, 50.0], "z": [50.0, 60.0]},
+            ])
+            path_axis = next(a for a in fig.get_axes() if a.name == "3d")
+            self.assertEqual([c.get_label() for c in path_axis.collections],
+                             ["elem -2", "elem 3", "elem 7"])
             # Axis labels state the convention explicitly.
             labels = [a.get_xlabel() + a.get_ylabel()
                       for a in fig.get_axes() if not a.name.startswith("3d")]

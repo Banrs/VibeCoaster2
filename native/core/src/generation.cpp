@@ -42,13 +42,13 @@ using detail::makeTurn;
 struct RoutePlan {
     bool stationChecked{},stationFeasible{},stationSelectionEligible{};double stationBayMinimum{},stationBayMaximum{},stationRequiredDatum{};
     int shape{},placement{};double heading{},length{},score{},relief{},deviation{},grade{},stationGrade{},groundMinimum{},groundMaximum{},valleyFraction{},valleyDistance{};int valleyCrossings{};
-    Vec3 origin;std::vector<double> angles,lengths;std::vector<TurnShape> turns;
+    Vec3 origin;std::vector<double> angles,lengths;
 };
 static double stationBankFactor(double remaining,const TrainConfig& train){double upright=std::max(40.,(train.cars-1)*train.spacing*.5+18);return smooth((remaining-upright)/100);}
 static double layoutWarp(double u,double shape){return u+shape*std::sin(2*pi*u)/(2*pi);}
 static double layoutSmooth(double u){u=std::clamp(u,0.,1.);return u*u*u*u*(35+u*(-84+u*(70-20*u)));}
 static Vec3 inFrame(Vec3 p,double h){return {p.x*std::cos(h)-p.y*std::sin(h),p.x*std::sin(h)+p.y*std::cos(h),p.z};}
-static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,const std::vector<double>& minimum,const std::array<double,4>& radii,const std::array<double,4>& ramps,double terminalReturnMinimum,int holdCorner,bool reversingPair,const std::array<detail::TerrainModuleFootprint,4>& footprints,Random& rng,Cancel cancel){
+static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,const std::vector<double>& minimum,const std::array<double,4>& radii,const std::array<double,4>& ramps,double terminalReturnMinimum,int holdCorner,const std::array<detail::TerrainModuleFootprint,4>& footprints,Random& rng,Cancel cancel){
     std::vector<RoutePlan> feasible;
     const bool dramaticTerrain=req.terrain.kind==TerrainKind::Canyon&&!req.terrain.isDefaultProfile();
     double startingHeading=rng.range(-pi,pi);Vec3 stationAnchor{rng.range(-200,200),rng.range(-160,160),0};
@@ -60,15 +60,16 @@ static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,
         // endpoint heading exact while the diagonals cross inside the layout.
         const double alpha=shapeRng.range(.71,.79)*pi,beta=shapeRng.range(.71,.79)*pi;
         p.angles={alpha,-beta,-alpha,beta};
+        std::array<TurnShape,4> turns;
         std::vector<Vec3> directions;Vec3 sum{};double h=0;
         for(int side=0;side<sides;++side){directions.push_back({std::cos(h),std::sin(h),0});
             const double extra=side==holdCorner?std::copysign(2*pi,p.angles[side]):0;
-            p.turns.push_back(makeTurn(p.angles[side]+extra,radii[side],ramps[side]));sum=sum+inFrame(p.turns.back().points.back(),h);h+=p.angles[side];}
+            turns[side]=makeTurn(p.angles[side]+extra,radii[side],ramps[side]);sum=sum+inFrame(turns[side].points.back(),h);h+=p.angles[side];}
         // Exact closure leaves two free corridor lengths. Solve their small
         // feasible polygon instead of fixing a randomly padded first leg and
         // charging the resulting slack to the next element's recovery.
         auto bounds=minimum;
-        bounds[3]+=std::max(0.,terminalReturnMinimum-p.turns[3].length);
+        bounds[3]+=std::max(0.,terminalReturnMinimum-turns[3].length);
         Vec3 x=directions[2],y=directions[3];double determinant=cross(x,y).z;
         if(std::abs(determinant)<.2)continue;
         auto closeFor=[&](double first,double second){Vec3 rhs=(sum+directions[0]*first+directions[1]*second)*(-1);return Vec3{cross(rhs,y).z/determinant,cross(x,rhs).z/determinant,0};};
@@ -89,13 +90,13 @@ static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,
         }
         if(!std::isfinite(shortest))continue;
         bool valid=true;p.length=0;
-        for(int side=0;side<sides;++side){if(p.lengths[side]<bounds[side]-1e-7||p.lengths[side]>2800+1e-7)valid=false;p.length+=p.lengths[side]+p.turns[side].length;}
+        for(int side=0;side<sides;++side){if(p.lengths[side]<bounds[side]-1e-7||p.lengths[side]>2800+1e-7)valid=false;p.length+=p.lengths[side]+turns[side].length;}
         // Major hills/inversion add approximately 400--650 m of 3-D rail to
         // this horizontal budget. Do not build a huge fallback corridor.
         // The exposure hold is an extra closed helix lap, not another long
         // perimeter corridor. Keep its real track length in all reports and
         // resource/clearance checks, but do not charge the same footprint twice.
-        const double repeatedHelixLength=reversingPair&&holdCorner>=0?2*pi*radii[holdCorner]:0;
+        const double repeatedHelixLength=holdCorner>=0?2*pi*radii[holdCorner]:0;
         if(!valid||p.length<4700||p.length-repeatedHelixLength>9800)continue;
         std::vector<Vec3> corridor;Vec3 cursor{};h=0;
         std::array<detail::TerrainModuleFootprint,4> placedFootprints;
@@ -108,8 +109,8 @@ static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,
             }
             int n=int(std::ceil(p.lengths[side]/25));Vec3 forward{std::cos(h),std::sin(h),0};
             for(int i=0;i<=n;++i)corridor.push_back(cursor+forward*(p.lengths[side]*i/n));cursor=cursor+forward*p.lengths[side];
-            for(size_t i=14;i<p.turns[side].points.size();i+=14)corridor.push_back(cursor+inFrame(p.turns[side].points[i],h));
-            cursor=cursor+inFrame(p.turns[side].points.back(),h);h+=p.angles[side];
+            for(size_t i=14;i<turns[side].points.size();i+=14)corridor.push_back(cursor+inFrame(turns[side].points[i],h));
+            cursor=cursor+inFrame(turns[side].points.back(),h);h+=p.angles[side];
         }
         if(norm(cursor)>1e-6)continue;
         for(int placement=0;placement<36;++placement){
@@ -195,8 +196,8 @@ double movingRideSeconds(const Design& d){
 static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,const AuthoringFeedback& feedback,CandidatePorts& ports,std::unique_ptr<const FvdTallHillResult>& preparedSignature){
     const int geometryAttempt=attempt/2,placementVariant=attempt%2;
     const bool dramaticTerrain=req.terrain.kind==TerrainKind::Canyon&&!req.terrain.isDefaultProfile();
-    Design d;d.request=req;d.candidate=attempt;Random rng{req.seed};rng.next();int sides=4;bool helix=false;
-    rng.next();int order=0;
+    Design d;d.request=req;d.candidate=attempt;Random rng{req.seed};rng.next();constexpr int sides=4;
+    rng.next(); // Preserve seeded route choices from the original grammar.
     bool intensityDesign=req.targets.requireIntensity&&std::isfinite(req.targets.referenceExposure);double exposureGoal=intensityDesign?req.targets.referenceExposure*1.1:0;
     double designNormalG=rng.range(3.2,3.6);if(intensityDesign)designNormalG=std::min(req.limits.maxVerticalG-.5,std::max(designNormalG,exposureGoal/10+.35+geometryAttempt*.10));
     designNormalG=std::max(1.2,designNormalG);double ramp=160+geometryAttempt*15;
@@ -231,13 +232,9 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     if(std::abs(signature.height-elevation)>1e-4)throw std::runtime_error("Prepared signature height differs from seeded source request");
     const double topSpeed=signature.authoring.speed+.5; // Physical motor margin; actual source agreement is checked.
     const double hillWidth=signature.span;
-    int hillSide=0,loopSide=1;
-    std::vector<int> module(sides,2);module[hillSide]=0;module[loopSide]=1;
-    if(sides==6){module[2]=3;module[5]=3;}
     rng.range(17,23); // Retain the independent route random sequence.
     // Source variations use a separate stream from route selection.
     Random detail{req.seed^0x8d2f41b79a5c630eull};
-    const bool reversingPair=true;
     double reversalHeight=std::max(84.,req.targets.inversionHeight+detail.range(7,14));
     detail.range(56,68);detail.range(190,240);
     const double reversalLane=detail.range(95,125);detail.range(72,96);
@@ -316,17 +313,9 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         }
         forceHills.push_back(std::move(authored));}
     const double forceReturnSpan=forceHills[1].span+forceHills[2].span+forceHills[3].span;
-    if(reversingPair)module[2]=4;
-    std::vector<double> minimum(sides);
-    for(int side=0;side<sides;++side){
-        double initial=side==0?200:0;
-        if(module[side]==0)minimum[side]=initial+(side?500:0)+hillWidth;
-        else if(module[side]==1)minimum[side]=initial+(side?380:300)+loopDrift+400+forceHills[0].span;
-        else if(module[side]==2)minimum[side]=400+forceReturnSpan;
-        else if(module[side]==4)minimum[side]=reversalNetLength;
-        else minimum[side]=130;
-    }
-    int holdCorner=intensityDesign&&exposureGoal>18&&sides>2?(hillSide+1)%(sides-1):-1;
+    std::vector<double> minimum{200+hillWidth,380+loopDrift+400+forceHills[0].span,
+        reversalNetLength,400+forceReturnSpan};
+    int holdCorner=intensityDesign&&exposureGoal>18?1:-1;
     std::array<detail::TerrainModuleFootprint,4> footprints;
     auto& loopFootprint=footprints[0];loopFootprint.entrance={380,0,0};
     for(int i=0;i<=32;++i)loopFootprint.samples.push_back({380.*i/32,0,0});
@@ -365,7 +354,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     const double tailExitSpeed=forceHills.back().section.samples.back().speed;
     const double trainLength=(req.train.cars-1)*req.train.spacing;
     const double terminalReturnMinimum=tailExitSpeed*tailExitSpeed/(2*2.4)+2*trainLength+67;
-    auto plans=planRoutes(req,sides,minimum,turnRadii,turnRamps,terminalReturnMinimum,holdCorner,reversingPair,footprints,rng,cancel);if(plans.empty())throw std::runtime_error("No terrain route fits exact closure and footprint budget");
+    auto plans=planRoutes(req,sides,minimum,turnRadii,turnRamps,terminalReturnMinimum,holdCorner,footprints,rng,cancel);if(plans.empty())throw std::runtime_error("No terrain route fits exact closure and footprint budget");
     // Visit terrain-ranked plans in order. Exact raw departure/return boundary
     // and bay must fit the local budget before committing to a station site.
     // The candidate list is bounded by 48 shapes x 36 placements; rejected
@@ -378,7 +367,12 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     if(placementVariant&&feedback.planShape<0&&plan.placement==firstFeasiblePlacement)continue;
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
     double heading=plan.heading;Vec3 origin=plan.origin,cursor=origin;
-    const std::string orderName=order==0?"H-I-A":order==1?"H-A-I":sides==2?"I-A-H":"I-H-A";
+    // Reconstruct only visited plans; placement ranking retains compact parameters
+    // instead of copying the same sampled turn geometry for all 36 sites.
+    std::array<TurnShape,4> turns;
+    for(int side=0;side<sides;++side){const double extra=side==holdCorner?std::copysign(2*pi,plan.angles[side]):0;
+        turns[side]=makeTurn(plan.angles[side]+extra,turnRadii[side],turnRamps[side]);}
+    const std::string orderName="H-I-A";
     d.topology="folded-bow-tie/H-I-IM-valley-A4";
     size_t forceHoldEnd=0;std::vector<AuthoredPoint> raw;struct Pending{size_t begin,end;DriveKind kind;double speed;double acceleration{3.5};};std::vector<Pending> pending;
     struct ModuleRun{size_t begin,end;int corridor;std::string identity;};std::vector<ModuleRun> modules;
@@ -404,9 +398,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     };
     for(int side=0;side<sides;++side){
         double used=0,straight=plan.lengths[side];
-        if(side==0){record(line(20,Element::Station),side,"station");record(drive(180,DriveKind::Launch,module[side]==1?62:topSpeed),side,"departure-launch");used=200;}
-        if(module[side]==0){
-            if(side){record(drive(500,DriveKind::Boost,topSpeed),side,"record-hill-relaunch");used+=500;}
+        if(side==0){record(line(20,Element::Station),side,"station");record(drive(180,DriveKind::Launch,topSpeed),side,"departure-launch");used=200;}
+        if(side==0){
             const Vec3 base=cursor;const size_t first=raw.size()-1;
             const int samples=int(std::ceil(signature.section.track.length/1.5));
             for(int i=0;i<=samples;++i){
@@ -417,8 +410,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
             }
             cursor=base+inFrame(signature.exit.position,heading);
             record({first,raw.size()-1},side,"record-hill");used+=signature.span;
-        }else if(module[side]==1){
-            double brakeLength=side?380:300;
+        }else if(side==1){
+            double brakeLength=380;
             const double trimTarget=std::sqrt(loopShape.idealEntrySpeed*loopShape.idealEntrySpeed+feedback.loopEnergyCorrection);
             const auto trim=drive(brakeLength,DriveKind::Brake,trimTarget);loopBrakeStartIndex=trim.first;loopEntryIndex=trim.second;
             const double effective=brakeLength-(req.train.cars-1)*req.train.spacing-.5*(feedback.loopApproachSpeed+trimTarget);
@@ -445,7 +438,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
             const double acceleration=std::min(req.limits.maxLongitudinalG*gravity-.1,std::max(4.5,(target*target-entryEstimate*entryEstimate)/(2*effectiveLength)+drag));
             relaunchEndIndex=launch.second;pending.push_back({launch.first,launch.second,DriveKind::Boost,target,acceleration});record(launch,side,"post-loop-launch");used+=400;
             used+=forceHill(0,side);
-        }else if(module[side]==4){
+        }else if(side==2){
             // Lead inward before reversing so the returning ground-level lane
             // is laterally separated from both the lead and the elevated lane.
             // The speed here is an energy-based estimate only: the same real
@@ -465,7 +458,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
             const double returnLength=reversalReturnLength;
             record(piece(returnLength+std::abs(reversalReturnOffset),[=](double u){return Vec3{returnLength*u,-reversalReturnOffset*layoutSmooth(u),0};},Element::Turn),side,"interior-low-return");
             used+=reversalNetLength;
-        }else if(module[side]==2){
+        }else{
             record(drive(400,DriveKind::Boost,60),side,"airtime-entry-launch");used+=400;
             for(int h=1;h<=3;++h)used+=forceHill(h,side);
         }
@@ -474,11 +467,11 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         // is a solved positional transfer, not a mandatory recovery/bump.
         const double recoveryLength=std::max(0.,straight-used);
         if(recoveryLength>1e-6)record(line(recoveryLength,Element::Return),side,"corridor-recovery");
-        const auto& turn=plan.turns[side];Vec3 base=cursor;size_t turnStart=raw.size()-1;double dz=helix?(side==0?55:-55):(side==holdCorner?55:0);
+        const auto& turn=turns[side];Vec3 base=cursor;size_t turnStart=raw.size()-1;double dz=side==holdCorner?55:0;
         const double turnSpeed=feedback.turnSpeed[side];
         const double bankedRise=std::min(26.,.65*gravity*turn.length*turn.length/(4*pi*pi*turnSpeed*turnSpeed))*turnRiseScale[side];
         for(size_t i=1;i<turn.points.size();++i){double along=turn.length*i/(turn.points.size()-1),curvature=smooth(std::min(along,turn.length-along)/turn.ramp)/turn.radius;cursor=base+inFrame(turn.points[i],heading);cursor.z=base.z+dz*smooth(along/turn.length)+bankedRise*std::pow(std::sin(pi*layoutWarp(along/turn.length,turnRiseShape[side])),4);append(cursor,-std::copysign(std::atan(turnSpeed*turnSpeed*curvature/gravity),turn.angle),Element::Turn);}
-        modules.push_back({turnStart,raw.size()-1,side,helix||side==holdCorner?"sustained-helix":"banked-camelback-turn"});if(side==holdCorner)forceHoldEnd=raw.size()-1;
+        modules.push_back({turnStart,raw.size()-1,side,side==holdCorner?"sustained-helix":"banked-camelback-turn"});if(side==holdCorner)forceHoldEnd=raw.size()-1;
         heading+=plan.angles[side];
     }
     if(std::hypot(cursor.x-origin.x,cursor.y-origin.y)>.001)throw std::runtime_error("Solved route failed canonical XY closure");
@@ -878,16 +871,16 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     d.operations.push_back({brakingStart,80,DriveKind::Station,0,req.train.carMass*terminalBrakeAcceleration,req.train.carMass*terminalBrakeAcceleration*100,.5,2.4,.2});
     for(auto& operation:d.operations)operation.exitFadeMeters=std::max(1.,operation.targetSpeed*operation.rampSeconds);
     coalesceDriveProfiles(d.operations);
-    if(reversingPair)d.topology+="/joint-fvd-immelmann-valley";
+    d.topology+="/joint-fvd-immelmann-valley";
     if(!flowJoins.empty())d.topology+="/continuous-module-joins";
     if(!pacingCrests.empty())d.topology+="/paced-connectors";
     std::ostringstream diagnostic;diagnostic<<std::setprecision(12)<<"{\"schemaVersion\":1,\"generationOnly\":true,\"seed\":"<<req.seed<<",\"candidate\":"<<attempt<<",\"order\":\""<<orderName<<"\",\"stationAnchoring\":{\"geometryScale\":"<<geometryAttempt<<",\"placementVariant\":"<<placementVariant<<",\"deferredFirstPlacement\":"<<firstFeasiblePlacement<<",\"selectedTerrainRank\":"<<(&plan-plans.data())<<",\"checkedPlanCount\":"<<(&plan-plans.data()+1)<<",\"transferRejectedSites\":"<<transferRejectedSites<<",\"heightBudget\":16,\"datum\":"<<stationDatum<<",\"groundMinimum\":"<<stationGroundMin<<",\"groundMaximum\":"<<stationGroundMax<<",\"datumAboveLowestGround\":"<<stationDatum-stationGroundMin<<",\"datumAboveHighestGround\":"<<stationDatum-stationGroundMax<<",\"fixedDepartureMeters\":"<<fixedDeparture<<",\"fixedReturnMeters\":"<<fixedReturn<<",\"controlSpacing\":"<<spacing<<"},\"launchPlanning\":{\"requestedSeconds\":"<<req.targets.launchSeconds<<",\"motorAcceleration\":"<<launchAcceleration<<",\"predictedSeconds\":"<<plannedLaunchTime(launchAcceleration,req.train)<<"},\"intensityPlanning\":{\"configured\":"<<(intensityDesign?"true":"false")<<",\"exposureGoal\":"<<exposureGoal<<",\"normalLoadHint\":"<<designNormalG<<",\"extraHelixCorner\":"<<holdCorner<<"},\"sides\":"<<sides<<",\"plannedHorizontalLength\":"<<plan.length<<",\"canonicalLength\":"<<d.track.length<<",\"selected\":{\"shape\":"<<plan.shape<<",\"placement\":"<<plan.placement<<",\"score\":"<<plan.score<<",\"terrainRelief\":"<<plan.relief<<",\"terrainStationDeviation\":"<<plan.deviation<<",\"terrainGradeRms\":"<<plan.grade<<",\"stationGrade\":"<<plan.stationGrade<<",\"groundMinimum\":"<<plan.groundMinimum<<",\"groundMaximum\":"<<plan.groundMaximum<<",\"valleyFraction\":"<<plan.valleyFraction<<",\"meanValleyDistance\":"<<plan.valleyDistance<<",\"valleyCrossings\":"<<plan.valleyCrossings<<"},\"scoreWeights\":{\"terrainRelief\":"<<(dramaticTerrain?0:1.5)<<",\"terrainReliefTarget\":"<<(dramaticTerrain?req.terrain.cliffHeight:0)<<",\"terrainReliefTargetDeviation\":"<<(dramaticTerrain?2:0)<<",\"terrainStationDeviation\":"<<(dramaticTerrain?.1:.5)<<",\"terrainGradeRms\":200,\"stationGrade\":"<<(dramaticTerrain?350:150)<<",\"horizontalLength\":0.015384615384615385,\"canyonOutsideValleyFraction\":"<<(req.terrain.kind==TerrainKind::Canyon?100:0)<<",\"valleyCoordinateUsesTerrainProfile\":"<<"true"<<"},\"corridors\":[";
-    for(int i=0;i<sides;++i){if(i)diagnostic<<',';diagnostic<<"{\"length\":"<<plan.lengths[i]<<",\"turnAngle\":"<<plan.angles[i]<<",\"turnSpeedMps\":"<<feedback.turnSpeed[i]<<",\"turnRadiusMeters\":"<<plan.turns[i].radius<<",\"turnRampMeters\":"<<plan.turns[i].ramp<<'}';}diagnostic<<"],\"rankedPlans\":[";
+    for(int i=0;i<sides;++i){if(i)diagnostic<<',';diagnostic<<"{\"length\":"<<plan.lengths[i]<<",\"turnAngle\":"<<plan.angles[i]<<",\"turnSpeedMps\":"<<feedback.turnSpeed[i]<<",\"turnRadiusMeters\":"<<turns[i].radius<<",\"turnRampMeters\":"<<turns[i].ramp<<'}';}diagnostic<<"],\"rankedPlans\":[";
     for(size_t i=0;i<plans.size();++i){if(i)diagnostic<<',';auto& p=plans[i];diagnostic<<"{\"shape\":"<<p.shape<<",\"placement\":"<<p.placement<<",\"score\":"<<p.score<<",\"relief\":"<<p.relief<<",\"deviation\":"<<p.deviation<<",\"grade\":"<<p.grade<<",\"stationGrade\":"<<p.stationGrade<<",\"length\":"<<p.length<<",\"groundMinimum\":"<<p.groundMinimum<<",\"groundMaximum\":"<<p.groundMaximum<<",\"valleyFraction\":"<<p.valleyFraction<<",\"meanValleyDistance\":"<<p.valleyDistance<<",\"valleyCrossings\":"<<p.valleyCrossings<<",\"stationBudgetChecked\":"<<(p.stationChecked?"true":"false")<<",\"stationBudgetFeasible\":"<<(p.stationFeasible?"true":"false")<<",\"stationSelectionEligible\":"<<(p.stationSelectionEligible?"true":"false");if(p.stationChecked)diagnostic<<",\"stationBayMinimum\":"<<p.stationBayMinimum<<",\"stationBayMaximum\":"<<p.stationBayMaximum<<",\"stationRequiredDatum\":"<<p.stationRequiredDatum;diagnostic<<'}';}diagnostic<<"],\"modules\":[";
     for(size_t i=0;i<modules.size();++i){if(i)diagnostic<<',';auto& m=modules[i];diagnostic<<"{\"identity\":\""<<m.identity<<"\",\"corridor\":"<<m.corridor<<",\"start\":"<<at(m.begin)<<",\"end\":"<<at(m.end)<<'}';}diagnostic<<"]}";d.planningDiagnostics=diagnostic.str();
-    d.planningDiagnostics.pop_back();std::ostringstream expansion;expansion<<std::setprecision(12)<<",\"layoutExpansion\":{\"reversingPair\":"<<(reversingPair?"true":"false")<<",\"organicRecoveryCount\":0"<<",\"loopProfileShape\":"<<loopProfileShape;
+    d.planningDiagnostics.pop_back();std::ostringstream expansion;expansion<<std::setprecision(12)<<",\"layoutExpansion\":{\"reversingPair\":"<<"true"<<",\"organicRecoveryCount\":0"<<",\"loopProfileShape\":"<<loopProfileShape;
     expansion<<",\"tallHill\":{\"height\":"<<signature.height<<",\"span\":"<<signature.span<<",\"arc\":"<<signature.section.track.length<<",\"sourceInlet\":"<<signature.authoring.speed<<",\"sourceExit\":"<<signature.exit.speed<<",\"rollingAcceleration\":"<<signature.authoring.rollingAcceleration<<",\"dragCoefficient\":"<<signature.authoring.dragAccelerationCoefficient<<",\"maxSourceReplayNormalResidual\":"<<signature.section.assessment.maxNormalResidualG<<",\"positionResidual\":"<<signaturePositionResidual<<",\"curvatureResidual\":"<<signatureCurvatureResidual<<",\"portCurvatureS\":["<<signaturePortCurvatureS[0]<<','<<signaturePortCurvatureS[1]<<"],\"portUpSS\":["<<signaturePortUpSS[0]<<','<<signaturePortUpSS[1]<<"],\"sourcePortCurvatureS\":["<<signatureSourceCurvatureS[0]<<','<<signatureSourceCurvatureS[1]<<"],\"sourcePortUpSS\":["<<signatureSourceUpSS[0]<<','<<signatureSourceUpSS[1]<<"]}";
-    if(reversingPair)expansion<<",\"sourceEntrySpeedMps\":"<<reversalRequest.entrySpeed<<",\"sourceInvertedHeightMeters\":"<<reversalSource.highestInvertedHeight<<",\"sourceApexHeightMeters\":"<<reversalSource.geometricApexHeight<<",\"sourceExitHeightMeters\":"<<reversalSource.exit.sample.position.z<<",\"sourceExitSpeedMps\":"<<reversalSource.section.samples.back().speed<<",\"sourceExitPitchRadians\":"<<reversalRequest.exitPitch<<",\"pulloutDurationSeconds\":"<<pulloutSource.duration<<",\"valleyTurnLengthMeters\":"<<valleyTurn.length<<",\"netForwardLength\":"<<reversalNetLength<<",\"entryEnergyCorrection\":"<<feedback.reversalEnergyCorrection<<",\"entrySpeedHint\":"<<reversalEntrySpeed<<",\"leadHorizontalLength\":"<<reversalLead<<",\"returnHorizontalLength\":"<<reversalReturnLength;
+    expansion<<",\"sourceEntrySpeedMps\":"<<reversalRequest.entrySpeed<<",\"sourceInvertedHeightMeters\":"<<reversalSource.highestInvertedHeight<<",\"sourceApexHeightMeters\":"<<reversalSource.geometricApexHeight<<",\"sourceExitHeightMeters\":"<<reversalSource.exit.sample.position.z<<",\"sourceExitSpeedMps\":"<<reversalSource.section.samples.back().speed<<",\"sourceExitPitchRadians\":"<<reversalRequest.exitPitch<<",\"pulloutDurationSeconds\":"<<pulloutSource.duration<<",\"valleyTurnLengthMeters\":"<<valleyTurn.length<<",\"netForwardLength\":"<<reversalNetLength<<",\"entryEnergyCorrection\":"<<feedback.reversalEnergyCorrection<<",\"entrySpeedHint\":"<<reversalEntrySpeed<<",\"leadHorizontalLength\":"<<reversalLead<<",\"returnHorizontalLength\":"<<reversalReturnLength;
     expansion<<",\"returnFlowBridge\":{\"start\":"<<at(flowBridgeBegin)<<",\"end\":"<<at(flowBridgeEnd)<<"},\"flowJoins\":[";
     for(size_t i=0;i<flowJoins.size();++i){if(i)expansion<<',';expansion<<"{\"start\":"<<at(flowJoins[i].first)<<",\"end\":"<<at(flowJoins[i].second)<<'}';}
     expansion<<"],\"forceDesignedAirtime\":[";

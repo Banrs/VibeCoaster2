@@ -1,5 +1,12 @@
 # Native foundation status
 
+## Focused optimization checkpoint (2026-09-10)
+
+The 0.8.1 generator stores compact placement parameters instead of copying sampled turns for every site, and unreachable old grammar branches are removed without changing seeded random draws. HUD parsing, rail trigonometry and plot grouping avoid repeated work. Three terrain cases have byte-identical plans, traces and saves before/after; observed peak process memory is 3–4 MB lower, with no substantial latency claim. All 26 CTest suites, 20 plot tests and seven UE contracts passed. Six actual editor-game HUD captures were inspected during a complete flat42 traversal. [Evidence and precise scope](artifacts/optimization-v081-20260910/REPORT.md).
+
+This is a behavior-preserving source checkpoint; the published ae09f02 package remains unchanged. Terrain routing engineering is the next separate change: full climb/return placement and the overly delayed canyon terminal descent remain unresolved here.
+
+
 ## Engineering preview â€” 0.8.1-intent.1, source ae09f02
 
 The numerical checkpoint contains a loss-aware force-authored tall signature, an energy-authored full loop, a joint-force Immelmann with a rolling descent and pullout, bounded finite-train energy feedback, terrain-aware element placement and composed crossing clearance. The canyon climb now unwinds through the trim approach instead of imposing a level reset at the motor/brake boundary. Conventional-train presentation, persisted operation hardware and uncapped native-display defaults have separate committed checkpoints. The current review covers whole-route terrain use, source preservation, physical supply and coherent element/transition forces; passing peak caps alone is insufficient.

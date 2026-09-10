@@ -1,0 +1,59 @@
+{
+  "cases": [
+    {
+      "terrain": "flat",
+      "seed": 42,
+      "variant": "before",
+      "exitCode": 0,
+      "wallSeconds": 17.361023699995712,
+      "generationSeconds": 12.508768,
+      "peakWorkingSetBytes": 77807616
+    },
+    {
+      "terrain": "flat",
+      "seed": 42,
+      "variant": "after",
+      "exitCode": 0,
+      "wallSeconds": 16.765946300001815,
+      "generationSeconds": 12.403594,
+      "peakWorkingSetBytes": 74002432
+    },
+    {
+      "terrain": "hills",
+      "seed": 9,
+      "variant": "after",
+      "exitCode": 0,
+      "wallSeconds": 19.61138260000007,
+      "generationSeconds": 15.790459,
+      "peakWorkingSetBytes": 74530816
+    },
+    {
+      "terrain": "hills",
+      "seed": 9,
+      "variant": "before",
+      "exitCode": 0,
+      "wallSeconds": 19.55324059999839,
+      "generationSeconds": 15.75072,
+      "peakWorkingSetBytes": 78520320
+    },
+    {
+      "terrain": "canyon",
+      "seed": 42,
+      "variant": "before",
+      "exitCode": 0,
+      "wallSeconds": 19.25388540000131,
+      "generationSeconds": 15.237343,
+      "peakWorkingSetBytes": 77246464
+    },
+    {
+      "terrain": "canyon",
+      "seed": 42,
+      "variant": "after",
+      "exitCode": 0,
+      "wallSeconds": 18.692999599996256,
+      "generationSeconds": 14.808578,
+      "peakWorkingSetBytes": 74407936
+    }
+  ],
+  "exactOutputs": true
+}
