@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "reference_fixture.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -25,6 +26,10 @@ int main(){try{
         bool started=false;auto rejected=generate(request,{},[&](int,const std::string&){started=true;});
         require(!started&&!rejected.accepted()&&rejected.track.spans.empty()&&has(rejected.report,"REQUEST_RANGE"),"Unsupported rate rejects before candidate work");
     }
+    request.simulationStep=1./960;request.targets.requireIntensity=true;request.targets.referenceExposure=1;request.targets.referenceId="unverified-test-scalar";
+    bool started=false;auto scalar=generate(request,{},[&](int,const std::string&){started=true;});
+    require(!started&&!scalar.accepted()&&scalar.track.spans.empty()&&has(scalar.report,"REFERENCE_UNAVAILABLE"),"Unverified scalar rejects before candidate search");
+    request.targets.requireIntensity=false;require(validateRequest(request).valid(),"Proof exploration can retain explicitly unverified comparison data");
     std::vector<AuthoredPoint> straight;
     for(int i=0;i<=100;++i)straight.push_back({{double(i),0,20},0,Element::Launch,{0,0,1}});
     const auto track=compile(straight,false);TrainConfig train;train.cars=1;
@@ -74,6 +79,8 @@ int main(){try{
     b=a;targets.requireIntensity=true;
     require(has(validateSimulationTargets(b,targets,limits),"REFERENCE_UNAVAILABLE"),"Missing real reference silently bypassed");
     targets.referenceId="explicit-test-reference";targets.referenceExposure=37;
+    require(has(validateSimulationTargets(b,targets,limits),"REFERENCE_UNAVAILABLE"),"Manual scalar cannot bypass strict target evaluation");
+    targets=syntheticReference(37);
     require(has(validateSimulationTargets(b,targets,limits),"INTENSITY_TARGET"),"Fine intensity threshold omitted");
     targets.requireIntensity=false;b.metrics.maxVerticalG=NAN;
     require(has(validateSimulationTargets(b,targets,limits),"NONFINITE_METRIC"),"NaN comparison bypasses force validation");

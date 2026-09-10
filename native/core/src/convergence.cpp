@@ -15,9 +15,9 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
     if(!std::isfinite(m.launchTo180)||m.launchTo180>targets.launchSeconds)
         report.fail("LAUNCH_TARGET","Measured 0-180 km/h launch exceeds target",0,m.launchTo180,targets.launchSeconds);
     if(targets.requireIntensity){
-        if(!std::isfinite(targets.referenceExposure)||targets.referenceId.empty())
-            report.fail("REFERENCE_UNAVAILABLE","I305 ten-second force trace benchmark has not been calibrated; all-record claim unavailable");
-        else minimum("INTENSITY_TARGET",m.exposure10Seconds,targets.referenceExposure*1.1);
+        auto reference=validateReference(targets);
+        report.errors.insert(report.errors.end(),reference.errors.begin(),reference.errors.end());
+        if(reference.valid())minimum("INTENSITY_TARGET",m.exposure10Seconds,targets.referenceExposure*1.1);
     }
     if(m.maxVerticalG>limits.maxVerticalG)report.fail("VERTICAL_FORCE","Positive rider force exceeds provisional envelope",0,m.maxVerticalG,limits.maxVerticalG);
     if(m.minVerticalG<limits.minVerticalG)report.fail("VERTICAL_FORCE","Negative rider force exceeds provisional envelope",0,m.minVerticalG,limits.minVerticalG);

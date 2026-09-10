@@ -46,6 +46,15 @@ int main(){try{
     std::vector<AuthoredPoint> points;for(int i=0;i<=6;++i){double roll=.1*i;points.push_back({{double(i),0,20},roll,Element::Return,rotate({0,0,1},{1,0,0},roll)});}auto line=compile(points,false);TrainConfig train;train.seatHeight=3;auto sweep=buildClearanceSweep(line,train);const auto& cell=sweep.frames()[sweep.frames().size()/2];double bound=terrain_validation::lowerBound(cell.sample,hills,sweep.trainTop(),sweep.padding());
     for(int j=0;j<=20;++j){auto q=line.sampleSpan(cell.span,cell.parameterBegin+(cell.parameterEnd-cell.parameterBegin)*j/20);for(double x:{-1.275,1.275})for(double y:{-1.5,1.5})for(double z:{-.8,3.6})check(bound<=clear(q.position+q.tangent*x+q.right*y+q.up*z,hills)+1e-9,"Continuous canonical cell includes intermediate body corners");}
     Limits limits;auto safe=circle(20);check(validateGeometry(safe,flat,limits,train,{}).valid(),"Clear closed curve accepted with full headroom");
+    for(double bank:{0.,pi}){
+        const double height=bank==0?3.5:6.1;
+        auto close=circle(height,bank);auto closeSweep=buildClearanceSweep(close,train);double minimum=INFINITY;
+        for(const auto& frame:closeSweep.frames())minimum=std::min(minimum,terrain_validation::lowerBound(frame.sample,flat,closeSweep.trainTop(),closeSweep.padding()));
+        check(minimum>=limits.minClearance&&minimum<limits.minClearance+1.6,"Continuous full-body certificate proves a closer pass within the unchanged selected clearance");
+        check(validateGeometry(close,flat,limits,train,{}).valid(),"Certified closer upright and inverted passes are accepted without a second sampled margin");
+        auto intrusion=circle(bank==0?2.79:5.59,bank);
+        check(code(validateGeometry(intrusion,flat,limits,train,{}),"TERRAIN_SWEEP_CLEARANCE"),"Actual below-2m upright and inverted body clearance remains rejected");
+    }
     auto safeSweep=buildClearanceSweep(safe,train);int nominal=int(std::ceil(safe.length/2));
     auto chordBounds=chord_validation::arcBounds(safe,safeSweep,nominal,{});check(chordBounds.size()==size_t(nominal),"Every chord gets one linear-time bound");
     for(size_t i=0;i<chordBounds.size();++i){double sampledLength=0;auto previous=safe.sample(safe.length*i/nominal).position;
@@ -54,11 +63,11 @@ int main(){try{
     check(chord_validation::validate(safe,safeSweep,nominal,{}).valid(),"Nominal chord domain certified");
     check(code(chord_validation::validate(safe,safeSweep,int(std::ceil(safe.length/3)),{}),"TRACK_SAMPLING_DOMAIN"),"Uncertified coarse chords fail the explicit domain gate");
     check(code(chord_validation::validate(safe,safeSweep,nominal,[]{return true;}),"CANCELLED"),"Chord certificate cancellation");
-    auto low=circle(3,pi);auto invalid=validateGeometry(low,flat,limits,train,{});check(code(invalid,"TERRAIN_CLEARANCE"),"Original terrain gate remains");check(code(invalid,"TERRAIN_SWEEP_CLEARANCE"),"Complete swept terrain certificate rejects low inverted headroom");
+    auto low=circle(3,pi);auto invalid=validateGeometry(low,flat,limits,train,{});check(code(invalid,"TERRAIN_SWEEP_CLEARANCE"),"Complete swept terrain certificate rejects low inverted headroom");
     limits.minClearance=30;check(!validateGeometry(safe,flat,limits,train,{}).valid(),"Configured clearance is never ignored");limits.minClearance=4;
     auto stale=safe;stale.spans[0].c[0].z+=1;check(code(validateGeometry(stale,flat,limits,train,{}),"SWEEP_DOMAIN"),"Empty support list cannot bypass canonical cache verification");
     auto malformed=safe;malformed.knots.clear();check(code(validateGeometry(malformed,flat,limits,train,{}),"GEOMETRY_DOMAIN"),"Malformed cardinality rejected before sampling");
     check(code(validateGeometry(safe,flat,limits,train,{},[]{return true;}),"CANCELLED"),"Geometry cancellation remains authoritative");
     size_t calls=0;check(code(validateGeometry(safe,flat,limits,train,{},[&]{return ++calls>50;}),"CANCELLED"),"Cancellation during prepared full-body coverage");
-    std::cout<<"PASS "<<checks<<" terrain certificate checks: omitted headroom/length, interior peak, full body and motion bounds, canonical intervals, old gate, stale cache and cancellation\n";return 0;
+    std::cout<<"PASS "<<checks<<" terrain certificate checks: omitted headroom/length, interior peak, full body and motion bounds, canonical intervals, closer legal passes, stale cache and cancellation\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

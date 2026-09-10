@@ -1,7 +1,7 @@
 {
-  "register": "official record specifications (as-published context only)",
-  "updated_utc": "2026-09-06T13:47:30Z",
-  "verification_policy": "Only entries with per-entry retrieved_utc fetched 2026-09-06 are verified-as-published (manufacturer / operator / RCDB page body observed). Wikipedia summaries, press-release mirrors, and prior numbers not observed on refetch are leads_only, status unverified, not primary evidence. Marketing record claims are labelled record-claim, distinct from measurement. This repo did NOT independently measure any spec. No peaks substitute for 10-s force exposure.",
+  "register": "published record specifications and supplied recording observations",
+  "updated_utc": "2026-09-10T08:22:41Z",
+  "verification_policy": "Published specifications retain their per-entry retrieval dates; this update does not claim they were refetched. Marketing record claims remain distinct from independent measurement. Supplied-recording metrics are computed from the original local files, with RFDB identity and processing checks documented separately. Unknown calibration, seat and timing information is not invented. A single observation is useful engineering evidence but does not establish a population median, recording spread or calibrated uncertainty. No peak substitutes for ten-second exposure.",
   "game_targets": {
     "note": "Configured physics-proof thresholds from native/core/NUMERICS.md, not independently confirmed world records.",
     "height_m": 220,
@@ -104,7 +104,7 @@
       "label": "Pantherian / ex-Intimidator 305 summaries (305 ft / 300 ft 85 deg / 90 mph / 5100 ft, reprofile history)",
       "source_urls": ["https://en.wikipedia.org/wiki/Pantherian", "https://thrillzing.com/roller-coasters/pantherian-kings-dominion/"],
       "status": "unverified-lead",
-      "note": "Encyclopedic summaries only, not primary evidence. Pre/post first-turn reprofile must be split by date; do not pool. No raw I305 benchmark on file."
+      "note": "Encyclopedic specifications remain leads. Pre/post first-turn reprofile must be split by date; do not pool. The supplied June 2026 Pantherian recording is inventoried below; a qualified multi-record benchmark is not yet established."
     },
     {
       "label": "Do-Dodonpa 49 m / 1244 m encyclopedic summary",
@@ -125,9 +125,63 @@
     "record": "https://rideforcesdb.com/record",
     "access": "rideInfo metadata public; /getRec traces gated to logged-in users per About privacy policy. This repo performs no bypass."
   },
+  "supplied_recordings": {
+    "status": "three usable engineering observations; one per ride; strict multi-record qualification not established",
+    "analysis": "native/artifacts/flow-intent-v083-20260910/references/FINDINGS.md",
+    "metrics": "native/artifacts/flow-intent-v083-20260910/references/signed-recording-metrics.json",
+    "method": "Nominal 50 Hz sample indices; source calibration-row projection; vertical=RFDB y, lateral=-RFDB x, longitudinal=RFDB z; gravity retained; exact piecewise-linear positive ten-second integral. Display metrics use the full-sequence centered 11-sample mean before cropping. No basis repair, time warping or calibrated uncertainty claim.",
+    "identity_check": "Each local file date plus startIndex/50 matches the named public RFDB recording date; reconstructed display vertical extrema match stored source extrema within 1e-10 g.",
+    "recording_spread": "unavailable: one supplied independent recording per ride",
+    "measurement_uncertainty": "not quantified; filtering sensitivity is reported separately and does not bound device calibration or timebase error",
+    "records": [
+      {
+        "ride": "Falcon's Flight", "rfdb_id": 4804,
+        "source_url": "https://rideforcesdb.com/?id=4804",
+        "file": "RFDB Data/FalconsF-897CA829-651D-4933-BB6A-1ADC16CF0693.forces",
+        "sha256": "7daa246124d8d7ace45ec1f45f29dd1f3cf127ed0e133b5c96ce63a474f214ba",
+        "recording_date_utc": "2026-01-01T18:30:49.744067Z",
+        "device": "Apple Watch", "seat": "Row 7, left seat; train unknown",
+        "selected_duration_s": 158.02, "S10_raw_g_s": 20.251133, "S10_display_g_s": 20.100043,
+        "display_vertical_min_max_g": [-0.986182, 3.893909],
+        "display_vertical_above3_total_longest_s": [4.476030, 1.102897],
+        "display_vertical_below0_total_s": 14.273950,
+        "display_vertical_below_minus_half_total_s": 2.480109,
+        "display_longitudinal_one_second_min_max_mean_g": [-0.883037, 1.209842]
+      },
+      {
+        "ride": "Pantherian", "rfdb_id": 6839,
+        "source_url": "https://rideforcesdb.com/?id=6839",
+        "file": "RFDB Data/Pantherian-3AA73A40-43F8-413E-B344-A1852F23524F.forces",
+        "sha256": "4322d69d3155dc6dbd369728dfc5590323eed1babbad285e2e4e10c437c30fd1",
+        "recording_date_utc": "2026-06-04T15:43:18.309401Z",
+        "device": "iPhone", "seat": null,
+        "selected_duration_s": 55.02, "S10_raw_g_s": 30.019585, "S10_display_g_s": 29.934713,
+        "display_vertical_min_max_g": [-0.864834, 4.403160],
+        "display_vertical_above3_total_longest_s": [15.317336, 4.474108],
+        "display_vertical_below0_total_s": 7.998930,
+        "display_vertical_below_minus_half_total_s": 2.087614,
+        "display_longitudinal_one_second_min_max_mean_g": [-1.104897, 0.770299]
+      },
+      {
+        "ride": "Tormenta Rampaging Run", "rfdb_id": 6383,
+        "source_url": "https://rideforcesdb.com/?id=6383",
+        "file": "RFDB Data/TormentaR-73197B76-7D63-4443-8733-B6B95EB54DE7.forces",
+        "sha256": "152b56443a918acc54c06f85fe26acfdd717296839881f391f28edae8a453882",
+        "recording_date_utc": "2026-07-08T00:02:07.789022Z",
+        "device": "iPhone", "seat": "Row 2, seat 8, train 1",
+        "selected_duration_s": 82.48, "S10_raw_g_s": 29.541296, "S10_display_g_s": 29.499321,
+        "display_vertical_min_max_g": [-0.517563, 4.343868],
+        "display_vertical_above3_total_longest_s": [12.885004, 2.786879],
+        "display_vertical_below0_total_s": 2.789362,
+        "display_vertical_below_minus_half_total_s": 0.072722,
+        "display_longitudinal_one_second_min_max_mean_g": [-0.788029, 0.354171]
+      }
+    ]
+  },
   "limits": {
-    "i305_benchmark": "No raw I305/Pantherian trace on file; benchmark.json status unavailable. RFDB peak metadata (instantaneous max/min) cannot be inferred into 10-s exposure S.",
-    "peaks_vs_exposure": "RFDB browse peaks are instantaneous only; Falcon's n=1 / Tormenta n=2 too thin for median even if traces existed; Do-Dodonpa archival only.",
+    "i305_benchmark": "Pantherian 6839 raw data and computed S10 are available above. A +10 percent comparison to this single observation is 33.021544 g*s raw or 32.928185 g*s displayed, not a qualified population median. Seat, device stability and calibrated uncertainty remain unverified; between-recording spread is unavailable. Historical processed/benchmark.json remains unchanged.",
+    "peaks_vs_exposure": "RFDB browse peaks alone cannot determine S10; the supplied full traces can. Supplied recording count is one each for Falcon's Flight, Pantherian and Tormenta. Publicly listed recording counts are not downloaded independent observations. Do-Dodonpa remains archival context.",
+    "aggregation_policy": "Current tools require the same ride/configuration/seat/device/calibration_id and at least three independent recordings. This is an implemented restriction, not a general scientific requirement. An explicitly reviewed compatible population may include different validated devices and per-run calibrations, with seat/device metadata retained as strata; no such policy change or eligibility promotion is applied by this register.",
     "wikipedia": "Wikipedia summaries are leads, never verified specs.",
     "game_vs_record": "220 m / 270 km/h (75 m/s) / 1.4 s (0-50 m/s) / 80 m inversion are configured game goals, not confirmed world records."
   }

@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "reference_fixture.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -76,7 +77,7 @@ static void geometry(){
     check(validateGeometry(loop,terrain,limits,train,{}).valid(),"Closed clear circle");
     auto a=loop.sample(0),b=loop.sample(loop.length);near(norm(a.position-b.position),0,1e-12,"Canonical seam position");near(norm(a.tangent-b.tangent),0,1e-12,"Canonical seam tangent");near(norm(a.curvature-b.curvature),0,1e-12,"Canonical seam curvature");
     auto displaced=loop;displaced.knots.back().position.x+=1;bool seamRejected=false;try{displaced.rebuild();}catch(...){seamRejected=true;}check(seamRejected,"Open canonical seam rejected before rebuilding shared G3 jets");
-    auto low=loop;for(auto& k:low.knots)k.position.z=4;low.rebuild();check(code(validateGeometry(low,terrain,limits,train,{}),"TERRAIN_CLEARANCE"),"Terrain envelope clearance");
+    auto low=loop;for(auto& k:low.knots)k.position.z=2.7;low.rebuild();check(code(validateGeometry(low,terrain,limits,train,{}),"TERRAIN_SWEEP_CLEARANCE"),"Body clearance below the selected 2 m minimum is rejected");
     std::vector<AuthoredPoint> p;for(int i=0;i<=600;++i){double a=2*pi*i/600;p.push_back({{50*std::sin(a),30*std::sin(2*a),20},0,Element::Turn,{0,0,1}});}p.back()=p.front();auto crossing=compile(p);check(code(validateGeometry(crossing,terrain,limits,train,{}),"TRACK_CLEARANCE"),"Nonadjacent figure-eight crossing");
     auto enormous=train;enormous.cars=1;enormous.spacing=1e6;check(code(validateGeometry(crossing,terrain,limits,enormous,{}),"TRAIN_CONFIG"),"Irrelevant one-car spacing cannot disable collision checks");
     auto q=loop.sample(80);Support column{{q.position.x,q.position.y,0},{q.position.x,q.position.y,40},{},false,0};check(code(validateGeometry(loop,terrain,limits,train,{column}),"SUPPORT_CLEARANCE"),"Full support column collision");
@@ -235,9 +236,9 @@ static void planningAndTargets(){
     check(varied.simulation.metrics.launchTo180<=1.4,"Second seeded hills actual departure meets launch target");
     req.seed=3;req.terrain.kind=TerrainKind::Canyon;auto stadium=generate(req);check(stadium.accepted(),"Terrain-ranked stadium accepted");
     check(std::any_of(stadium.track.knots.begin(),stadium.track.knots.end(),[](const Knot& k){return k.element==Element::Airtime;}),"Stadium retains canonical airtime");
-    req.seed=1;req.terrain.kind=TerrainKind::Flat;req.targets.requireIntensity=true;req.targets.referenceId="TEST_ONLY_SYNTHETIC_NOT_I305";req.targets.referenceExposure=20;
+    req.seed=1;req.terrain.kind=TerrainKind::Flat;req.targets=syntheticReference(20);
     auto lowReference=generate(req);check(lowReference.accepted(),"Synthetic 20 g*s reference drives a feasible design");
-    req.targets.referenceExposure=30;auto highReference=generate(req);check(highReference.accepted(),"Synthetic 30 g*s reference drives a feasible design");
+    req.targets=syntheticReference(30);auto highReference=generate(req);check(highReference.accepted(),"Synthetic 30 g*s reference drives a feasible design");
     check(highReference.simulation.metrics.exposure10Seconds>=33,"Independent measurement meets synthetic exposure goal");
     check(highReference.simulation.metrics.exposure10Seconds>lowReference.simulation.metrics.exposure10Seconds+.1,"Reference magnitude changes force design and measured exposure");
     check(std::abs(highReference.track.length-lowReference.track.length)>1,"Reference changes geometry, not just acceptance postfilter");
@@ -246,7 +247,7 @@ static void planningAndTargets(){
     near(halfStep.metrics.maxSpeed,highReference.simulation.metrics.maxSpeed,.01,"Target-driven speed convergence");near(halfStep.metrics.maxVerticalG,highReference.simulation.metrics.maxVerticalG,.03,"Target-driven normal-force convergence");near(halfStep.metrics.maxLateralG,highReference.simulation.metrics.maxLateralG,.03,"Target-driven lateral-force convergence");near(halfStep.metrics.exposure10Seconds,highReference.simulation.metrics.exposure10Seconds,.05,"Target-driven exposure convergence");near(halfStep.frames.back().speed,0,0,"Target-driven physical terminal stop");
     auto path=(std::filesystem::temp_directory_path()/"coaster-synthetic-target.coaster").string();std::string error;check(saveDesign(highReference,path,error),"Synthetic target geometry independently validates before save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Synthetic target saved geometry replays: "+error);check(reportJson(loaded)==reportJson(highReference),"Synthetic configured target and exact measured result survive save/replay");std::filesystem::remove(path);
 
-    req.targets.referenceExposure=51;check(code(generate(req).report,"INTENSITY_FEASIBILITY"),"Exposure above the force-duration ceiling rejected honestly");
+    req.targets=syntheticReference(51);check(code(generate(req).report,"INTENSITY_FEASIBILITY"),"Exposure above the force-duration ceiling rejected honestly");
     req.seed=2;req.terrain.kind=TerrainKind::Hills;req.targets.requireIntensity=false;req.targets.launchSeconds=1.2;auto fastLaunch=generate(req);
     check(fastLaunch.accepted()&&fastLaunch.simulation.metrics.launchTo180<=1.2,"Launch request sizes explicit motor force");
     check(fastLaunch.simulation.metrics.maxLongitudinalG<=req.limits.maxLongitudinalG,"Faster departure preserves longitudinal force ceiling");
