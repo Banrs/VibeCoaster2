@@ -1,19 +1,17 @@
 # VibeCoaster native game
 
-Active source is **0.8.2-terrain.1**. Terrain routing and source cleanup passed native and UE checks; the published package below remains the preserved 0.8.1 build.
-
-The current Windows engineering preview uses **0.8.1-intent.1 / COASTER5**, built from commit `ae09f02`. Generator flow and hardware feasibility remain under review. The commit-qualified delivery name distinguishes preserved intermediate bundles. See [work in progress](WORK_IN_PROGRESS.md).
+Active source and the current Windows engineering preview use **0.8.2-terrain.1 / COASTER5**, built from `6f23a9e`. Terrain routing and code simplification are verified within the scope below; whole-ride flow and hardware feasibility remain under review. See [work in progress](WORK_IN_PROGRESS.md).
 
 Fresh profiles use desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off. Saved player settings remain respected, and distribution launchers forward command-line options.
 
 
-**Windows engineering preview: 0.8.1-intent.1-ae09f02.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.1-intent.1-ae09f02) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
+**Windows engineering preview: 0.8.2-terrain.1-6f23a9e.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.2-terrain.1-6f23a9e) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
 
 Extract the entire Windows ZIP, then open **Play VibeCoaster.cmd** or
 **VibeCoaster.exe**. Unreal Editor, Blender and a compiler are not required to
 play. Keep the Engine and VibeCoaster folders alongside the EXE.
 
-Choose **PHYSICS-PROOF**, **Canyon**, seed **42**, press Enter to generate, then
+Choose **PHYSICS-PROOF**, **Canyon**, seed **9**, press Enter to generate, then
 Space to ride. Up/Down selects a setting; Left/Right changes it. Tab shows setup,
 1/2/3 selects front/middle/rear while riding, M overview, R restart, F5 save,
 F9 load, and Alt+F4 exit. Other seeds vary the dimensions and placement within the
@@ -48,10 +46,10 @@ identity is **0.8.2-terrain.1 / COASTER5**; older releases' saves require the pr
 
 ## Current verification and limits
 
-All 26 local CTest suites and three-platform core/Python CI passed for `ae09f02`.
-Eleven targeted circuits passed exact saved replay and independent convergence,
-reaching final braking in 137.708–147.896 s. Windows build/cook/package and seven
-UE contracts passed. Three complete packaged terrain/seat runs also passed
+All 26 local CTest suites passed across the full run and targeted fixture rerun.
+Six targeted circuits passed independent saved replay and 960/1920 Hz convergence,
+reaching final braking in 140.027–172.440 s. Windows build/cook/package and seven
+UE contracts passed. Two fresh packaged terrain/seat runs passed complete
 traversal and save/load; extracted startup and all 48 runtime hashes were verified.
 See [DELIVERY.md](DELIVERY.md) for scope. Frozen evidence, failed runs and older
 binaries remain preserved. This package has no new performance acceptance claim.
