@@ -3,7 +3,7 @@
 
 Pinned core report contract (core/src/persistence.cpp:reportJson,
 core/src/main.cpp, core/src/generation.cpp:evaluateTargets):
-  schemaVersion==1, generatorVersion=="0.5.0-geometry.2", seed/terrain/preset echo the
+  schemaVersion==1, generatorVersion matches the current core, seed/terrain/preset echo the
   request, intensityRequired==(preset=="all-records"),
   accepted/completed/cancelled are strict booleans, errors==[] iff accepted.
   physics-proof is the ONLY intensity exemption; all-records with
@@ -21,6 +21,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -40,8 +41,11 @@ DEFAULT_STEP = 1.0 / 960.0
 CASE_JSON_VERSION = 3
 MANIFEST_VERSION = 3
 REPORT_SCHEMA_VERSION = 1
-EXPECTED_GENERATOR_VERSION = "0.5.0-geometry.2"
-VALIDATION_POLICY = "validate-required-v4-convergence"
+EXPECTED_GENERATOR_VERSION = re.search(
+    r'\bgeneratorVersion\s*=\s*"([^"]+)"',
+    (Path(__file__).resolve().parents[1] / "core/include/coaster/coaster.hpp").read_text(encoding="utf-8"),
+).group(1)
+VALIDATION_POLICY = "validate-required-v5-full-envelope-960-1920"
 
 
 def build_manifest(count=DEFAULT_COUNT, candidates=DEFAULT_CANDIDATES,
@@ -49,6 +53,8 @@ def build_manifest(count=DEFAULT_COUNT, candidates=DEFAULT_CANDIDATES,
     """Predeclare `count` cases deterministically (half/half, round-robin)."""
     if count <= 0:
         raise ValueError("count must be > 0")
+    if step != DEFAULT_STEP:
+        raise ValueError("Acceptance requires 960 Hz simulation and 1920 Hz verification")
     half = count // 2
     cases = []
     for i in range(count):
@@ -228,7 +234,7 @@ def _convergence_check(obj, case):
     if not isinstance(c, dict) or c.get("performed") is not True or c.get("passed") is not True:
         return "CONVERGENCE_NOT_VERIFIED"
     expected_step = case.get("step")
-    if not is_finite_nonneg(expected_step) or expected_step <= 0:
+    if not is_finite_number(expected_step) or expected_step != DEFAULT_STEP:
         return "CONVERGENCE_STEP"
     for key, expected in (("coarseStep", expected_step), ("fineStep", expected_step / 2)):
         value = c.get(key)
@@ -264,6 +270,48 @@ def _convergence_check(obj, case):
             required.update(prefix + field for field in ("minG", "maxG", "meanG", "mean1sMin", "mean1sMax", "mean10sMin", "mean10sMax"))
             if axis == "vertical" or is_finite_nonneg(limits.get("max" + axis.title() + "RateGps")):
                 required.add(prefix + "maxRateGps")
+    envelope = obj.get("forceEnvelope")
+    if not isinstance(envelope, dict) or envelope.get("sampleRateHz") != 960:
+        return "CONVERGENCE_ENVELOPE_BINDING"
+    envelope_seats = envelope.get("seats")
+    if not isinstance(envelope_seats, list) or len(envelope_seats) != 3:
+        return "CONVERGENCE_ENVELOPE_BINDING"
+    # The version-bound report shape mirrors ForceEnvelopeAssessment. Bind all
+    # compared values to its actual coarse evidence, not only the legacy peaks.
+    for name, seat in zip(("front", "middle", "rear"), envelope_seats):
+        if not isinstance(seat, dict) or seat.get("performed") is not True or seat.get("passed") is not True:
+            return "CONVERGENCE_ENVELOPE_BINDING"
+        axes = seat.get("axes")
+        if not isinstance(axes, list) or len(axes) != 3:
+            return "CONVERGENCE_ENVELOPE_BINDING"
+        prefix = name + ".forceEnvelope."
+        for axis, values in zip(("vertical", "lateral", "longitudinal"), axes):
+            if not isinstance(values, dict):
+                return "CONVERGENCE_ENVELOPE_BINDING"
+            for field in ("minimumG", "maximumG", "minimumOnsetGps", "maximumOnsetGps"):
+                key = prefix + axis + "." + field
+                required.add(key)
+                coarse_values[key] = values.get(field)
+        for field, report_field, count in (
+            ("directional", "directionalG", 6), ("paired", "pairedSquaredUtilization", 3),
+            ("horizontalReversal", "horizontalReversalG", 2), ("durationExtent", "durationExtentSeconds", 2),
+        ):
+            values = seat.get(report_field)
+            if not isinstance(values, list) or len(values) != count or any(not isinstance(v, dict) for v in values):
+                return "CONVERGENCE_ENVELOPE_BINDING"
+            for index, value in enumerate(values):
+                key = prefix + field + str(index)
+                required.add(key)
+                coarse_values[key] = value.get("utilization")
+        for field, report_field in (
+            ("reducedPositive", "reducedPositiveG"), ("zeroToTwo", "zeroToTwoSeconds"),
+            ("enhancedLongitudinalOnset", "enhancedLongitudinalOnsetGps"),
+        ):
+            value = seat.get(report_field)
+            if not isinstance(value, dict):
+                return "CONVERGENCE_ENVELOPE_BINDING"
+            required.add(prefix + field)
+            coarse_values[prefix + field] = value.get("utilization")
     rows = c.get("metrics")
     if not isinstance(rows, list) or len(rows) != len(required):
         return "CONVERGENCE_METRICS"
@@ -981,6 +1029,9 @@ def main(argv=None):
     vtimeout = float(args.validate_timeout) if args.validate_timeout is not None else float(args.timeout)
     if not is_finite_nonneg(vtimeout) or vtimeout <= 0:
         print("error: --validate-timeout must be > 0", file=sys.stderr)
+        return 2
+    if args.step != DEFAULT_STEP:
+        print("error: acceptance requires --step 1/960 and 1920 Hz verification", file=sys.stderr)
         return 2
     cli_hash = sha256_file(str(cli))
     if cli_hash is None:

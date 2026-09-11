@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import acceptance
 
 CLI = os.environ.get("COASTER_CLI")
 if __name__ == "__main__" and len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
@@ -102,6 +103,22 @@ class CliArguments(unittest.TestCase):
                 for rider in phase["ridersAtPhase"]:
                     self.assertEqual(len(rider["Gzyx"]), 3)
                     self.assertTrue(all(math.isfinite(v) for v in [rider["time"], rider["speedMps"], *rider["Gzyx"]]))
+
+    def test_acceptance_tool_matches_current_cli_and_saved_replay(self):
+        cli = Path(CLI).resolve()
+        with tempfile.TemporaryDirectory(dir=cli.parent) as directory:
+            for preset, expected in (("physics-proof", "accepted"), ("all-records", "rejected")):
+                case = {"index": 0, "id": preset, "seed": 42, "terrain": "flat",
+                        "preset": preset, "candidates": 1, "step": 1/960}
+                record = acceptance.run_one_case(str(cli), case, directory, timeout=180)
+                self.assertEqual(record["category"], expected, record)
+                if expected == "accepted":
+                    self.assertEqual(record["note"], "validate-confirmed")
+                    self.assertEqual(record["replayReturncode"], 0)
+                    report = json.loads((Path(directory) / "replays" / (preset + ".replay.json")).read_text())
+                    self.assertTrue(any(".forceEnvelope." in r["name"] for r in report["convergence"]["metrics"]))
+                else:
+                    self.assertIn("REFERENCE_UNAVAILABLE", record["errorCodes"])
 
 
 if __name__ == "__main__":
