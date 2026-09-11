@@ -24,44 +24,13 @@ int main(){try{
         rejects([&]{detail::fitTerrainWindow({0,length*.4995,length*.999},{-1,-1,-1},rise,0,grade,curvature);},"Shortening a minimum-span transition violates a physical requirement");
     }
     check(detail::minimumTerrainWindowLength(0,2,.005)==0,"Zero rise has no invented minimum terrain length");
-    std::vector<double> s(601),floor(601,0);for(size_t i=0;i<s.size();++i)s[i]=i*2.;
-    auto ordinary=detail::fitTerrainTransfer(s,floor,10,220,2,.02);check(ordinary.timing==1,"Unobstructed transfer retains its S7 timing");
-    // A cliff rises earlier than the original transfer. Its entire sampled
-    // lower envelope must clear, without an added summit or reversed grade.
-    for(size_t i=0;i<s.size();++i)floor[i]=i<160?0:180;
-    auto climb=detail::fitTerrainTransfer(s,floor,10,220,2,.02);
-    check(climb.timing>1,"Early escarpment advances the climb");
-    double previous=10;
-    for(size_t i=0;i<s.size();++i){double z=climb.height(s[i]);check(z+1e-7>=floor[i],"Whole sampled cliff envelope clears");check(z>=previous&&z<=220,"Climb remains monotone and inside its port heights");previous=z;}
-    std::reverse(floor.begin(),floor.end());auto descent=detail::fitTerrainTransfer(s,floor,220,10,2,.02);
-    for(size_t i=0;i<s.size();++i)check(std::abs(descent.height(s[i])-climb.height(1200-s[i]))<1e-8,"Late descent is the reflected early climb");
-    check(climb.height(0)==10&&climb.height(1200)==220,"Both absolute port heights are exact");
-    double a=climb.height(.1)-10,b=climb.height(.2)-10;
-    check(a>0&&b/a>15.5&&b/a<16.5,"Endpoint displacement is fourth order, preserving zero first three jets");
-    auto bad=floor;bad.front()=221;rejects([&]{detail::fitTerrainTransfer(s,bad,220,10,2,.02);},"A buried fixed port is infeasible");
-    bad.assign(s.size(),0);bad[300]=221;rejects([&]{detail::fitTerrainTransfer(s,bad,10,220,2,.02);},"A ridge above both ports requires another route");
-    bad.assign(s.size(),0);bad[1]=100;rejects([&]{detail::fitTerrainTransfer(s,bad,10,220,2,.02);},"Near-port deficit cannot create an unbounded remote hump");
-    rejects([&]{detail::fitTerrainTransfer(s,floor,220,10,2,.00001);},"Curvature authoring budget rejects a compressed transfer");
-    auto level=detail::fitTerrainTransfer(s,std::vector<double>(s.size(),9),10,10,2,.02);check(level.height(600)==10,"Level clear ports remain level");
-    rejects([&]{detail::fitTerrainTransfer(s,std::vector<double>(s.size(),11),10,10,2,.02);},"Level buried ports cannot invent a hill");
-    bool cancelled=false;try{detail::fitTerrainTransfer(s,floor,220,10,2,.02,[]{return true;});}catch(const std::runtime_error& e){cancelled=std::string(e.what())=="CANCELLED";}check(cancelled,"Transfer fit remains cancellable");
-    bool siteFailure=false;
-    try{detail::fitTerrainTransfer(s,std::vector<double>(s.size(),221),10,220,2,.02);}catch(const detail::TerrainTransferInfeasible&){siteFailure=true;}
-    check(siteFailure,"Expected terrain infeasibility has a distinct site-selection type");
-    bool invalidInput=false;
-    try{detail::fitTerrainTransfer(s,floor,220,10,0,.02);}catch(const detail::TerrainTransferInfeasible&){throw std::runtime_error("Invalid input masqueraded as a site rejection");}catch(const std::invalid_argument&){invalidInput=true;}
-    check(invalidInput,"Input errors cannot silently trigger another terrain site");
-    cancelled=false;
-    try{detail::fitTerrainTransfer(s,floor,220,10,2,.02,[]{return true;});}catch(const detail::TerrainTransferInfeasible&){throw std::runtime_error("Cancellation masqueraded as a site rejection");}catch(const std::runtime_error& e){cancelled=std::string(e.what())=="CANCELLED";}
-    check(cancelled,"Site feasibility retries cannot consume cancellation");
+    double previous=0;bool cancelled=false,invalidInput=false;
     // A late cliff followed by a long station return must not stretch the
     // descent across the entire return or remain on a high artificial shelf.
     std::vector<double> terminalDistance(1001),terminalFloor(1001);
     for(size_t i=0;i<terminalDistance.size();++i){terminalDistance[i]=i*2.;terminalFloor[i]=i<400?180:10;}
     auto terminal=detail::fitTerrainWindow(terminalDistance,terminalFloor,220,10,1,.003);
-    auto stretched=detail::fitTerrainTransfer(terminalDistance,terminalFloor,220,10,1,.003);
     check(terminal.activeStart>0&&terminal.activeStart+terminal.activeLength<1500,"Late cliff descent finishes before the distant station return");
-    check(terminal.height(1200)+40<stretched.height(1200),"Active descent removes the full-domain high return shelf");
     previous=terminal.start;
     for(size_t i=0;i<terminalDistance.size();++i){double z=terminal.height(terminalDistance[i]);check(z+1e-7>=terminalFloor[i],"Active window clears the complete sampled cliff");check(z<=previous&&z>=terminal.finish,"Terminal descent remains monotone within fixed port heights");previous=z;}
     const double windowEnd=terminal.activeStart+terminal.activeLength;

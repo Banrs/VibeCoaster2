@@ -1,5 +1,7 @@
 #include "coaster/coaster.hpp"
 #include "../src/drive_force.hpp"
+#include "../src/boost_planning.hpp"
+#include "../src/simulation_internal.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -32,6 +34,14 @@ int main(){try{
     auto wrap=op(300,20),after=op(20,100);x={wrap,after};coalesceDriveProfiles(x);check(x.size()==2&&equal(x[0],wrap)&&equal(x[1],after),"Wrapped regions are left explicit");
     x={b,a};coalesceDriveProfiles(x);check(x.size()==2&&equal(x[0],b)&&equal(x[1],a),"Authored operations are never reordered");
     std::vector<AuthoredPoint> points;for(int i=0;i<=350;++i)points.push_back({{double(i),0,20},0,Element::Launch,{0,0,1}});auto track=compile(points,false);TrainConfig train;train.cars=1;train.carMass=1500;train.dragCdA=0;train.rollingResistance=0;train.seatHeight=0;
+    for(int cars:{6,12})for(double step:{1./960,1./1920}){
+        auto consist=train;consist.cars=cars;const auto source=detail::simulateSource(track,consist,35,step);
+        check(source.completed&&source.frames.front().distance==0&&source.frames.front().speed==35,"Internal passive source replay begins at its explicit physical inlet");
+        bool conserved=true;for(const auto& frame:source.frames)conserved&=frame.speed==35&&frame.drives.propulsion==0&&frame.drives.braking==0;
+        check(conserved&&detail::validateSimulationForces(source,Limits{}).valid(),"Lossless finite train conserves analytic straight-line speed and passes the shared force assessment at both mandatory rates");
+        Limits restrictive;restrictive.maxVerticalG=.9;
+        check(!detail::validateSimulationForces(source,restrictive).valid(),"Source preflight retains the full ride's selected force limits");
+    }
     std::vector<Operation> separate{op(0,100),op(100,300)},merged=separate;coalesceDriveProfiles(merged);const double expected=3.5/gravity;
     for(double step:{1./480,1./960}){
         auto before=simulate(track,separate,train,step),afterRun=simulate(track,merged,train,step);check(before.completed&&afterRun.completed,"Both explicit-drive control runs physically complete");
@@ -85,6 +95,35 @@ int main(){try{
             const auto run=simulate(sourceTrack,{launch,motor,brake},sourceTrain,step);check(run.completed,"Adjacent finite-train operation fixture completes");
             int mixed=0;for(const auto& frame:run.frames)if(frame.drives.propulsion>0&&frame.drives.braking<0)++mixed;
             check(inset?mixed==0:mixed>0,"Partitioned center work domains prevent simultaneous rear propulsion and front braking");
+        }
+    }
+    // A declared ordinary LSM rating owns the required work length. Check
+    // the planning estimate against independent full-train integration, with
+    // both force-limited and power-limited propulsion and real source insets.
+    for(int cars:{6,12})for(double powerSpeed:{50.,100.}){
+        TrainConfig consist;consist.cars=cars;
+        const double h=(cars-1)*consist.spacing*.5;
+        Operation departure{0,300,DriveKind::Launch,45,consist.carMass*12,consist.carMass*1200,.5};
+        departure.exitFadeMeters=22.5;
+        const auto upstream=simulate(sourceTrack,{departure},consist,1./960);
+        const double inlet=speedAt(upstream,450);
+        Operation boost{0,1,DriveKind::Boost,65,consist.carMass*.8*gravity,consist.carMass*.8*gravity*powerSpeed,.5};
+        boost.exitFadeMeters=32.5;
+        const double length=detail::plannedBoostLength(inlet,boost,consist);
+        boost.start=450+h;boost.end=450+length-h;
+        double previous=0;
+        for(double step:{1./960,1./1920}){
+            const auto run=simulate(sourceTrack,{departure,boost},consist,step);
+            check(run.completed,"Physically sized booster traverses at both mandatory rates");
+            const double outlet=speedAt(run,450+length);
+            check(outlet>=boost.targetSpeed-.5&&outlet<=boost.targetSpeed,"Sized work reaches the governor approach without assigning speed");
+            if(previous)check(std::abs(outlet-previous)<.001,"Sized booster outlet converges within one millimetre per second");
+            previous=outlet;
+            double peak=0,tail=0;
+            for(const auto& f:run.frames){if(f.distance>=450&&f.distance<=450+length)peak=std::max(peak,f.seats[1].longitudinal);
+                if(f.distance>=450+length&&f.distance<=460+length)tail=std::max(tail,std::abs(f.drives.propulsion));}
+            check(peak>.5&&peak<=.8,"Ordinary boost uses real bounded thrust despite train and governor ramps");
+            check(tail==0,"The complete train clears booster hardware before the passive source begins");
         }
     }
     std::vector<AuthoredPoint> circuit;

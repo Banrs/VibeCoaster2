@@ -1,4 +1,5 @@
 #include "coaster/force_envelope.hpp"
+#include "force_envelope_parameters.hpp"
 #include <span>
 
 namespace coaster {
@@ -80,6 +81,16 @@ std::vector<Event> events(const std::vector<double>& values,double step,const Ca
     for(size_t i=1;i<values.size();++i){if(stopped(cancel,i))return {};double a=values[i-1],b=values[i],begin=(i-1)*step,end=i*step;
         if(a*b<0){double crossing=begin+step*std::abs(a)/(std::abs(a)+std::abs(b));append(a>0?1:-1,begin,crossing,a,0);append(b>0?1:-1,crossing,end,0,b);}
         else append((a>0||b>0)?1:(a<0||b<0)?-1:0,begin,end,a,b);}
+    // A strict sampled peak has a local quadratic time estimate. Using only
+    // grid positions can put the same smooth reversal on opposite sides of
+    // 200 ms at the mandatory rates. Keep sampled magnitudes and the existing
+    // first/last extents of flat peaks unchanged.
+    for(auto& event:result)if(event.firstPeak==event.lastPeak){
+        const size_t i=static_cast<size_t>(std::llround(event.firstPeak/step));
+        if(i==0||i+1>=values.size())continue;
+        const double a=event.sign*values[i-1],b=event.sign*values[i],c=event.sign*values[i+1];
+        if(a<b&&c<b)event.firstPeak=event.lastPeak=(i+.5*(a-c)/(a-2*b+c))*step;
+    }
     return result;
 }
 
@@ -132,7 +143,7 @@ ForceEnvelopeAssessment assessForceEnvelope(const std::array<std::vector<double>
             size_t first=std::max<size_t>(1,static_cast<size_t>(std::ceil(event.begin/step))),last=std::min(count-1,static_cast<size_t>(std::floor(event.end/step)));
             bool crossed=false;
             for(size_t i=first;i<=last;++i){if(stopped(cancel,i)){result.cancelled=true;return result;}
-                if(!crossed&&filtered[0][i]>=2&&filtered[0][i-1]<2){double t=(i-1)*step+step*(2-filtered[0][i-1])/(filtered[0][i]-filtered[0][i-1]);worst(result.zeroToTwo,t-event.begin,.133,event.begin,t-event.begin,true);crossed=true;}
+                if(!crossed&&filtered[0][i]>=2&&filtered[0][i-1]<2){double t=(i-1)*step+step*(2-filtered[0][i-1])/(filtered[0][i]-filtered[0][i-1]);worst(result.zeroToTwo,t-event.begin,detail::zeroToTwoMinimumSeconds,event.begin,t-event.begin,true);crossed=true;}
             }
         }
         if(duration>=.2){negativeDuration=0;nonpositiveDuration=0;}

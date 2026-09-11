@@ -1,6 +1,7 @@
 #include "coaster/coaster.hpp"
 #include "coaster/force_envelope.hpp"
 #include "drive_force.hpp"
+#include "simulation_internal.hpp"
 #include <deque>
 
 namespace coaster {
@@ -27,12 +28,12 @@ ForceMeasurement measure(const Track& track,double distance,double speed,double 
 SeatForces measureSeatForces(const Track& track,double distance,double speed,double acceleration,double seatHeight){
     return measure(track,distance,speed,acceleration,seatHeight).force;
 }
-SimulationResult simulate(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel){
+static SimulationResult simulateInterval(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel,
+    double start,double finish,double initialSpeed){
     SimulationResult out;
     if(track.spans.empty()||dt<1./4000||dt>1./30||!std::isfinite(dt)||train.cars<1||train.cars>16||!std::isfinite(train.carMass)||train.carMass<=0||!std::isfinite(train.spacing)||train.spacing<=0||train.spacing>20||!std::isfinite(train.seatHeight)||train.seatHeight<0||!std::isfinite(train.dragCdA)||train.dragCdA<0||!std::isfinite(train.rollingResistance)||train.rollingResistance<0||!std::isfinite(train.airDensity)||train.airDensity<0){out.report.fail("SIM_CONFIG","Invalid simulation configuration");return out;}
     for(const auto& op:ops)if(int(op.kind)<0||int(op.kind)>3||!std::isfinite(op.start)||!std::isfinite(op.end)||!std::isfinite(op.targetSpeed)||!std::isfinite(op.maxForce)||!std::isfinite(op.maxPower)||!std::isfinite(op.rampSeconds)||!std::isfinite(op.stopDeceleration)||!std::isfinite(op.stopOffset)||!std::isfinite(op.exitFadeMeters)||op.exitFadeMeters<.01||op.exitFadeMeters>1000||op.stopDeceleration<=0||op.stopDeceleration>20||op.stopOffset<0||op.stopOffset>5||op.start<0||op.end<0||op.start>track.length||op.end>track.length||op.targetSpeed<0||op.maxForce<0||op.maxPower<0||op.rampSeconds<0){out.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return out;}
-    double half=(train.cars-1)*train.spacing*.5,start=half+30,finish=track.length+start,s=start,v=0,t=0;
-    if(!track.closed){start=half+1;s=start;finish=track.length-half-1;}
+    double half=(train.cars-1)*train.spacing*.5,s=start,v=initialSpeed,t=0;
     if(finish<=start||2*half+2>=track.length){out.report.fail("TRAIN_LENGTH","Track is shorter than the train");return out;}
     std::vector<double> entered(train.cars*ops.size(),-1);
     constexpr double traceDt=1./60;double nextTrace=0;
@@ -146,5 +147,12 @@ SimulationResult simulate(const Track& track,const std::vector<Operation>& ops,c
     }
     if(!out.completed&&out.report.valid())out.report.fail("TIMEOUT","Ride did not finish within 600 seconds",s);
     return out;
+}
+SimulationResult simulate(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel){
+    const double half=(train.cars-1)*train.spacing*.5,start=half+(track.closed?30:1);
+    return simulateInterval(track,ops,train,dt,cancel,start,track.closed?track.length+start:track.length-half-1,0);
+}
+SimulationResult detail::simulateSource(const Track& track,const TrainConfig& train,double speed,double dt,Cancel cancel){
+    return simulateInterval(track,{},train,dt,cancel,0,track.length,speed);
 }
 }

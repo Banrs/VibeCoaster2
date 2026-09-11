@@ -1,9 +1,10 @@
 #include "coaster/coaster.hpp"
 #include "coaster/force_envelope.hpp"
+#include "simulation_internal.hpp"
 #include <stdexcept>
 
 namespace coaster {
-ValidationReport validateSimulationTargets(const SimulationResult& simulation,const Targets& targets,const Limits& limits){
+ValidationReport detail::validateSimulationForces(const SimulationResult& simulation,const Limits& limits){
     ValidationReport report;
     const auto& m=simulation.metrics;
     for(const auto& envelope:simulation.forceEnvelope){
@@ -12,17 +13,6 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
     }
     for(double v:{m.maxSpeed,m.exposure10Seconds,m.minVerticalG,m.maxVerticalG,m.maxLateralG,m.maxLongitudinalG,m.maxJerkGps}){
         if(!std::isfinite(v)){report.fail("NONFINITE_METRIC","A required simulated target or force metric is nonfinite");return report;}
-    }
-    auto minimum=[&](const char* code,double value,double target){
-        if(!std::isfinite(value)||value+1e-6<target)report.fail(code,"Measured result misses requested target",0,value,target);
-    };
-    minimum("SPEED_TARGET",m.maxSpeed,targets.speed);
-    if(!std::isfinite(m.launchTo180)||m.launchTo180>targets.launchSeconds)
-        report.fail("LAUNCH_TARGET","Measured 0-180 km/h launch exceeds target",0,m.launchTo180,targets.launchSeconds);
-    if(targets.requireIntensity){
-        auto reference=validateReference(targets);
-        report.errors.insert(report.errors.end(),reference.errors.begin(),reference.errors.end());
-        if(reference.valid())minimum("INTENSITY_TARGET",m.exposure10Seconds,targets.referenceExposure*1.1);
     }
     if(m.maxVerticalG>limits.maxVerticalG)report.fail("VERTICAL_FORCE","Positive rider force exceeds configured raw peak guard",0,m.maxVerticalG,limits.maxVerticalG);
     if(m.minVerticalG<limits.minVerticalG)report.fail("VERTICAL_FORCE","Negative rider force exceeds configured raw peak guard",0,m.minVerticalG,limits.minVerticalG);
@@ -41,6 +31,23 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
             peak=std::max(peak,value);
         }
         if(peak>limit)report.fail(axis==1?"LATERAL_FORCE_RATE":"LONGITUDINAL_FORCE_RATE","Rider-axis rate exceeds configured provisional gate",0,peak,limit);
+    }
+    return report;
+}
+
+ValidationReport validateSimulationTargets(const SimulationResult& simulation,const Targets& targets,const Limits& limits){
+    auto report=detail::validateSimulationForces(simulation,limits);const auto& m=simulation.metrics;
+    if(std::any_of(report.errors.begin(),report.errors.end(),[](const Finding& f){return f.code=="NONFINITE_METRIC";}))return report;
+    auto minimum=[&](const char* code,double value,double target){
+        if(!std::isfinite(value)||value+1e-6<target)report.fail(code,"Measured result misses requested target",0,value,target);
+    };
+    minimum("SPEED_TARGET",m.maxSpeed,targets.speed);
+    if(!std::isfinite(m.launchTo180)||m.launchTo180>targets.launchSeconds)
+        report.fail("LAUNCH_TARGET","Measured 0-180 km/h launch exceeds target",0,m.launchTo180,targets.launchSeconds);
+    if(targets.requireIntensity){
+        auto reference=validateReference(targets);
+        report.errors.insert(report.errors.end(),reference.errors.begin(),reference.errors.end());
+        if(reference.valid())minimum("INTENSITY_TARGET",m.exposure10Seconds,targets.referenceExposure*1.1);
     }
     return report;
 }

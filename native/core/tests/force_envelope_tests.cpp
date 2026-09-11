@@ -98,7 +98,15 @@ int main(){try{
         auto conditionalReversal=assessForceEnvelope(history(4,step,[](double t){double a=(t-1.92)/.055,b=(t-2.08)/.055;return SeatForces{0,0,(t<2?.2:-.2)+2*std::exp(-a*a)-1.6*std::exp(-b*b)};}),step);
         check(conditionalReversal.axes[2].minimumG>-2&&conditionalReversal.axes[2].minimumOnsetGps<-15&&has(conditionalReversal,"FORCE_HORIZONTAL_REVERSAL")&&near(conditionalReversal.horizontalReversal[1].limit,1),"An onset-unqualified negative event uses the ordinary OTS 1 g reversal half-limit, not the higher exception's 1.75 g");
     }
+    auto nearBoundaryReversal=[](double t){
+        const double a=(t-1.973+.21*.5)/.055,b=(t-1.973-.21*.5)/.055;
+        return SeatForces{1,0,(t<1.973?.2:-.2)+.3*(std::exp(-a*a)-std::exp(-b*b))};
+    };
+    const auto referenceReversal=assessForceEnvelope(history(4,1./15360,nearBoundaryReversal),1./15360).horizontalReversal[1];
+    check(referenceReversal.utilization>.27&&referenceReversal.durationSeconds<.2,"A densely sampled continuous signal independently resolves the near-200 ms reversal");
     for(double step:{1./960,1./1920}){
+        const auto reversal=assessForceEnvelope(history(4,step,nearBoundaryReversal),step).horizontalReversal[1];
+        check(near(reversal.utilization,referenceReversal.utilization,.001)&&near(reversal.durationSeconds,referenceReversal.durationSeconds,step*.5),"Isolated peak timing resolves the same near-boundary event within half a sample at both mandatory rates");
         auto ramp=history(3,step,[](double t){return SeatForces{.4+1.5*t,0,-.2-t};});auto measured=assessForceEnvelope(ramp,step);
         for(size_t axis:std::array<size_t,2>{0,2}){auto filtered=referenceFilter(ramp[axis],step);const size_t half=size_t(std::llround(.05/step));double minimum=0,maximum=0;
             for(size_t center=half;center+half<filtered.size();++center){double numerator=0,denominator=0;for(int offset=-int(half);offset<=int(half);++offset){double time=offset*step;numerator+=time*filtered[center+offset];denominator+=time*time;}double slope=numerator/denominator;minimum=std::min(minimum,slope);maximum=std::max(maximum,slope);}

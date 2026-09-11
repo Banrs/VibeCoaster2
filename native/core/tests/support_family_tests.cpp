@@ -87,6 +87,28 @@ int main(int argc,char** argv){try{
             check(m.base.z<=ground-.5&&m.top.z>=ground+.2,"Full footing circumference remains terrain anchored on rotated cliff");}
     }
     check(cliffFootings>0,"Cliff footprint fixture exercises real canonical footings");
+    // A tall tower on a steep wall must fit its steel and anchoring within the
+    // same supported foundation depth, without moving the track or its tower.
+    Design tallWall;tallWall.request.terrain.kind=TerrainKind::Canyon;
+    tallWall.request.terrain.verticalScale=.12;tallWall.request.terrain.cliffHeight=210;tallWall.request.terrain.cliffWidth=170;
+    std::vector<AuthoredPoint> wallTrack;
+    const double wallCentre=260+tallWall.request.terrain.cliffWidth*.5;
+    const double towerElevation=tallWall.request.terrain.height(0,wallCentre)+360;
+    for(int i=0;i<=20;++i)wallTrack.push_back({{double(i),wallCentre,towerElevation},0,Element::Return});
+    tallWall.track=compile(wallTrack,false);buildSupportLayout(tallWall);validate(tallWall);
+    check(tallWall.supports.size()==1&&feet(tallWall.supports.front())==4,"Steep-wall tall tower has four connected anchored feet");
+    for(const auto& member:tallWall.supports.front().members)if(member.kind==SupportMemberKind::Footing){
+        check(member.top.z-member.base.z<=12,"Solved footing retains the existing maximum depth");
+        for(int i=0;i<64;++i){const double angle=2*pi*i/64;
+            const double ground=tallWall.request.terrain.height(member.base.x+member.radiusBase*std::cos(angle),member.base.y+member.radiusBase*std::sin(angle));
+            check(member.base.z<=ground-.5&&member.top.z>=ground+.2,"Independent footing circumference clears both anchoring faces");
+        }
+    }
+    Design stacked;std::vector<AuthoredPoint> stackedPoints;
+    for(int i=0;i<=720;++i){const double t=2*pi*i/720;
+        stackedPoints.push_back({{200*std::sin(t),100*std::sin(2*t),200+100*std::cos(t)},0,Element::Return});
+    }
+    stacked.track=compile(stackedPoints,true);buildSupportLayout(stacked);validate(stacked);
     // The first generated footing can correctly be on the flat floor/rim.
     // Put this negative control at the actual wall derivative maximum instead.
     const double wallY=260+.5*cliffProfile.cliffWidth;

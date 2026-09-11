@@ -47,8 +47,7 @@ inline TerrainMotionAssessment assessTerrainMotion(const TerrainTransfer& profil
     advance(activeStart);
     for(int i=1;i<=intervals&&result.positiveEnergyBound;++i){
         if((i&63)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");
-        const double w=double(i)/intervals;
-        const double u=profile.timing==1?w:(climb?1-std::pow(1-w,1/profile.timing):std::pow(w,1/profile.timing));
+        const double u=double(i)/intervals;
         advance(activeStart+activeLength*u);
     }
     if(result.positiveEnergyBound)advance(profile.length);
@@ -60,7 +59,7 @@ inline bool terrainMotionFits(const TerrainMotionAssessment& assessment,const Te
 inline double minimumTerrainMotionLength(double rise,double maxGrade,TerrainMotion motion,Cancel cancel={}){
     if(!std::isfinite(rise)||!std::isfinite(maxGrade)||maxGrade<=0)throw std::invalid_argument("Invalid terrain motion span");
     // Validate the same physical intent even when no height change is needed.
-    assessTerrainMotion({0,0,1,1},motion,cancel);
+    assessTerrainMotion({0,0,1},motion,cancel);
     if(rise==0)return 0;
     // A preceding level powered interval can reach at most its declared target.
     // This is a conservative active-window inlet bound, never a speed reset.
@@ -72,7 +71,7 @@ inline double minimumTerrainMotionLength(double rise,double maxGrade,TerrainMoti
     const double speedBound=motion.entrySpeed*motion.entrySpeed+2*gravity*std::max(0.,-rise);
     double lo=std::abs(rise)*(35./16)/maxGrade;
     double hi=minimumTerrainWindowLength(std::abs(rise),bracketGrade,forceBudget*gravity/speedBound);
-    auto excess=[&](double length){const auto result=assessTerrainMotion({0,rise,length,1},motion,cancel);
+    auto excess=[&](double length){const auto result=assessTerrainMotion({0,rise,length},motion,cancel);
         return result.positiveEnergyBound?std::max(motion.minimumNormalG-result.minimumNormalG,result.maximumNormalG-motion.maximumNormalG):INFINITY;};
     double lowExcess=excess(lo),highExcess=excess(hi);int previousSide=0;
     if(highExcess>0)throw TerrainTransferInfeasible("Terrain transfer lacks source or declared motor energy");
@@ -93,12 +92,6 @@ inline TerrainTransfer fitTerrainMotionWindow(const std::vector<double>& distanc
     double start,double finish,double maxGrade,const TerrainMotion& motion,Cancel cancel={}){
     auto result=placeTerrainWindow(distance,floor,start,finish,minimumTerrainMotionLength(finish-start,maxGrade,motion,cancel),cancel);
     if(!terrainMotionFits(assessTerrainMotion(result,motion,cancel),motion))throw TerrainTransferInfeasible("Terrain window exceeds its signed load intent");
-    return result;
-}
-inline TerrainTransfer fitTerrainMotionTransfer(const std::vector<double>& distance,const std::vector<double>& floor,
-    double start,double finish,double maxGrade,const TerrainMotion& motion,Cancel cancel={}){
-    auto result=placeTerrainTransfer(distance,floor,start,finish,maxGrade,cancel);
-    if(!terrainMotionFits(assessTerrainMotion(result,motion,cancel),motion))throw TerrainTransferInfeasible("Terrain transfer exceeds its signed load intent");
     return result;
 }
 } // namespace coaster::detail

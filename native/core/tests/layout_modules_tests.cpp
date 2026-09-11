@@ -1,4 +1,5 @@
 #include "coaster/layout_modules.hpp"
+#include "../src/source_geometry.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -21,6 +22,31 @@ void checkJoins(const Track& track){
         nearVector(a.sample.up,b.sample.up,2e-10,"Frame orientation join");
         nearVector(a.upS,b.upS,2e-9,"C1 frame join");
         nearVector(a.upSS,b.upSS,2e-8,"C2 frame join");
+    }
+}
+void checkSourcePlacement(const Track& source,double landmark){
+    const detail::SourceGeometry geometry(source,Element::Inversion,{landmark});
+    const Vec3 origin{123,-456,37};
+    const auto yaw=[](Vec3 p){return Vec3{-p.y,p.x,p.z};};
+    bool found=false;Track placed;placed.closed=false;
+    for(size_t i=0;i<geometry.points.size();++i){
+        const auto& point=geometry.points[i];const auto frame=detail::placeSourceFrame(point.frame,origin,pi/2);
+        const auto actual=source.sample(point.distance);found|=point.distance==landmark;
+        nearVector(frame.position,origin+yaw(actual.position),1e-10,"Placed source uses actual canonical positions");
+        nearVector(frame.tangent,yaw(actual.tangent),1e-12,"Source placement preserves tangents");
+        nearVector(frame.curvature,yaw(actual.curvature),1e-12,"Source placement preserves curvature");
+        nearVector(frame.up,yaw(actual.up),1e-12,"Source placement preserves the physical force frame");
+        placed.knots.push_back({frame.position,frame.tangent,frame.curvature,frame.up,0,frame.element});
+    }
+    check(found,"Nonuniform physical landmark is retained exactly");placed.rebuild();checkJoins(placed);
+    near(placed.length,source.length,2e-5,"Placed source retains canonical arc length");
+    for(double s=1;s<source.length-1;s+=2.3){
+        const auto expected=source.sample(s),actual=placed.sample(s);
+        nearVector(actual.position,origin+yaw(expected.position),3e-5,"Resampled placement retains source interior");
+        nearVector(actual.curvature,yaw(expected.curvature),2e-5,"Resampled placement retains physical curvature between controls");
+        const auto originalForce=measureSeatForces(source,s,45,0,0),placedForce=measureSeatForces(placed,s,45,0,0);
+        near(placedForce.vertical,originalForce.vertical,.005,"Placed source preserves independent rider normal force");
+        near(placedForce.lateral,originalForce.lateral,.005,"Placed source preserves independent rider lateral force");
     }
 }
 }
@@ -56,6 +82,10 @@ int main(){try{
     }
     EnergyLoopModuleRequest request;auto base=buildEnergyLoopModule(request),repeated=buildEnergyLoopModule(request);
     good(base);good(repeated);
+    checkSourcePlacement(base.track,base.apex.distance);
+    const auto reversal=designFvdImmelmann(FvdImmelmannRequest{});
+    check(reversal.section.assessment.passed&&reversal.section.report.valid(),"Immelmann source for placement test is valid");
+    checkSourcePlacement(reversal.section.track,reversal.rollExit.distance);
     check(base.points.size()==repeated.points.size(),"Deterministic sample count");
     for(size_t i=0;i<base.points.size();++i){nearVector(repeated.points[i].position,base.points[i].position,0,"Deterministic geometry");nearVector(repeated.points[i].upHint,base.points[i].upHint,0,"Deterministic orientation");}
     request.entry.position={123,-456,37};const double heading=.71;request.entry.forward={std::cos(heading),std::sin(heading),0};
