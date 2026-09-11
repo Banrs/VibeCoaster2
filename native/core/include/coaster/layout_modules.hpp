@@ -1,8 +1,8 @@
 #pragma once
-#include "coaster/coaster.hpp"
+#include "coaster/fvd.hpp"
 
 namespace coaster {
-// Geometric authoring only. These are open sections, not accepted rides.
+// Point-source authoring only. These are open sections, not accepted rides.
 // Pose uses SI and an orthonormal forward/up frame; right=cross(forward,up).
 struct LayoutModulePose {
     Vec3 position{},forward{1,0,0},up{0,0,1};
@@ -10,21 +10,28 @@ struct LayoutModulePose {
 struct EnergyLoopModuleRequest {
     LayoutModulePose entry;
     double height{60},apexSpeed{20},normalG{3.5},apexNormalG{.5},pushRampSeconds{1.2};
-    double lateralOffset{36},portLength{8},sampleSpacing{1.5};
+    double crossingOffset{18},portLength{8},sampleSpacing{1.5};
+    double rollingAcceleration{},dragAccelerationCoefficient{};
     size_t maxSamples{20000};
 };
 struct EnergyLoopModule {
     LayoutModulePose entry,exit;
     std::vector<AuthoredPoint> points;
     Track track;
-    double height{},pitchForwardDisplacement{},idealEntrySpeed{},idealApexSpeed{};
+    FvdRequest authoring;
+    std::vector<FvdSample> samples;
+    FvdAssessment assessment;
+    FvdSample loopEntry,apex,loopExit;
+    FvdSample crossingEntry,crossingExit;
+    double height{};
     bool geometryBuilt{},canonicalBuilt{},cancelled{};
     ValidationReport report;
 };
-// Two energy-authored pitches meet at a positive-load inverted crest. The
-// reflected descent restores heading and height, with actual netX=2*pitchX+2*portLength.
-// A smooth caller-selected lateral offset separates the loop's crossing arms.
-// No frame roll or endpoint displacement correction is used to fake closure.
+// Rigidly places one continuous loss-aware FVD loop. Normal force and physical
+// twist separate the actual low crossing arms during integration. The real exit
+// position AND heading must be used for continuation; neither is post-warped.
+// Actual samples, apex/guard boundaries and replay assessment remain available
+// for section review. Routing points do not replace the canonical source jets.
 EnergyLoopModule buildEnergyLoopModule(const EnergyLoopModuleRequest&,Cancel cancel={});
 
 

@@ -1,5 +1,15 @@
 # Coaster modelling brief
 
+## Required higher-force restraint concept — 2026-09-10
+
+The 0.8.3 numerical design now selects the higher historical F2291-23b restraint-dependent force profile. The train remains conventionally seated and individually contained. Model an appropriate backrest/headrest with maintained rider support and a padded upper-torso/over-shoulder restraint that minimizes forward motion. The numerical enhanced braking curve reaches -3.5 g for up to two seconds only with load-buildup onset below 15 g/s. Extended uplift reaches -2.8 g at 200 ms, tapering with duration, and requires a special restraint arrangement justified by ride analysis. An ordinary lap bar or a generic OTS silhouette does not prove that provision.
+
+These requirements are pending modelling/design verification. They are explicitly flagged in every native force report. Existing train art, including the preserved lap-bar models, is not evidence that they are met. Keep the user's simple conventional train styling; show plausible padding, contact, restraint hinges and load paths without inventing qualified dimensions or components. Check front/middle/rear POV and the full moving/reach envelopes at the unchanged camera/force datum. Structural, fit/population, closure/interlock and restraint-load qualification remain separate from mesh inspection.
+
+The selected curves, conditions and source editions are in [FORCE_GUIDELINES.md](../core/FORCE_GUIDELINES.md); the profile and requirement text have one runtime owner in [force_envelope.hpp](../core/include/coaster/force_envelope.hpp). Higher force capacity does not authorize consuming existing clearance reserves or shrinking the rider envelope.
+
+## Preserved initial dimension assessment
+
 2026-09-07. Read-only source assessment of native `0.7.0-folded.1`. Dimensions below are the current game's geometry contract, not manufacturer drawings or structural certification. Production source was not changed for this brief.
 
 ## First deliverable: a usable train POV

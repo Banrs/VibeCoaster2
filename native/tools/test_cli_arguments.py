@@ -1,13 +1,15 @@
-"""Real CLI argument regressions; fail-fast invalid budgets avoid generating rides.
+"""Real CLI argument and generated phase-plan protocol regressions.
 
 Run: python test_cli_arguments.py /path/to/coaster_cli
 Discovery runs can set COASTER_CLI; otherwise these executable tests are skipped.
 """
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 CLI = os.environ.get("COASTER_CLI")
@@ -80,6 +82,26 @@ class CliArguments(unittest.TestCase):
                             ("--longitudinal-rate-limit", "maxLongitudinalRateGps")):
             with self.subTest(option=option):
                 self.assertEqual(self.parsed(option, "1e3")["limits"][key], 1000)
+
+    def test_generated_phase_plan_is_valid_json(self):
+        cli = Path(CLI).resolve()
+        with tempfile.TemporaryDirectory(dir=cli.parent) as directory:
+            plan_path = Path(directory) / "plan.json"
+            result = subprocess.run(
+                [str(cli), "generate", "--seed", "42", "--terrain", "flat",
+                 "--preset", "physics-proof", "--candidates", "1", "--plan", str(plan_path)],
+                cwd=directory, capture_output=True, text=True, encoding="utf-8", timeout=180,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            phases = plan["airtimePhaseIntent"]
+            self.assertTrue({"entry", "apex", "valley", "exit"}.issubset({p["phase"] for p in phases}))
+            for phase in phases:
+                self.assertLessEqual(abs(phase["speedResidualMps"]), .500001)
+                self.assertEqual(len(phase["ridersAtPhase"]), 3)
+                for rider in phase["ridersAtPhase"]:
+                    self.assertEqual(len(rider["Gzyx"]), 3)
+                    self.assertTrue(all(math.isfinite(v) for v in [rider["time"], rider["speedMps"], *rider["Gzyx"]]))
 
 
 if __name__ == "__main__":

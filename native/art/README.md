@@ -1,4 +1,8 @@
-# Current high-speed train — v004
+# Current train and restraint requirements
+
+The runtime uses the user's simple conventional car at `/Game/Art/V072/Conventional2/SM_TrainCar`. The 0.8.3 higher-force profile requires supported upright seating, padded upper-torso restraint and special uplift restraint provisions; these are design requirements awaiting model/ride-analysis verification. Read the [current modelling brief](MODELLING_BRIEF.md) before revising the train. The meshes below are preserved art history, not proof that these requirements are met.
+
+## Preserved high-speed train — v004
 
 ## Connected track webbing - pacing.2
 

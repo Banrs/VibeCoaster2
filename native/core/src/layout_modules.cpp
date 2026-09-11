@@ -1,5 +1,4 @@
 #include "coaster/layout_modules.hpp"
-#include "coaster/fvd.hpp"
 #include <stdexcept>
 
 namespace coaster {
@@ -13,36 +12,50 @@ EnergyLoopModule buildEnergyLoopModule(const EnergyLoopModuleRequest& r,Cancel c
     EnergyLoopModule result;result.entry=r.entry;result.track.closed=false;
     auto fail=[&](const char* code,const char* message){result.report.fail(code,message);};
     if(!validPose(r.entry)||std::abs(r.entry.forward.z)>1e-9||norm(r.entry.up-Vec3{0,0,1})>1e-9||
-        !std::isfinite(r.lateralOffset)||std::abs(r.lateralOffset)>100||!std::isfinite(r.apexNormalG)||r.apexNormalG<0||r.apexNormalG>1.5||
         !std::isfinite(r.sampleSpacing)||r.sampleSpacing<.25||r.sampleSpacing>2||
         !std::isfinite(r.portLength)||r.portLength<4*r.sampleSpacing||r.portLength>100){
-        fail("LAYOUT_MODULE_INPUT","Unsupported energy-authored full-loop pose, offset or sampling");return result;}
+        fail("LAYOUT_MODULE_INPUT","Unsupported energy-authored full-loop pose or sampling");return result;}
     if(r.maxSamples<12||r.maxSamples>50000){fail("LAYOUT_MODULE_BUDGET","Unsupported loop sample budget");return result;}
     auto cancelled=[&]{if(cancel&&cancel()){result.cancelled=true;fail("CANCELLED","Energy-authored full loop cancelled");return true;}return false;};
     if(cancelled())return result;
-    auto pitch=designFvdPitch({r.height,r.apexSpeed,r.normalG,r.pushRampSeconds,r.apexNormalG},cancel);
-    result.report=pitch.section.report;result.cancelled=pitch.section.cancelled;
-    if(!result.report.valid()||!pitch.section.assessment.passed)return result;
-    result.height=pitch.height;result.pitchForwardDisplacement=pitch.forwardDisplacement;
-    result.idealEntrySpeed=pitch.authoring.speed;result.idealApexSpeed=r.apexSpeed;
-    const double L=pitch.section.track.length,D=pitch.forwardDisplacement;
-    const int steps=int(std::ceil(L/r.sampleSpacing)),guards=int(std::ceil(r.portLength/r.sampleSpacing));
-    if(2*size_t(steps)+2*guards+1>r.maxSamples){fail("LAYOUT_MODULE_BUDGET","Energy-authored full loop exceeds sample budget");return result;}
+    FvdLoopRequest request;request.height=r.height;request.apexSpeed=r.apexSpeed;request.normalG=r.normalG;
+    request.apexNormalG=r.apexNormalG;request.pushRampSeconds=r.pushRampSeconds;request.crossingOffset=r.crossingOffset;
+    request.portLength=r.portLength;request.maxSamples=r.maxSamples;
+    request.rollingAcceleration=r.rollingAcceleration;request.dragAccelerationCoefficient=r.dragAccelerationCoefficient;
+    auto source=designFvdLoop(request,cancel);result.report=source.section.report;result.cancelled=source.section.cancelled;
+    if(!result.report.valid()||!source.section.assessment.passed)return result;
+    result.height=source.apex.position.z;result.authoring=std::move(source.authoring);
+    result.samples=std::move(source.section.samples);result.assessment=source.section.assessment;
+    result.loopEntry=source.loopEntry;result.apex=source.apex;result.loopExit=source.loopExit;result.track=std::move(source.section.track);
+    result.crossingEntry=source.crossingEntry;result.crossingExit=source.crossingExit;
     const Vec3 right=cross(r.entry.forward,r.entry.up);
-    auto transform=[&](Vec3 p){return r.entry.forward*p.x-right*p.y+r.entry.up*p.z;};
-    auto append=[&](Vec3 p,Vec3 up,Element e){result.points.push_back({r.entry.position+transform(p),0,e,transform(up)});};
-    for(int i=0;i<=guards;++i)append({r.portLength*i/guards,0,0},{0,0,1},Element::Return);
-    for(int i=1;i<=2*steps;++i){if((i&63)==0&&cancelled())return result;
-        double s=L*i/steps,u=double(i)/(2*steps);bool descending=i>steps;
-        auto q=pitch.section.track.sample(descending?2*L-s:s);
-        Vec3 p=descending?Vec3{2*D-q.position.x,q.position.y,q.position.z}:q.position;
-        Vec3 up=descending?Vec3{-q.up.x,q.up.y,q.up.z}:q.up;
-        p.x+=r.portLength;p.y+=r.lateralOffset*u*u*u*u*(35+u*(-84+u*(70-20*u)));
-        append(p,up,Element::Inversion);
+    const auto transform=[&](Vec3 p){return r.entry.forward*p.x-right*p.y+r.entry.up*p.z;};
+    const auto place=[&](FvdSample& q){q.position=r.entry.position+transform(q.position);q.forward=transform(q.forward);q.up=transform(q.up);q.curvature=transform(q.curvature);};
+    result.authoring.position=r.entry.position;result.authoring.forward=r.entry.forward;result.authoring.up=r.entry.up;
+    place(result.loopEntry);place(result.apex);place(result.loopExit);place(result.crossingEntry);place(result.crossingExit);
+    for(auto& q:result.samples){if(cancelled())return result;place(q);}
+    for(size_t i=0;i<result.track.knots.size();++i){
+        auto& k=result.track.knots[i];const auto& q=result.samples[i];
+        k.position=q.position;k.tangent=q.forward;k.up=q.up;k.curvature=q.curvature;
+        k.element=q.time>=result.loopEntry.time&&q.time<=result.loopExit.time?Element::Inversion:Element::Return;
     }
-    for(int i=1;i<=guards;++i)append({r.portLength+2*D+r.portLength*i/guards,r.lateralOffset,0},{0,0,1},Element::Return);
-    result.geometryBuilt=true;if(cancelled())return result;
-    try{result.track=compile(result.points,false);result.canonicalBuilt=true;auto end=result.track.sample(result.track.length);result.exit={end.position,end.tangent,end.up};}
+    try{
+        if(cancelled())return result;result.track.rebuild();if(cancelled())return result;
+        // Sample each real phase boundary exactly; only translation/yaw has
+        // changed the source, and its canonical tangent/curvature/up survive.
+        const std::array<double,5> boundaries{0,result.loopEntry.distance,result.apex.distance,result.loopExit.distance,result.track.length};
+        result.points.push_back({result.samples.front().position,0,Element::Return,result.samples.front().up});
+        for(size_t phase=1;phase<boundaries.size();++phase){
+            const double start=boundaries[phase-1],length=boundaries[phase]-start;
+            const size_t count=size_t(std::ceil(length/r.sampleSpacing));
+            if(count>r.maxSamples-result.points.size()){fail("LAYOUT_MODULE_BUDGET","Energy-authored full loop exceeds routing sample budget");return result;}
+            for(size_t i=1;i<=count;++i){if(cancelled())return result;
+                const auto q=result.track.sample(start+length*i/count);
+                result.points.push_back({q.position,0,phase==2||phase==3?Element::Inversion:Element::Return,q.up});
+            }
+        }
+        const auto& end=result.samples.back();result.exit={end.position,end.forward,end.up};result.geometryBuilt=true;result.canonicalBuilt=true;
+    }
     catch(const std::exception& e){fail("LAYOUT_MODULE_CANONICAL",e.what());}
     return result;
 }

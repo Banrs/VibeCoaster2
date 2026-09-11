@@ -31,20 +31,12 @@ Support compactBent(const TrackSample& q,Vec3 right,double distance,const Terrai
     const double localHeight=attachment.z-terrain.height(attachment.x,attachment.y);
     // A low pier needs a short rail joint, not the same two-metre neck as a
     // tall bent. The complete resulting steel still faces the rider sweep.
-    double standoff=paired?2.:std::clamp(localHeight-3.,.6,2.);
-    Vec3 cap=attachment-q.up*standoff;
-    if(!paired&&standoff>.6&&cap.z-terrain.height(cap.x,cap.y)<3){
-        // Tilt moves the cap onto different terrain. Shorten the neck at its
-        // actual ground location instead of relaxing the pier-height minimum.
-        double lower=.6,upper=standoff;
-        for(int i=0;i<32;++i){double mid=(lower+upper)*.5;Vec3 trial=attachment-q.up*mid;
-            if(trial.z-terrain.height(trial.x,trial.y)>=3)lower=mid;else upper=mid;}
-        standoff=lower;cap=attachment-q.up*standoff;
-    }
+    const double standoff=paired?2.:std::clamp(localHeight-3.,.6,2.);
+    const Vec3 cap=attachment-q.up*standoff;
     const Vec3 centre{cap.x,cap.y,terrain.height(cap.x,cap.y)};
     Support s{centre,cap,attachment,true,distance,{}};
     const double height=cap.z-centre.z;
-    if(height<3||height>(paired?90.:22.)||q.up.z<(paired?.65:.92)||std::abs(q.tangent.z)>(paired?.65:.35))return s;
+    if(height<=0||height>(paired?90.:22.)||q.up.z<(paired?.65:.92)||std::abs(q.tangent.z)>(paired?.65:.35))return s;
     const double radiusBase=paired?.28+height*.004:.24+height*.009;
     const double radiusTop=paired?.20+height*.001:.18+height*.002;
     const double footingRadius=.85+radiusBase*1.8;
@@ -55,6 +47,8 @@ Support compactBent(const TrackSample& q,Vec3 right,double distance,const Terrai
     for(int side=0;side<(paired?2:1);++side){
         const Vec3 p=centre+right*(side?halfWidth:-halfWidth);
         const auto foundation=footing(p,terrain,footingRadius,radiusBase,true);
+        // The actual foundation top sets usable post height, including slope.
+        // A low, clear track does not require a three-metre cap above terrain.
         if(cap.z-foundation.top.z<1)return Support{centre,cap,attachment,true,distance,{}};
         add(foundation.base,foundation.top,foundation.radius,foundation.radius,SupportMemberKind::Footing);
         add(foundation.top,cap,radiusBase,radiusTop);

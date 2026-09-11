@@ -245,8 +245,8 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Event(TEXT("accepted-commit"), TEXT(",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"seed\":") + Q(FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(D.request.seed))) + TEXT(",\"terrain\":") + Q(FString(UTF8_TO_TCHAR(D.request.terrain.name().c_str()))) + TEXT(",\"duration_s\":") + N(S.Duration) + TEXT(",\"track_length_m\":") + N(D.track.length) + TEXT(",\"convergence_performed\":true,\"convergence_passed\":true"));
             double ApexTime = 0, ApexHeight = -1e30, HighestTime = 0, HighestGround = -1e30;
             double CliffTime = 0, CliffGrade = 0, LowPassTime = 0, LowPassHeight = 1e30;
-            TArray<double> InversionPassages;
-            bool WasInverted = false;
+            TArray<double> InversionPassages, UprightReturns;
+            bool WasInverted = false, AwaitUprightReturn = false;
             for (const auto& F : D.simulation.frames)
             {
                 const auto K = D.track.sample(F.distance + coaster::seatDistanceOffset(D.request.train, S.Seat));
@@ -257,6 +257,8 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                 if (K.element == coaster::Element::Inversion && K.up.z < -.5 && H > ApexHeight) { ApexHeight = H; ApexTime = F.time; }
                 const bool Inverted = K.up.z < -.5;
                 if (Inverted && !WasInverted) InversionPassages.Add(F.time);
+                if (Inverted) AwaitUprightReturn = true;
+                if (AwaitUprightReturn && K.up.z > .5) { UprightReturns.Add(F.time); AwaitUprightReturn = false; }
                 WasInverted = Inverted;
                 const double Ahead = D.request.terrain.height(K.position.x + K.tangent.x * 5, K.position.y + K.tangent.y * 5);
                 const double Behind = D.request.terrain.height(K.position.x - K.tangent.x * 5, K.position.y - K.tangent.y * 5);
@@ -269,6 +271,8 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             // Inspect each actual inverted passage, plus the descending terrain
             // edge. These are sampled frames during full playback, not video.
             for (double Time : InversionPassages) { S.ShotTimes.Add(FMath::Max(0., Time - 1)); S.ShotTimes.Add(Time + .5); }
+            // Entry/apex views alone miss the rolling descent and its pullout.
+            for (double Time : UprightReturns) { S.ShotTimes.Add(Time); S.ShotTimes.Add(FMath::Min(S.Duration, Time + 1)); }
             if (D.request.terrain.kind == coaster::TerrainKind::Canyon)
             {
                 S.ShotTimes.Add(FMath::Max(0., CliffTime - 2)); S.ShotTimes.Add(CliffTime); S.ShotTimes.Add(FMath::Min(S.Duration, CliffTime + 2));

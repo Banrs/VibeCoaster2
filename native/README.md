@@ -1,6 +1,6 @@
 # VibeCoaster native game
 
-Active source and the current Windows engineering preview use **0.8.2-terrain.1 / COASTER5**, built from `6f23a9e`. Terrain routing and code simplification are verified within the scope below; whole-ride flow and hardware feasibility remain under review. See [work in progress](WORK_IN_PROGRESS.md).
+Source development is **0.8.3-flow.1 / COASTER5**. The current Windows engineering preview remains **0.8.2-terrain.1**, built from `6f23a9e`; the unfinished source iteration has not replaced its launcher. The verification below belongs to that published package. See [work in progress](WORK_IN_PROGRESS.md).
 
 Fresh profiles use desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off. Saved player settings remain respected, and distribution launchers forward command-line options.
 
@@ -17,15 +17,16 @@ Space to ride. Up/Down selects a setting; Left/Right changes it. Tab shows setup
 F9 load, and Alt+F4 exit. Other seeds vary the dimensions and placement within the
 current folded route family.
 
-**ALL RECORDS is unavailable** until authentic eligible I305/Pantherian reference
-recordings are supplied and curated. PHYSICS-PROOF tests the remaining selected
+**ALL RECORDS requires a qualified I305/Pantherian reference.** Authentic supplied
+and additional retrieved recordings are available; their calibration, mounting and
+comparable configuration are not yet sufficient for the strict benchmark. PHYSICS-PROOF tests the remaining selected
 targets; it does not claim an intensity record or silently substitute a benchmark.
 
 ## Existing implementation
 
 This is the single active C++/UE5 game. The obsolete TypeScript/browser
 implementation was archived and removed at the user's request. Source geometry/save
-identity is **0.8.2-terrain.1 / COASTER5**; older releases' saves require the preserved older app.
+identity is **0.8.3-flow.1 / COASTER5**; development artifacts and older releases' saves require their matching application.
 
 - Canonical G3 septic centreline and C2 orientation shared by dynamics, rendering,
   rider forces, clearance and saved geometry.
@@ -54,7 +55,7 @@ traversal and save/load; extracted startup and all 48 runtime hashes were verifi
 See [DELIVERY.md](DELIVERY.md) for scope. Frozen evidence, failed runs and older
 binaries remain preserved. This package has no new performance acceptance claim.
 
-The foundation is not complete: authentic reference data, actual Mac/Metal tests,
+The foundation is not complete: strict reference qualification, actual Mac/Metal tests,
 coherent terrain-directed layout/flow, drive/support engineering and continuous human
 POV/keyboard review remain. No ASTM compliance, structural certification or
 telemetry calibration is claimed.

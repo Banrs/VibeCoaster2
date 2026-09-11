@@ -1,6 +1,5 @@
 #include "coaster/coaster.hpp"
 #include "../src/bank_target.hpp"
-#include "../src/turn_bank_profile.hpp"
 #include "../src/turn_shape.hpp"
 #include <iostream>
 #include <stdexcept>
@@ -56,6 +55,50 @@ int main(){try{
         near(acceleration,peak*(10*std::sqrt(3.)/3)/(seconds*seconds),1e-5,"Turn roll acceleration follows the authored quintic bank trajectory");
         check(acceleration<oldAcceleration*.6,"Bank-first geometry removes nonlinear roll acceleration concentration");
     }
+    // A short terminal turn used to truncate its requested 115 m roll ramp to
+    // 57 m. Its attainable peak must fall instead; the heading still closes.
+    for(double heading:{.2,pi/4,1.12470735774}){
+        const double speed=46.8537681621,radius=59.198400916,ramp=speed*160/65;
+        const double peak=std::atan(speed*speed/(gravity*radius));
+        auto turn=detail::makeTurn(heading,radius,ramp,peak);
+        near(turn.ramp,ramp,0,"Short turns preserve the requested roll distance");
+        check(turn.peakBank<peak&&turn.radius>radius,"Short turns reduce the attainable load instead of compressing the roll");
+        near(turn.radius*std::tan(turn.peakBank),speed*speed/gravity,1e-10,"Short-turn sizing retains the design speed");
+        near(turn.length,2*ramp,1e-9,"Short turn has two complete ramps without a false peak plateau");
+        double angle=0;Vec3 position{};const int count=200000;const double ds=turn.length/count;
+        for(int i=0;i<count;++i){double s=(i+.5)*ds,beta=turn.peakBank*smooth(std::min(s,turn.length-s)/ramp);
+            double curvature=gravity*std::tan(beta)/(speed*speed);
+            position=position+Vec3{std::cos(angle+curvature*ds/2),std::sin(angle+curvature*ds/2),0}*ds;angle+=curvature*ds;}
+        near(angle,heading,2e-9,"Short-turn bank intent integrates to the exact requested heading");
+        near(norm(position-turn.points.back()),0,.006,"Short-turn position matches independent fine integration");
+        std::vector<AuthoredPoint> source;
+        for(size_t i=0;i<turn.points.size();++i)source.push_back({turn.points[i]+Vec3{0,0,30},turn.bankAt(turn.length*i/(turn.points.size()-1)),Element::Turn});
+        auto track=compile(source,false);double peakLateral=0;
+        for(double s=5;s<track.length-5;s+=.2){auto force=measureSeatForces(track,s,speed,0,1.2);peakLateral=std::max(peakLateral,std::abs(force.lateral));}
+        check(peakLateral<.5,"Canonical short turn keeps actual rider-offset lateral loads bounded");
+    }
+    // Ramp duration follows a declared physical twist/onset intention, rather
+    // than a distance chosen at one nominal speed. These are authoring choices,
+    // not ASTM limits; whole-terrain finite-train force assessment still gates.
+    for(double speed:{30.,70.})for(double bank:{.45,1.32})for(double heading:{.25,1.9}){
+        constexpr double twist=80*pi/180,onset=150*pi/180;
+        const double seconds=std::max(1.875*bank/twist,std::sqrt((10*std::sqrt(3.)/3)*bank/onset));
+        const double radius=speed*speed/(gravity*std::tan(bank));
+        const auto turn=detail::makeTurn(heading,radius,speed*seconds,bank);
+        std::vector<AuthoredPoint> points;
+        for(size_t i=0;i<turn.points.size();++i)points.push_back({turn.points[i],turn.bankAt(turn.length*i/(turn.points.size()-1)),Element::Turn});
+        const auto track=compile(points,false);double measuredTwist=0,measuredOnset=0;
+        for(double s=3;s<track.length-3;s+=.2){
+            const auto k=sampleKinematics(track,s);const auto& p=k.sample;
+            const Vec3 rightS=cross(p.curvature,p.up)+cross(p.tangent,k.upS);
+            measuredTwist=std::max(measuredTwist,std::abs(dot(k.upS,p.right)*speed));
+            measuredOnset=std::max(measuredOnset,std::abs(dot(k.upSS,p.right)+dot(k.upS,rightS))*speed*speed);
+        }
+        check(measuredTwist<=twist+.002&&measuredOnset<=onset+.006,"Canonical physical twist and onset respect the declared planar turn intentions");
+        check(std::max(measuredTwist/twist,measuredOnset/onset)>.98*turn.peakBank/bank,"Attainable turn loads use the declared roll phase without an arbitrary long shoulder");
+        near(turn.ramp/speed,seconds,1e-12,"A short heading reduces its attainable load while preserving the chosen physical roll phase");
+    }
+
     // Canyon0's terminal crest has negative normal load before lateral
     // curvature grows. Its almost vertical force must not request an85deg roll.
     for(double lateral:{2.24111807115e-6,-1.95299849792e-5}){
@@ -80,45 +123,6 @@ int main(){try{
         near(lateral*std::cos(bank)-normal*std::sin(bank),0,1e-12,"Overbanked crest cancels its lateral force");
         near(normal*std::cos(bank)+lateral*std::sin(bank),3.1*gravity,1e-12,"Overbanked crest retains its positive rider load");
         near(detail::forceAxisBank(-normal,-lateral,authored),bank,1e-12,"Overbank axis is invariant when resultant force reverses");
-    }
-    {
-        Track source;source.closed=false;
-        for(int i=0;i<=50;++i){double angle=i*6./150;
-            source.knots.push_back({{150*std::sin(angle),150*(1-std::cos(angle)),80},{std::cos(angle),std::sin(angle),0},{-std::sin(angle)/150,std::cos(angle)/150,0},{0,0,1},0,Element::Turn});}
-        source.rebuild();double previousPeak=0;
-        for(double velocity:{20.,40.}){
-            auto fitted=source;std::vector<double> speeds(source.spans.size(),velocity);
-            const size_t first=3,last=46;auto beforeA=sampleSpanKinematics(source,first,0),beforeB=sampleSpanKinematics(source,last,0);
-            check(detail::fitTurnBankProfile(fitted,first,last,speeds),"Continuous turn bank profile fits the actual force demand");
-            double baselineCost=0,fittedCost=0,peak=0;
-            for(size_t i=first;i<last;++i){
-                double s=source.spans[i].start;auto a=measureSeatForces(source,s,velocity,0,0),b=measureSeatForces(fitted,s,velocity,0,0);
-                baselineCost+=a.lateral*a.lateral*source.spans[i].length;fittedCost+=b.lateral*b.lateral*source.spans[i].length;
-                peak=std::max(peak,std::abs(fitted.knots[i].bank));check(std::abs(fitted.knots[i].bank)<=1.5+1e-12,"Continuous bank fit retains the existing bank bound");
-            }
-            check(fittedCost<baselineCost,"Continuous bank fit reduces actual lateral force residual");
-            check(peak>previousPeak,"Higher speed changes the fitted bank rather than using a fixed angle");previousPeak=peak;
-            for(auto pair:{std::pair{first,beforeA},std::pair{last,beforeB}}){auto after=sampleSpanKinematics(fitted,pair.first,0);
-                near(norm(after.sample.position-pair.second.sample.position),0,0,"Bank fitting leaves boundary position exact");
-                near(norm(after.sample.up-pair.second.sample.up),0,0,"Bank fitting retains boundary orientation exact");
-                near(norm(after.upS-pair.second.upS),0,0,"Bank fitting retains exact first frame jet");
-                near(norm(after.upSS-pair.second.upSS),0,0,"Bank fitting retains exact second frame jet");
-            }
-            for(size_t i=0;i<source.knots.size();++i)if(i<=first+3||i>=last-3)
-                near(fitted.knots[i].bank,source.knots[i].bank,0,"Turn bank fitting preserves all exterior and guard knots");
-        }
-    }
-    {
-        Track ring;ring.closed=true;
-        for(int i=0;i<64;++i){double angle=2*pi*i/64;
-            ring.knots.push_back({{150*std::sin(angle),150*(1-std::cos(angle)),80},{std::cos(angle),std::sin(angle),0},{-std::sin(angle)/150,std::cos(angle)/150,0},{0,0,1},0,i<3?Element::Station:Element::Turn});}
-        ring.knots.push_back(ring.knots.front());ring.rebuild();auto before=sampleSpanKinematics(ring,0,0);
-        std::vector<double> speeds(ring.spans.size(),20);
-        check(detail::fitTurnBankProfile(ring,3,ring.spans.size(),speeds),"Terminal turn ending at the closed seam receives its bank fit");
-        auto after=sampleSpanKinematics(ring,0,0);
-        near(norm(after.sample.up-before.sample.up),0,0,"Terminal fit preserves exact seam orientation");
-        near(norm(after.upS-before.upS),0,0,"Terminal fit preserves exact seam first frame jet");
-        near(norm(after.upSS-before.upSS),0,0,"Terminal fit preserves exact seam second frame jet");
     }
     // Independent closed-form rigid offset on a straight track. Quadratic bank
     // tests angular acceleration as well as the centripetal offset term.

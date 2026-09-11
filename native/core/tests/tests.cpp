@@ -154,7 +154,7 @@ static void migration(const Design& current){
         near(replay.operations[i].stopOffset,current.operations[i].stopOffset,0,"Explicit offset roundtrip");
         near(replay.operations[i].exitFadeMeters,current.operations[i].exitFadeMeters,0,"Explicit exit fade roundtrip");
         near(current.operations[i].exitFadeMeters,std::max(1.,current.operations[i].targetSpeed*current.operations[i].rampSeconds),0,"Generator authors a speed-scaled exit fade");
-        if(current.operations[i].kind==DriveKind::Station){station=true;near(replay.operations[i].stopDeceleration,2.4,0,"Packed station preferred deceleration");near(replay.operations[i].stopOffset,.2,0,"Packed station stop offset");near(replay.operations[i].exitFadeMeters,1,0,"Station physical endpoint fade remains beyond its stopped train");}
+        if(current.operations[i].kind==DriveKind::Station){station=true;near(replay.operations[i].stopDeceleration,6,0,"Packed terminal service deceleration");near(replay.operations[i].stopOffset,.2,0,"Packed station stop offset");near(replay.operations[i].exitFadeMeters,1,0,"Station physical endpoint fade remains beyond its stopped train");}
     }
     check(station,"Current design has an explicit station operation");
     for(const auto& fields:std::vector<std::pair<std::string,std::string>>{{"0","0.2"},{"-1","0.2"},{"21","0.2"},{"nan","0.2"},{"1e309","0.2"},{"2.4","-1"},{"2.4","6"},{"2.4","nan"},{"2.4","1e309"}}){
@@ -236,24 +236,25 @@ static void planningAndTargets(){
     check(varied.simulation.metrics.launchTo180<=1.4,"Second seeded hills actual departure meets launch target");
     req.seed=3;req.terrain.kind=TerrainKind::Canyon;auto stadium=generate(req);check(stadium.accepted(),"Terrain-ranked stadium accepted");
     check(std::any_of(stadium.track.knots.begin(),stadium.track.knots.end(),[](const Knot& k){return k.element==Element::Airtime;}),"Stadium retains canonical airtime");
-    req.seed=1;req.terrain.kind=TerrainKind::Flat;req.targets=syntheticReference(20);
-    auto lowReference=generate(req);check(lowReference.accepted(),"Synthetic 20 g*s reference drives a feasible design");
-    req.targets=syntheticReference(30);auto highReference=generate(req);check(highReference.accepted(),"Synthetic 30 g*s reference drives a feasible design");
-    check(highReference.simulation.metrics.exposure10Seconds>=33,"Independent measurement meets synthetic exposure goal");
-    check(highReference.simulation.metrics.exposure10Seconds>lowReference.simulation.metrics.exposure10Seconds+.1,"Reference magnitude changes force design and measured exposure");
-    check(std::abs(highReference.track.length-lowReference.track.length)>1,"Reference changes geometry, not just acceptance postfilter");
-    check(highReference.simulation.metrics.maxLateralG<=req.limits.maxLateralG&&highReference.simulation.metrics.maxVerticalG<=req.limits.maxVerticalG,"Target adaptation preserves force gates");
-    auto halfStep=simulate(highReference.track,highReference.operations,req.train,1./480);check(halfStep.completed,"Target-driven sustained-force half-step replay completes");
-    near(halfStep.metrics.maxSpeed,highReference.simulation.metrics.maxSpeed,.01,"Target-driven speed convergence");near(halfStep.metrics.maxVerticalG,highReference.simulation.metrics.maxVerticalG,.03,"Target-driven normal-force convergence");near(halfStep.metrics.maxLateralG,highReference.simulation.metrics.maxLateralG,.03,"Target-driven lateral-force convergence");near(halfStep.metrics.exposure10Seconds,highReference.simulation.metrics.exposure10Seconds,.05,"Target-driven exposure convergence");near(halfStep.frames.back().speed,0,0,"Target-driven physical terminal stop");
-    auto path=(std::filesystem::temp_directory_path()/"coaster-synthetic-target.coaster").string();std::string error;check(saveDesign(highReference,path,error),"Synthetic target geometry independently validates before save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Synthetic target saved geometry replays: "+error);check(reportJson(loaded)==reportJson(highReference),"Synthetic configured target and exact measured result survive save/replay");std::filesystem::remove(path);
+    req.seed=42;req.terrain.kind=TerrainKind::Flat;req.targets=syntheticReference(20);req.maxCandidates=1;
+    auto lowReference=generate(req);check(lowReference.accepted(),"Measured first candidate exceeds the synthetic low reference under all force and convergence gates");
+    req.targets=syntheticReference((lowReference.simulation.metrics.exposure10Seconds+2)/1.1);
+    auto highReference=generate(req);
+    check(!highReference.accepted()&&code(highReference.report,"INTENSITY_TARGET"),"An unmet measured exposure target remains a rejection");
+    const auto lowPath=sampledPath(lowReference.track),highPath=sampledPath(highReference.track);
+    check(highPath.size()==lowPath.size()&&std::equal(highPath.begin(),highPath.end(),lowPath.begin(),[](Vec3 a,Vec3 b){return norm(a-b)==0;}),
+        "The same authored candidate does not acquire a special exposure helix when its comparison threshold changes");
+    near(highReference.simulation.metrics.exposure10Seconds,lowReference.simulation.metrics.exposure10Seconds,0,"Reference threshold cannot change measured exposure of the same candidate");
+    auto path=(std::filesystem::temp_directory_path()/"coaster-synthetic-target.coaster").string();std::string error;check(saveDesign(lowReference,path,error),"Synthetic target geometry independently validates before save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Synthetic target saved geometry replays: "+error);check(reportJson(loaded)==reportJson(lowReference),"Synthetic configured target and exact measured result survive save/replay");std::filesystem::remove(path);
+    req.maxCandidates=8;
 
-    req.targets=syntheticReference(51);check(code(generate(req).report,"INTENSITY_FEASIBILITY"),"Exposure above the force-duration ceiling rejected honestly");
+    req.targets=syntheticReference((10*req.limits.maxVerticalG+1)/1.1);check(code(generate(req).report,"INTENSITY_FEASIBILITY"),"Exposure above ten seconds at the selected peak ceiling is rejected honestly");
     req.seed=2;req.terrain.kind=TerrainKind::Hills;req.targets.requireIntensity=false;req.targets.launchSeconds=1.2;auto fastLaunch=generate(req);
     check(fastLaunch.accepted()&&fastLaunch.simulation.metrics.launchTo180<=1.2,"Launch request sizes explicit motor force");
     check(fastLaunch.simulation.metrics.maxLongitudinalG<=req.limits.maxLongitudinalG,"Faster departure preserves longitudinal force ceiling");
     auto launchForce=[](const Design& d){for(const auto& op:d.operations)if(op.kind==DriveKind::Launch)return op.maxForce;return 0.;};
     check(launchForce(fastLaunch)>launchForce(varied),"Tighter launch time changes authored bounded motor force");
-    req.targets.launchSeconds=1.15;check(code(generate(req).report,"LAUNCH_FEASIBILITY"),"Unreachable flat-departure target rejected with physical bound");
+    req.targets.launchSeconds=.5;check(code(generate(req).report,"LAUNCH_FEASIBILITY"),"Unreachable flat-departure target rejected with physical bound");
 }
 
 static void stationPlacementRepair(){

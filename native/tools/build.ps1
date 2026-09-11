@@ -56,6 +56,7 @@ $CoreSources = @(
   (Join-Path $SrcDir "track.cpp"),
   (Join-Path $SrcDir "frame.cpp"),
   (Join-Path $SrcDir "drive_profile.cpp"),
+  (Join-Path $SrcDir "force_envelope.cpp"),
   (Join-Path $SrcDir "convergence.cpp"),
   (Join-Path $SrcDir "simulation.cpp"),
   (Join-Path $SrcDir "generation.cpp"),
@@ -137,7 +138,7 @@ if ($Test) {
 # Independent experiment suites preserve the scientific/property tests from each input.
 $AdapterInclude = Join-Path $NativeDir "unreal/Source/VibeCoaster/Public"
 $Historical = Join-Path $TestsDir "fixtures/historical"
-foreach ($Name in @("terrain_transfer", "passive_transfer", "terrain_module_placement", "persistence_cancel", "baseline_jets", "flow_bridge", "connector_profile", "reference", "support", "support_family", "layout_modules", "organic_generation", "terrain_profile", "fvd", "dimensions", "clearance", "track_web", "station", "structures", "geometry", "frame_force", "terrain", "convergence", "drive_profile")) {
+foreach ($Name in @("terrain_transfer", "terrain_motion", "passive_transfer", "terrain_module_placement", "persistence_cancel", "baseline_jets", "flow_bridge", "reference", "support", "support_family", "layout_modules", "organic_generation", "terrain_profile", "fvd", "dimensions", "clearance", "track_web", "station", "structures", "geometry", "frame_force", "terrain", "convergence", "drive_profile", "force_envelope")) {
   $Source = Join-Path $TestsDir ($Name + "_tests.cpp")
   $Binary = Join-Path $BuildDir ($Name + "_tests.exe")
   $SuiteSources = $CoreSources

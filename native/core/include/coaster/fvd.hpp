@@ -6,15 +6,20 @@ namespace coaster {
 // Forces are non-gravitational specific forces at the TRACK CENTERLINE: an
 // upright level straight is normalG=1, lateralG=0; zero/zero is ballistic.
 // Roll is the physical twist about forward in rad/s, not an Euler bank rate.
-// Each adjacent control pair uses a quintic smoothstep (zero first/second
-// derivatives at controls). Time must start at zero and increase strictly.
+// Adjacent controls use monotone quintics with zero second derivatives.
+// Normal-force slopes are explicit; zero slopes retain quintic smoothstep.
+// Lateral/roll slopes remain zero. Time starts at zero and increases strictly.
 struct FvdControl {
-    double time{},normalG{1},lateralG{},rollRate{};
+    double time{},normalG{1},lateralG{},rollRate{},normalRateGps{};
 };
+// Physical twist integrated about the moving tangent. A quintic angle change
+// gives zero twist rate and onset at both ends; angle is not an Euler bank.
+struct FvdTwistPhase {double begin{},end{},angle{};};
 struct FvdRequest {
     Vec3 position{0,0,50},forward{1,0,0},up{0,0,1};
     double speed{20},step{.005};
     std::vector<FvdControl> controls{{0,1,0,0},{1,1,0,0}};
+    std::vector<FvdTwistPhase> twists; // Optional nonoverlapping phases; controls must then have zero rollRate.
     size_t maxSamples{20000};
     double forceToleranceG{.02},rollToleranceRadPerSecond{.02};
     double replayDistanceTolerance{.02},replaySpeedTolerance{.02};
@@ -23,7 +28,7 @@ struct FvdRequest {
 struct FvdSample {
     double time{},distance{},speed{};
     Vec3 position,forward,up,curvature;
-    double dissipatedWorkPerMass{};
+    double dissipatedWorkPerMass{}; // Work since this open section's inlet; add prior-section work when composing an energy audit.
 };
 struct FvdAssessment {
     bool performed{},passed{};
@@ -54,18 +59,35 @@ struct FvdResult {
 // Cancellation is polled during integration and replay;
 // the bounded existing Track::rebuild itself has no cancellation callback.
 FvdResult designFvdSection(const FvdRequest&,Cancel cancel={});
-// Production authoring adapter: a symmetric, planar force-controlled airtime
-// hill with horizontal 1g ports. Shooting closes pitch at the apex; mirroring
-// the force history returns to the entry height/speed without spatial scaling.
-// It remains a point-mass source shape, subject to all full-ride acceptance.
+// One to three force-controlled hills integrated as a single 3D source.
+// Only the two outer ports are horizontal 1g. Every internal valley retains
+// the next hill's pushG, nonzero curvature and continuous energy. Continuously
+// changing load passes through an unloading knee and the crest; only explicit
+// peak controls hold load. Apex pitch and descent height/pitch are shot in
+// time, never spatially warped. The complete force history requires assessment.
+// Explicit point losses carry through every apex and valley; exit speeds are
+// integrated outputs. Zero loss coefficients retain the gravity-only case.
+// Point-mass source intent still requires all full-ride acceptance checks.
+struct FvdAirtimeHill {
+    double pushG{2.2},crestG{-.15};
+    double pushHoldSeconds{.4},crestRampSeconds{1.2},crestPulseSeconds{1.6}; // Crest phase spans zero crossings for negative crestG.
+    double bankRadians{}; // Nominal crest-bank intent; the actual apex bank is an integrated output.
+};
 struct FvdAirtimeRequest {
-    double speed{65},pushG{2.2},crestG{-.15};
-    double guardSeconds{.1},pushRampSeconds{.8},pushHoldSeconds{.4},crestRampSeconds{1.2};
+    // Entry and final exit use explicit load ramps. Valley closure may solve
+    // a positive-load hold, but cannot shorten these ramps to force a fit.
+    double speed{65},guardSeconds{.1},portRampSeconds{.8},unloadG{1};
+    std::vector<FvdAirtimeHill> hills{{}};
+    double rollingAcceleration{},dragAccelerationCoefficient{};
+};
+struct FvdAirtimeSpan {
+    FvdSample entry,apex,exit; // Distances and frames in the complete source.
 };
 struct FvdAirtimeResult {
     FvdRequest authoring;
     FvdResult section;
-    double span{},height{};
+    std::vector<FvdAirtimeSpan> hills;
+    double span{},height{}; // span is horizontal path arc length; use the actual last sample for the exit pose.
 };
 FvdAirtimeResult designFvdAirtime(const FvdAirtimeRequest&,Cancel cancel={});
 // Planar upward half-loop. A bounded duration shoot closes height and pi pitch
@@ -83,48 +105,56 @@ struct FvdPitchResult {
 };
 FvdPitchResult designFvdPitch(const FvdPitchRequest&,Cancel cancel={});
 
-// Joint body-force/twist authoring of a reversing ascent and rolling descent.
-// Entry is at the origin, level along +X. The exit height/pitch are prescribed;
-// horizontal displacement and heading are integrated, never post-warped.
-// Forces are gravity-only point-source intent, not finite-train acceptance.
-struct FvdReversalRequest {
-    double entrySpeed{48.9107707974},exitHeight{50},exitPitch{-40*pi/180};
-    double normalG{3.5},pushRampSeconds{1.2},rollStartFraction{.25},lateralPulseG{.15};
-    int hand{1};
-    double step{.0025};
+// Continuous full loop with explicit losses. Entry speed and phase durations
+// close the actual apex height/speed and a level upright exit. Two physical
+// twist phases separate the actual crossing arms; exit X/Y and heading
+// remain integrated outputs. Zero body-lateral intent does not mean zero
+// world-lateral acceleration: the normal force acts through the banked frame.
+// The straight guards have actual path length portLength, including losses.
+struct FvdLoopRequest {
+    double height{60},apexSpeed{20},normalG{3.5},apexNormalG{.5},pushRampSeconds{1.2};
+    double crossingOffset{18},portLength{8},step{.0025}; // Signed Y separation where the low arms share actual X/Z.
+    double rollingAcceleration{},dragAccelerationCoefficient{};
+    size_t maxSamples{20000};
 };
-struct FvdReversalResult {
-    FvdResult section;
-    TrackKinematics entry,exit;
-    std::vector<FvdControl> intent; // Continuous controls evaluated at source samples.
-    double geometricApexHeight{},highestInvertedHeight{},minSpeed{};
-    double holdSeconds{},unloadSeconds{},totalTwist{},duration{};
-};
-FvdReversalResult designFvdReversal(const FvdReversalRequest&,Cancel cancel={});
-
-// Continue an upright, straight-compatible descending source port into a level
-// lower valley. The actual entry heading is preserved; no horizontal reset is
-// inserted. The source entry sample must have negligible curvature.
-struct FvdPulloutRequest {
-    FvdSample entry;
-    double targetHeight{},normalG{3.2},rampSeconds{1.2},step{.0025};
-};
-struct FvdPulloutResult {
+struct FvdLoopResult {
     FvdRequest authoring;
     FvdResult section;
-    TrackKinematics entry,exit;
-    double slopeHoldSeconds{},unloadSeconds{},duration{};
+    FvdSample loopEntry,apex,loopExit; // Actual force-phase boundaries, with the guards outside them.
+    FvdSample crossingEntry,crossingExit; // Integrated observations at solved crossing times, not force-control resets.
 };
-FvdPulloutResult designFvdPullout(const FvdPulloutRequest&,Cancel cancel={});
+FvdLoopResult designFvdLoop(const FvdLoopRequest&,Cancel cancel={});
+
+// One loss-aware Immelmann source owns the half-loop, overlapping half-roll
+// and descending pullout. Time, force and physical twist are solved together
+// for the true inverted apex and final upright valley. The rolling-descent
+// checkpoint is curved; no straight descending port or extra hold is inserted.
+// Actual XY, exit heading, speeds and work remain integrated outputs. These
+// point forces still require complete finite-train/rider acceptance.
+
+struct FvdImmelmannRequest {
+    double entrySpeed{53},height{95},exitHeight{10};
+    double normalG{4.8},crestG{.6},rollExitG{.3},rampSeconds{1.2},rollOverlapFraction{.35};
+    int hand{1};double step{.0025},rollingAcceleration{},dragAccelerationCoefficient{};
+};
+struct FvdImmelmannResult {
+    FvdRequest authoring;FvdResult section;
+    FvdSample apex,rollExit,exit;
+};
+FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest&,Cancel cancel={});
 
 // Height-constrained single hill with level, zero-curvature ports. The ascent
 // and descent are solved separately with the requested explicit point losses;
 // positions are never scaled and exit speed is an output, not reset to entry.
 // The bounded family covers 220..280 m and 75..90 m/s when physically feasible.
+// A continuous unloading/recovery history brackets an explicit crest phase.
+// Its positive knee has no held-load interval. Peak inputs are authoring intent;
+// their durations and combined rider histories still require assessment.
 // Full finite-train/rider/clearance/operations validation remains mandatory.
 struct FvdTallHillRequest {
     double height{240},speed{80},normalG{3.35},crestG{-.025},rampSeconds{1.2};
     double rollingAcceleration{},dragAccelerationCoefficient{};
+    double unloadG{1},crestPulseSeconds{1.6};
 };
 struct FvdTallHillResult {
     FvdRequest authoring;

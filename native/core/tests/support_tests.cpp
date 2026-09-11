@@ -54,7 +54,8 @@ int main(int argc,char** argv){try{
             check(support.members.size()==size_t(feet*2+1),"Compact cap belongs to a connected post or paired bent");
             check(norm(offset+frame.up*standoff)<1e-8,"Compact cap has no lateral or tangential outreach");
             check(feet==1?(standoff>=.6-1e-8&&standoff<=2+1e-8):std::abs(standoff-2)<1e-8,"Compact cap uses its height-adaptive canonical under-spine neck");
-            check(support.top.z-banked.request.terrain.height(support.top.x,support.top.y)>=3-1e-8,"Compact cap retains its actual terrain clearance");
+            for(const auto& member:support.members)if(member.kind==SupportMemberKind::Footing)
+                check(support.top.z-member.top.z>=1-1e-8,"Compact cap leaves usable steel above every actual foundation");
         }else{
             check(feet==4,"Other banked supports are four-foot towers");
             check(std::abs(standoff-2)<1e-8||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Tower cap uses a bounded canonical under-spine stand-off across banking");

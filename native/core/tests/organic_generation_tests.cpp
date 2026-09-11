@@ -17,7 +17,9 @@ ObservedInversions classifyGeometry(const Design& design){
         Vec3 forward=unit(Vec3{start.tangent.x,start.tangent.y,0});
         Vec3 exitForward=unit(Vec3{end.tangent.x,end.tangent.y,0});
         double headingAgreement=dot(forward,exitForward),rise=end.position.z-start.position.z;
-        constexpr double portAngle=15*pi/180,phaseTolerance=2*portAngle,headingCosine=.984807753012208;
+        // A curved rolling descent can change yaw after the half-loop. Test
+        // the actual vertical/roll sequence, allowing that authored return.
+        constexpr double portAngle=15*pi/180,phaseTolerance=2*portAngle,headingCosine=.866025403784439;
         for(const auto& port:{start,end}){
             Vec3 upright=unit(Vec3{0,0,1}-port.tangent*port.tangent.z);
             check(std::abs(port.tangent.z)<std::sin(portAngle)&&dot(port.up,upright)>std::cos(portAngle),"Flowing inversion ports remain within 15 degrees of upright and level");
@@ -45,13 +47,13 @@ ObservedInversions classifyGeometry(const Design& design){
         // A full pitch revolution survives borrowed rising ports. A barrel
         // roll has no pitch revolution; a horizontal hairpin lacks a vertical
         // landmark. Neither can substitute for these actual inversion shapes.
-        if(headingAgreement>headingCosine&&std::abs(pitchSweep-2*pi)<phaseTolerance){
+        if(std::abs(pitchSweep-2*pi)<phaseTolerance){
             check(std::isfinite(firstAscendingVertical)&&std::isfinite(firstDescendingVertical)&&firstAscendingVertical<firstDescendingVertical,"Retained full loop contains ascent and descent pitch in its original heading");
             check(std::abs(rollSweep)<phaseTolerance,"Full loop is a pitch revolution without an added barrel roll");
-            check(region.verticalExtent>=54&&region.verticalExtent<=70,"Ordinary loop keeps its approximately55-68m physical size instead of borrowing the inversion record target");
+            check(region.verticalExtent>=67&&region.verticalExtent<=80,"Record-scale full loop keeps its own68-78m physical height separately from the tall Immelmann");
             double minimumSpeed=INFINITY;
             for(const auto& frame:design.simulation.frames)if(frame.distance>=region.startDistance&&frame.distance<=region.endDistance)minimumSpeed=std::min(minimumSpeed,frame.speed);
-            check(minimumSpeed>17,"Fixture loop retains moving crest energy rather than approaching stall");
+            check(minimumSpeed>24,"Larger full loop retains its authored26m/s moving crest energy");
             ++observations.fullLoop;
         }else if(headingAgreement< -headingCosine&&region.verticalExtent>70&&rise>=0&&std::abs(pitchSweep-pi)<phaseTolerance){
             check(std::isfinite(firstAscendingVertical)&&!std::isfinite(firstDescendingVertical),"Immelmann contains an actual ascending half-loop");
@@ -60,7 +62,7 @@ ObservedInversions classifyGeometry(const Design& design){
             double peak=-INFINITY;
             for(const auto& frame:design.simulation.frames)for(int seat=0;seat<3;++seat){double at=frame.distance+seatDistanceOffset(design.request.train,seat);
                 if(at>=region.startDistance&&at<=region.endDistance)peak=std::max(peak,frame.seats[seat].vertical);}
-            check(peak<4.4,"Fixture Immelmann has the intended ordinary-force passage; this is not a universal safety cap");
+            check(peak>4.5,"Signature Immelmann delivers its stronger entry/pullout intention; full signed force acceptance remains independent");
             check(returnUprightSlope<-.1,"Immelmann rolls upright on its curved descent instead of a level rolling tail");
             check(region.verticalMaximum-end.position.z>40,"Signature returns toward a lower valley before the ordinary turnaround");
             observations.immelmannRise=region.verticalExtent;observations.immelmannForwardExtent=region.forwardExtent;++observations.immelmann;
@@ -73,6 +75,29 @@ ObservedInversions classifyGeometry(const Design& design){
     }
     check(observations.fullLoop==1&&observations.immelmann==1&&observations.diveLoop==0,"Fixture retains the full loop and descending Immelmann without a mandatory mirrored dive to undo its raised exit");
     return observations;
+}
+int checkCrestCharacter(const Design& design){
+    int peaks=0,positiveRelief=0,strongAirtime=0;bool rising=false;double ascending=0;
+    for(double distance=0;distance<design.track.length;distance+=5){
+        const auto sample=design.track.sample(distance);
+        if(sample.element!=Element::Airtime){rising=false;continue;}
+        if(sample.tangent.z>.03)rising=true;
+        if(sample.tangent.z>0)ascending=distance;
+        if(!rising||sample.tangent.z>=-.03)continue;
+        double lo=ascending,hi=distance;
+        for(int iteration=0;iteration<24;++iteration){const double mid=(lo+hi)*.5;if(design.track.sample(mid).tangent.z>0)lo=mid;else hi=mid;}
+        const double at=(lo+hi)*.5-seatDistanceOffset(design.request.train,1);
+        const auto& frames=design.simulation.frames;
+        const auto after=std::lower_bound(frames.begin(),frames.end(),at,[](const auto& frame,double distance){return frame.distance<distance;});
+        check(after!=frames.begin()&&after!=frames.end(),"A geometric airtime crest has actual rider telemetry on both sides");
+        const auto& before=*(after-1);const double u=(at-before.distance)/(after->distance-before.distance);
+        const double normal=before.seats[1].vertical*(1-u)+after->seats[1].vertical*u;
+        positiveRelief+=normal>0&&normal<.75;strongAirtime+=normal<-.8;
+        ++peaks;rising=false;
+    }
+    check(peaks>=4,"Complete circuit contains at least four actual ascending-descending force-authored crest shapes");
+    check(positiveRelief>0&&strongAirtime>0,"Actual geometric crests include both positive relief and stronger negative airtime; one force recipe cannot replace the sequence");
+    return peaks;
 }
 void checkFoldedGeometry(const Design& design){
     struct Segment{double s;TrackSample sample;};
@@ -101,10 +126,7 @@ void checkFoldedGeometry(const Design& design){
     }
     check(crossings>=1,"Complete circuit has a transverse crossover between widely separated route branches");
     check(straightFlat/design.track.length<.35,"Straight and grade-flat geometry occupies less than35percent of the complete circuit");
-    int airtimePeaks=0;bool rising=false;
-    for(size_t i=0;i<points.size();++i){const auto& sample=points[i].sample;if(sample.element!=Element::Airtime){rising=false;continue;}
-        if(sample.tangent.z>.03)rising=true;if(rising&&sample.tangent.z<-.03){++airtimePeaks;rising=false;}}
-    check(airtimePeaks>=4,"Complete circuit contains at least four actual ascending-descending force-authored crest shapes");
+    const int airtimePeaks=checkCrestCharacter(design);
     std::cout<<"crossings="<<crossings<<" minimumCanonicalSeparation="<<minimumSeparation<<" straightFlatShare="<<straightFlat/design.track.length<<" gradeFlatShare="<<gradeFlat/design.track.length<<" airtimePeaks="<<airtimePeaks<<'\n';
 }
 double fieldNumber(const std::string& text,size_t begin,size_t end,const std::string& key){
@@ -157,6 +179,7 @@ void checkSupportSpacing(const Design& design){
     // train/hardware clearance validation; spacing is checked independently here.
 }
 void checkOperationIntent(const Design& design){
+    const double halfTrain=(design.request.train.cars-1)*design.request.train.spacing*.5;
     const auto launch=moduleInterval(design,"post-loop-launch");
     const auto nextBrake=moduleInterval(design,"immelmann-inward-entry-brake");
     check(launch.first>design.inversionDimensions.front().endDistance&&nextBrake.first>launch.second,"Explicit relaunch lies after full loop and before the passive run");
@@ -164,7 +187,7 @@ void checkOperationIntent(const Design& design){
     for(const auto& op:design.operations){
         if(op.kind!=DriveKind::Boost&&op.kind!=DriveKind::Launch)continue;
         if(op.start<launch.second-1e-6&&op.end>launch.first+1e-6){++motors;
-            check(op.kind==DriveKind::Boost&&std::abs(op.start-launch.first)<1e-6&&std::abs(op.end-launch.second)<1e-6,"One bounded relaunch supplies this section without spilling into coasting track");
+            check(op.kind==DriveKind::Boost&&std::abs(op.start-halfTrain-launch.first)<1e-6&&std::abs(op.end+halfTrain-launch.second)<1e-6,"Relaunch hardware confines every car's applied work to the intended section");
             const double capacity=op.maxForce/design.request.train.carMass;
             check(std::isfinite(capacity)&&capacity>=4.5-1e-10&&capacity<=design.request.limits.maxLongitudinalG*gravity&&
                 std::isfinite(op.maxPower)&&op.maxPower>0&&std::isfinite(op.targetSpeed)&&op.targetSpeed>0&&op.targetSpeed<=100&&op.rampSeconds>0&&op.exitFadeMeters>0,
@@ -180,12 +203,15 @@ void checkOperationIntent(const Design& design){
     // Check convergence against measured boundaries, not just a reported flag.
     const auto& text=design.planningDiagnostics;size_t module=0,source=text.find("\"forceDesignedAirtime\":[");
     check(source!=std::string::npos,"Force source speeds are retained for comparison with final replay");
-    for(int hill=0;hill<4;++hill){module=text.find("\"identity\":\"fvd-airtime\"",module);check(module!=std::string::npos,"All four physical airtime entries are present");
+    for(int chain=0;chain<2;++chain){module=text.find("\"identity\":\"fvd-airtime\"",module);check(module!=std::string::npos,"Both continuous airtime sources have physical entry ports");
         size_t endModule=text.find('}',module);double at=fieldNumber(text,module,endModule,"\"start\":");
         source=text.find('{',source);check(source!=std::string::npos,"Each airtime source has an authored entry speed");size_t endSource=text.find('}',source);
         double authored=fieldNumber(text,source,endSource,"\"sourceSpeedMps\":");
         check(std::abs(measuredSpeed(design,at)-authored)<=.500001,"Final finite-train airtime entry converges within the0.5m/s authoring tolerance");
         const double end=fieldNumber(text,module,endModule,"\"end\":"),sourceHeight=fieldNumber(text,source,endSource,"\"height\":");
+        const double sourceExit=fieldNumber(text,source,endSource,"\"sourceExitSpeedMps\":");
+        check(authored-sourceExit>3,"Unpowered airtime source spends real energy on rolling and drag rather than resetting its exit speed");
+        check(std::abs(measuredSpeed(design,end)-sourceExit)<=.500001,"Actual airtime exit also agrees with the loss-aware source; entry agreement cannot hide later loss error");
         auto entry=design.track.sample(at),exit=design.track.sample(end);double maximum=entry.position.z;
         for(double distance=at;distance<end;distance+=.5)maximum=std::max(maximum,design.track.sample(distance).position.z);
         maximum=std::max(maximum,exit.position.z);
@@ -201,15 +227,19 @@ void checkOperationIntent(const Design& design){
     check(fieldNumber(text,energy,endEnergy,"\"maximumSpeedResidualMps\":")<=.500001,"Reported loop and reversal energy residuals also meet the authoring tolerance");
 }
 void checkAscentTrimFlow(const Design& design){
-    const auto ascent=moduleInterval(design,"terrain-ascent-launch"),trim=moduleInterval(design,"inversion-entry-brake"),loop=moduleInterval(design,"record-inversion");
-    check(std::abs(ascent.second-trim.first)<1e-6&&std::abs(trim.second-loop.first)<1e-6,"Ascent, trim and retained full loop share their actual physical boundaries");
+    const auto ascent=moduleInterval(design,"terrain-ascent-transfer"),loop=moduleInterval(design,"record-inversion");
+    const double halfTrain=(design.request.train.cars-1)*design.request.train.spacing*.5;
+    auto brake=std::find_if(design.operations.begin(),design.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Brake&&std::abs(op.end+halfTrain-loop.first)<1e-6;});
+    check(brake!=design.operations.end(),"Actual trim hardware clears the entire train before the loop source inlet");
+    const std::pair<double,double> trim{brake->start-halfTrain,brake->end+halfTrain};
+    check(trim.first>ascent.first&&std::abs(ascent.second-loop.first)<1e-6,"One terrain ascent contains motor and trim work without an inserted level reset");
     check(std::abs(design.track.sample(trim.second).tangent.z)<std::sin(.01*pi/180),"Terrain ascent reaches the actual level inversion inlet");
     for(double boundary:{trim.first,trim.second}){
         const auto before=design.track.sample(boundary-.01),after=design.track.sample(boundary+.01);
         check(norm(after.tangent-before.tangent)<.001,"Ascent, trim and inversion inlet have no abrupt tangent change across their physical joins");
         check(norm(after.curvature-before.curvature)<1e-4,"Ascent, trim and inversion inlet retain smooth curvature across their physical joins");
     }
-    check(std::any_of(design.operations.begin(),design.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Brake&&std::abs(op.start-trim.first)<1e-6&&std::abs(op.end-trim.second)<1e-6;}),"Real bounded braking covers exactly the authored trim interval");
+    check(std::any_of(design.operations.begin(),design.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Boost&&std::abs(op.end+halfTrain-trim.first)<1e-6;}),"Adjacent ascent motor and brake work domains retain one train length of actual hardware separation");
     double maximumHeight=0;
     for(double at=ascent.first;at<=trim.second;at+=.5){const auto point=design.track.sample(at).position;
         maximumHeight=std::max(maximumHeight,point.z-design.request.terrain.height(point.x,point.y));}
@@ -243,6 +273,26 @@ Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
     check(design.accepted(),"Entire generated circuit passes unmodified geometry, train forces, target and convergence gates");
     check(design.convergence.coarseStep==1./960&&design.convergence.fineStep==1./1920,"Full ride uses required 960/1920 Hz simulation and verification");
     check(design.simulation.metrics.maxGroundHeight>=request.targets.height&&design.simulation.metrics.maxSpeed>=request.targets.speed&&design.simulation.metrics.inversionGroundHeight>=request.targets.inversionHeight,"Existing record hill and speed targets remain selected and satisfied");
+    const auto& plan=design.planningDiagnostics;const size_t signature=plan.find("\"tallHill\":{");
+    check(signature!=std::string::npos,"Tall signature retains its physical source energy");
+    const size_t signatureEnd=plan.find('}',signature);
+    const double inlet=fieldNumber(plan,signature,signatureEnd,"\"sourceInlet\":"),exit=fieldNumber(plan,signature,signatureEnd,"\"sourceExit\":");
+    int launches=0;
+    for(const auto& op:design.operations)if(op.kind==DriveKind::Launch){
+        ++launches;check(std::abs(op.targetSpeed-inlet-.5)<1e-8,"Initial launch target belongs to its signature and cannot absorb a downstream supply correction");
+    }
+    check(launches==1,"One physical initial launch supplies the signature");
+    size_t history=plan.find("\"iterations\":[");check(history!=std::string::npos,"Measured energy iteration history is available");
+    const size_t historyEnd=plan.find(']',history);
+    while((history=plan.find("\"signatureEntryMps\":",history))!=std::string::npos&&history<historyEnd){
+        const size_t end=plan.find('}',history);
+        check(std::abs(fieldNumber(plan,history,end,"\"signatureEntryMps\":")-inlet)<=.500001&&
+              std::abs(fieldNumber(plan,history,end,"\"signatureExitMps\":")-exit)<=.500001,
+              "Every reached signature inlet and exit preserves its source energy throughout downstream feedback");
+        if(seed==42&&terrain==TerrainKind::Flat)for(const char* key:{"\"loopSupplyCorrectionM2ps2\":","\"nextLoopSupplyCorrectionM2ps2\":"})
+            check(fieldNumber(plan,history,end,key)==0,"Flat42 loop supply never changes its shared initial launch");
+        history=end+1;
+    }
     std::cout<<"seed="<<seed<<" accepted=true candidate="<<design.candidate<<" length="<<design.track.length<<" topology="<<design.topology<<'\n';
     return design;
 }

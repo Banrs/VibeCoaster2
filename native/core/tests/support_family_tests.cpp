@@ -41,17 +41,22 @@ int main(int argc,char** argv){try{
     double minimumGap=40,maximumGap=0;
     for(size_t i=1;i<transition.supports.size();++i){double gap=transition.supports[i].trackDistance-transition.supports[i-1].trackDistance;minimumGap=std::min(minimumGap,gap);maximumGap=std::max(maximumGap,gap);check(gap>=24-1e-8&&gap<=40+1e-8,"Adaptive spans preserve bounded density");}
     check(maximumGap-minimumGap>3,"Curved crest and straight approach receive different support spacing");
-    auto groundHugging=circle(4.7);validate(groundHugging);
-    for(const auto& s:groundHugging.supports)check(feet(s)==1&&norm(s.top-s.attachment)<1.1,"Low rail uses a shortened connected pier neck while retaining full swept clearance");
+    for(double height:{3.4,4.1,4.7})for(double bank:{0.,.1}){
+        auto groundHugging=circle(height,TerrainKind::Flat,bank);validate(groundHugging);
+        for(const auto& s:groundHugging.supports){
+            check(feet(s)==1&&norm(s.top-s.attachment)<1.1,"Low rail uses a shortened connected pier neck while retaining full swept clearance");
+            check(s.top.z-s.members.front().top.z>=1,"Low post retains usable steel above its actual foundation");
+        }
+    }
     // Lowering a cap along tilted rail-up also changes its ground location.
-    // A neck sized at attachment XY can leave a nominal 3 m pier below 3 m.
+    // The actual footing top must leave room for its steel post.
     Design slopedLow;slopedLow.request.terrain=Terrain::seeded(TerrainKind::Hills,9);
     std::vector<AuthoredPoint> slopedLowPoints;
     for(int i=0;i<=20;++i)slopedLowPoints.push_back({{-263.03-.534*i,390.986+.845*i,11.086+.041*i},0,Element::Return});
     slopedLow.track=compile(slopedLowPoints,false);buildSupportLayout(slopedLow);validate(slopedLow);
     check(slopedLow.supports.size()==1&&feet(slopedLow.supports.front())==1,"Low inclined track on sloped ground retains a connected compact pier");
     const auto& slopedPier=slopedLow.supports.front();
-    check(slopedPier.top.z-slopedLow.request.terrain.height(slopedPier.top.x,slopedPier.top.y)>=3,"Actual cap ground location respects the unchanged 3 m compact-pier minimum");
+    check(slopedPier.top.z-slopedPier.members.front().top.z>=1,"Actual sloped foundation leaves at least one metre of steel post");
     auto lower=circle(7),higher=circle(20);validate(lower);validate(higher);
     check(higher.supports[0].members[1].radiusBase>lower.supports[0].members[1].radiusBase,"Post thickness adapts to height");
     check(higher.supports[0].members[0].radiusBase>lower.supports[0].members[0].radiusBase,"Footing radius adapts to height");

@@ -8,6 +8,22 @@ void check(bool okay,const char* message){++checks;if(!okay)throw std::runtime_e
 template<class F>void rejects(F action,const char* message){bool failed=false;try{action();}catch(const std::runtime_error&){failed=true;}check(failed,message);}
 }
 int main(){try{
+    for(double rise:{1.,20.,80.,207.0828558894449,250.})for(double grade:{.25,1.,2.,10.})for(double curvature:{.0001,.001,.0056486304,.02}){
+        const double length=detail::minimumTerrainWindowLength(rise,grade,curvature);
+        const auto fitted=detail::fitTerrainWindow({0,length*.5,length},{-1,-1,-1},rise,0,grade,curvature);
+        double measuredGrade=0,measuredCurvature=0;
+        for(int i=1;i<4000;++i){
+            const double at=length*i/4000,step=length/100000;
+            const double before=fitted.height(at-step),middle=fitted.height(at),after=fitted.height(at+step);
+            const double slope=(after-before)/(2*step),second=(after-2*middle+before)/(step*step);
+            measuredGrade=std::max(measuredGrade,std::abs(slope));
+            measuredCurvature=std::max(measuredCurvature,std::abs(second)/std::pow(1+slope*slope,1.5));
+        }
+        check(measuredGrade<=grade*1.00001&&measuredCurvature<=curvature*1.00002,"Shared minimum span respects independently measured grade and curvature");
+        check(std::max(measuredGrade/grade,measuredCurvature/curvature)>.9999,"At least one physical span constraint is active");
+        rejects([&]{detail::fitTerrainWindow({0,length*.4995,length*.999},{-1,-1,-1},rise,0,grade,curvature);},"Shortening a minimum-span transition violates a physical requirement");
+    }
+    check(detail::minimumTerrainWindowLength(0,2,.005)==0,"Zero rise has no invented minimum terrain length");
     std::vector<double> s(601),floor(601,0);for(size_t i=0;i<s.size();++i)s[i]=i*2.;
     auto ordinary=detail::fitTerrainTransfer(s,floor,10,220,2,.02);check(ordinary.timing==1,"Unobstructed transfer retains its S7 timing");
     // A cliff rises earlier than the original transfer. Its entire sampled

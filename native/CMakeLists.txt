@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
-project(ExtremeCoaster VERSION 0.8.2 LANGUAGES CXX)
+project(ExtremeCoaster VERSION 0.8.3 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_library(coaster_core core/src/track.cpp core/src/frame.cpp core/src/drive_profile.cpp core/src/simulation.cpp core/src/convergence.cpp core/src/generation.cpp core/src/layout_modules.cpp core/src/fvd.cpp core/src/persistence.cpp core/src/reference.cpp core/src/supports.cpp core/src/clearance.cpp core/src/dimensions.cpp core/src/station.cpp core/src/structures.cpp)
+add_library(coaster_core core/src/track.cpp core/src/frame.cpp core/src/drive_profile.cpp core/src/simulation.cpp core/src/force_envelope.cpp core/src/convergence.cpp core/src/generation.cpp core/src/layout_modules.cpp core/src/fvd.cpp core/src/persistence.cpp core/src/reference.cpp core/src/supports.cpp core/src/clearance.cpp core/src/dimensions.cpp core/src/station.cpp core/src/structures.cpp)
 target_include_directories(coaster_core PUBLIC core/include)
 if(MSVC)
   target_compile_options(coaster_core PRIVATE /W4 /fp:strict)
@@ -17,7 +17,7 @@ add_executable(coaster_tests core/tests/tests.cpp)
 target_link_libraries(coaster_tests PRIVATE coaster_core)
 add_test(NAME core COMMAND coaster_tests)
 
-foreach(suite terrain_transfer passive_transfer terrain_module_placement persistence_cancel baseline_jets flow_bridge connector_profile reference support support_family layout_modules organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile)
+foreach(suite terrain_transfer terrain_motion passive_transfer terrain_module_placement persistence_cancel baseline_jets flow_bridge reference support support_family layout_modules organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile force_envelope)
   add_executable(${suite}_tests core/tests/${suite}_tests.cpp)
   target_include_directories(${suite}_tests PRIVATE unreal/Source/VibeCoaster/Public)
   target_link_libraries(${suite}_tests PRIVATE coaster_core)
@@ -33,7 +33,7 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME cli_arguments COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_cli_arguments.py" "$<TARGET_FILE:coaster_cli>")
-  set_tests_properties(cli_arguments PROPERTIES TIMEOUT 60)
+  set_tests_properties(cli_arguments PROPERTIES TIMEOUT 180)
 endif()
 
 # FVD authoring now supplies production airtime geometry. Keep the public

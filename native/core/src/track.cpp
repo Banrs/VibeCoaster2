@@ -111,7 +111,7 @@ void Track::rebuild(){
         for(int b=0;b<7;++b){for(int k=0;k<=b;++k)derivative[b]=derivative[b]+sp.c[k+1]*((k+1)*binomial(b,k)/binomial(6,k));double speed=dot(derivative[b],forward);
             if(!finite(derivative[b])||speed<h*.5||speed<norm(derivative[b])*.95)throw std::runtime_error("Canonical span is outside the supported tangent cone");minimumSpeed=std::min(minimumSpeed,speed);}
         for(int b=0;b<6;++b)secondBound=std::max(secondBound,6*norm(derivative[b+1]-derivative[b]));
-        if(secondBound/(minimumSpeed*minimumSpeed)>.2)throw std::runtime_error("Canonical span exceeds the interval curvature bound");
+        if(secondBound/(minimumSpeed*minimumSpeed)>.2)throw std::runtime_error("Canonical span "+std::to_string(i)+" at "+std::to_string(length)+" m exceeds the interval curvature bound: "+std::to_string(secondBound/(minimumSpeed*minimumSpeed))+" /m");
         sp.length=arc(sp,1);if(!std::isfinite(sp.length)||sp.length<1e-5||sp.length>200)throw std::runtime_error("Invalid canonical span length");length+=sp.length;spans.push_back(sp);
     }
     rebuildFramePolynomials(*this);
