@@ -37,17 +37,19 @@ foreach ($Name in @('coaster_cli.exe', 'coaster_convergence.exe')) {
 
 # CMake registers the same 36 contracts against the Zig executables. It does
 # not compile a second core or run tests during this configuration step.
-$Python = (Get-Command python -CommandType Application).Source
+$Python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
 $Adapter = Join-Path $Native 'build-qualification-tests'
 & cmake -S $Native -B $Adapter "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=$Build" "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=$Build" "-DPython3_EXECUTABLE=$Python"
 if ($LASTEXITCODE -ne 0) { throw 'Portable CTest adapter configuration failed' }
 $InventoryText = & ctest --test-dir $Adapter -C Release --show-only=json-v1
 if ($LASTEXITCODE -ne 0) { throw 'Portable CTest inventory failed' }
 $Inventory = ($InventoryText -join "`n") | ConvertFrom-Json
-if ($Inventory.tests.Count -ne 36 -or 'cli_arguments' -notin $Inventory.tests.name) { throw 'Expected all 36 tests including real CLI contracts' }
 $Testing = Join-Path $Adapter 'Testing'
 New-Item -ItemType Directory -Path $Testing -Force | Out-Null
 $InventoryText | Set-Content -LiteralPath (Join-Path $Testing 'inventory.json') -Encoding utf8
+if ($Inventory.tests.Count -ne 36 -or 'cli_arguments' -notin $Inventory.tests.name) {
+  throw "Expected all 36 tests including real CLI contracts; found $($Inventory.tests.Count) using Python '$Python'"
+}
 & ctest --test-dir $Adapter -C Release -L component --output-on-failure --stop-on-failure --parallel 2 --timeout 600 --output-junit (Join-Path $Testing 'components.xml')
 if ($LASTEXITCODE -ne 0) { throw 'Portable component contracts failed' }
 & ctest --test-dir $Adapter -C Release -L integration --output-on-failure --stop-on-failure --parallel 2 --timeout 600 --output-junit (Join-Path $Testing 'integrations.xml')
