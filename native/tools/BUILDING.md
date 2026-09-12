@@ -39,7 +39,12 @@ runs every check. Never use a focused pass as full qualification.
 
 The portable `native/tools/build.ps1` likewise compiles the core once into a
 static library before linking the CLI and tests. Every invocation rebuilds the
-objects with the current headers and flags; `-Test` still runs every full suite.
+objects with the current headers and flags; `-Test` runs every full native suite
+and the eight real CLI argument, generation-plan and saved-replay contracts
+against the newly built `native/build/coaster_cli.exe`. `-Test` requires an
+available Python 3 interpreter, using `PYTHON` when set or discovering `python3`,
+`python`, or `py -3` on `PATH`. Build-only invocations remain Zig-only, and the
+script never downloads either tool.
 
 CMake also registers real CLI argument tests when Python is available. Historical rejection fixtures under
 `core/tests/fixtures/historical/artifacts` are required committed test inputs.

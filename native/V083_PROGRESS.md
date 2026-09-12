@@ -15,3 +15,9 @@
 Source63 completed the same local gates before the final dead-branch cleanup. Source64 repeated every gate on its rebuilt source; no earlier pass substituted for final qualification.
 
 The source59 handoff and earlier failures remain preserved in [historical qualification](V083_INTEGRATION.md#source59-historical-checkpoint) and their original evidence directories. Identity remains **0.8.3-flow.1 / COASTER5**. API preservation is anchored to source59, not historical experimental interfaces on main. Packaging, benchmark qualification, POV/FPS/load and Mac/Metal runtime checks remain outside this milestone.
+
+## Portable driver review after source64
+
+The requested deflation/skeptic loops produced a bounded correction: portable `-Test` now runs the existing eight real CLI contracts against its new executable. The independent review's PowerShell 5.1 discovery failure has a preserved red witness and passing scoped fix review. Adjacent numerical/design findings and their evidence-based no-change decisions are recorded in [qualification](V083_INTEGRATION.md#portable-driver-review-after-source64).
+
+Fresh Python discovery passed 176 tests, with eight expected CLI skips; all eight real CLI contracts also passed against the freshly built executable before the qualification checkpoint commit. [The fresh evidence directory](artifacts/deflation-skeptic-20260912/portable-final-2/) records the full actual portable Release driver, sources, command, tool versions, logs and output hashes. Checkpoint CI can overlap the remaining local suites; merge requires full local success and exact-commit Windows/macOS integration CI, then main CI. [The new promotion directory](artifacts/deflation-skeptic-20260912/promotion/) records those results, with `complete.json` written only after every gate passes. Source64 physical/UE evidence remains historical evidence for its unchanged native inputs and original outputs.

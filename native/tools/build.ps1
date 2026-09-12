@@ -92,6 +92,41 @@ if ($Configuration -eq "Debug") {
 # Pinned warning + FP flags shared by the core and every executable.
 $CommonFlags = @("-std=c++20", "-ffp-contract=off", "-Wall", "-Wextra") + $OptFlags
 
+$PythonCommand = $null
+$PythonPrefixArgs = @()
+if ($Test) {
+  $PythonCandidates = @()
+  if (-not [string]::IsNullOrWhiteSpace($env:PYTHON)) {
+    $PythonCandidates += [pscustomobject]@{ Command = $env:PYTHON; PrefixArgs = @() }
+  }
+  $PythonCandidates += @(
+    [pscustomobject]@{ Command = "python3"; PrefixArgs = @() },
+    [pscustomobject]@{ Command = "python"; PrefixArgs = @() },
+    [pscustomobject]@{ Command = "py"; PrefixArgs = @("-3") }
+  )
+  foreach ($Candidate in $PythonCandidates) {
+    $Resolved = Get-Command $Candidate.Command -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $Resolved) { continue }
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = "Continue"
+      & $Resolved.Source @($Candidate.PrefixArgs) "-c" "import sys; raise SystemExit(0 if sys.version_info.major == 3 else 1)" *> $null
+      $CandidateExit = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+    if ($CandidateExit -eq 0) {
+      $PythonCommand = $Resolved.Source
+      $PythonPrefixArgs = @($Candidate.PrefixArgs)
+      break
+    }
+  }
+  if ($null -eq $PythonCommand) {
+    Write-Error "-Test requires an available Python 3 interpreter for native/tools/test_cli_arguments.py. Set PYTHON to its executable path or put python3, python, or py on PATH. No tools were downloaded." -ErrorAction Continue
+    exit 1
+  }
+}
+
 $CliOut = Join-Path $BuildDir "coaster_cli.exe"
 $TestsOut = Join-Path $BuildDir "coaster_tests.exe"
 
@@ -165,3 +200,14 @@ foreach ($Name in @("terrain_transfer", "terrain_motion", "passive_transfer", "t
 $ConvergenceSource = Join-Path $ToolsDir "convergence/audit.cpp"
 $ConvergenceOut = Join-Path $BuildDir "coaster_convergence.exe"
 Invoke-Zig -Label "coaster_convergence build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, $ConvergenceSource, $CoreLibrary, "-o", $ConvergenceOut))
+
+if ($Test) {
+  $CliArgumentsTest = Join-Path $ToolsDir "test_cli_arguments.py"
+  & $PythonCommand @PythonPrefixArgs "-B" $CliArgumentsTest $CliOut
+  $CliTestExit = $LASTEXITCODE
+  if ($CliTestExit -ne 0) {
+    Write-Error "Real CLI tests failed (exit=$CliTestExit)." -ErrorAction Continue
+    exit $CliTestExit
+  }
+  Write-Host "Real CLI tests passed."
+}
