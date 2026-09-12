@@ -66,5 +66,13 @@ int main(){try{
     verifyConvergence(design); // Empty canonical track cannot complete a finer replay.
     require(!design.accepted()&&!design.convergence.passed,"Invalid finer replay becomes accepted");
     require(design.simulation.frames.size()==2&&design.simulation.frames.back().distance==5000,"Failed verification replaces coarse presentation trace");
+    GenerationRequest request;request.targets.requireIntensity=false;request.maxCandidates=1;
+    std::atomic<bool> replayStarted{false},overlap{false};std::atomic<int> polling{0};
+    auto cancelled=generate(request,[&]{
+        if(polling.fetch_add(1)!=0)overlap.store(true);
+        const bool stop=replayStarted.load();polling.fetch_sub(1);return stop;
+    },[&](int,const std::string& stage){if(stage.find("Replaying final geometry")!=std::string::npos)replayStarted.store(true);});
+    require(replayStarted&&!overlap&&polling==0,"Parallel validation serializes user cancellation callbacks and joins its workers");
+    require(!cancelled.accepted()&&cancelled.simulation.cancelled,"Cancelling concurrent replays cannot accept a ride");
     std::cout<<"PASS "<<checks<<" convergence acceptance checks\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<"\n";return 1;}}

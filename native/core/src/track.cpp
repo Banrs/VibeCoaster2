@@ -155,10 +155,17 @@ Track compile(const std::vector<AuthoredPoint>& p,bool closed){
     t.rebuild();return t;
 }
 TrackLocation Track::locate(double distance) const {
+    size_t hint=spans.size();return locate(distance,hint);
+}
+TrackLocation Track::locate(double distance,size_t& hint) const {
     if(spans.empty()||!std::isfinite(distance)||!std::isfinite(length)||length<=0)throw std::runtime_error("Invalid track distance or empty track");
     if(closed){distance=std::fmod(distance,length);if(distance<0)distance+=length;}else distance=std::clamp(distance,0.,length);
-    auto it=std::upper_bound(spans.begin(),spans.end(),distance,[](double s,const Span& sp){return s<sp.start;});
-    const size_t i=it==spans.begin()?0:size_t(it-spans.begin()-1);const auto& sp=spans[i];
+    auto contains=[&](size_t i){return i<spans.size()&&distance>=spans[i].start&&(i+1==spans.size()||distance<spans[i+1].start);};
+    if(!contains(hint)){
+        if(hint<spans.size()&&contains(hint+1))++hint;
+        else{auto it=std::upper_bound(spans.begin(),spans.end(),distance,[](double s,const Span& sp){return s<sp.start;});hint=it==spans.begin()?0:size_t(it-spans.begin()-1);}
+    }
+    const size_t i=hint;const auto& sp=spans[i];
     const double local=std::clamp(distance-sp.start,0.,sp.length);
     if(local==0)return {i,0};if(local==sp.length)return {i,1};
     double lo=0,hi=1,u=local/sp.length;

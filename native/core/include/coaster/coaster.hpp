@@ -58,7 +58,10 @@ struct Track {
     bool closed{true};
     void rebuild();
     TrackLocation locate(double distance) const;
+    TrackLocation locate(double distance,size_t& spanHint) const;
     TrackSample sample(double distance) const;
+    Vec3 tangent(double distance) const;
+    Vec3 tangent(double distance,size_t& spanHint) const;
     TrackSample sampleSpan(size_t span,double parameter) const;
     std::array<double,6> bankPolynomial(size_t span) const;
     double distanceAtSpan(size_t span,double parameter) const;

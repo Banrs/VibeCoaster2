@@ -3,6 +3,9 @@
 #include "baseline_jets.hpp"
 #include "flow_bridge.hpp"
 #include "connector_profile.hpp"
+#include "simulation_internal.hpp"
+#include <future>
+#include <mutex>
 #include <numeric>
 #include <stdexcept>
 #include <sstream>
@@ -536,8 +539,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     throw std::runtime_error(placementVariant?"No second distinct feasible station placement fits the actual boundary and footprint budget":"No terrain-ranked placement fits the actual station departure/return boundary and 16 m bay-height budget");
 }
 static void placeSupports(Design& d,Cancel cancel){buildSupportLayout(d,cancel);}
-static void improveBanking(Design& d){
-    const auto& frames=d.simulation.frames;if(frames.empty())return;
+static void improveBanking(Design& d,const std::vector<Frame>& frames){
+    if(frames.empty())return;
     const size_t count=d.track.spans.size();std::vector<double> authored(count),target(count),along(count),left(count),right(count),speed(count);
     for(size_t i=0;i<count;++i){const auto& k=d.track.knots[i];authored[i]=target[i]=k.bank;along[i]=d.track.spans[i].start;
         speed[i]=replayValueAt(frames,along[i]);if(k.element!=Element::Turn)continue;
@@ -588,6 +591,9 @@ ValidationReport validateRequest(const GenerationRequest& req){
     return r;
 }
 Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(int,const std::string&)> progress){
+    std::mutex cancellationMutex;
+    const Cancel requestedCancel=std::move(cancel);
+    if(requestedCancel)cancel=[&]{std::lock_guard lock(cancellationMutex);return requestedCancel();};
     GenerationRequest req=input;if(req.terrain.isDefaultProfile())req.terrain=Terrain::seeded(req.terrain.kind,req.seed);
     Design last;last.request=req;
     last.report=validateRequest(req);if(!last.report.valid())return last;
@@ -623,31 +629,45 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
         if(progress)progress(i,"Solving terrain corridor and circuit");
         try{
             AuthoringFeedback feedback;CandidatePorts ports;
-            Design d=candidate(req,i,cancel,feedback,ports);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);
-            if(d.simulation.cancelled){d.report.fail("CANCELLED","Generation cancelled");return d;}
-            if(d.simulation.completed){
+            Design d=candidate(req,i,cancel,feedback,ports);
+            if(progress)progress(i,"Simulating initial geometry");
+            auto motion=simulateMotion(d.track,d.operations,req.train,req.simulationStep,cancel);
+            if(motion.cancelled){d.simulation.cancelled=true;d.report.fail("CANCELLED","Generation cancelled");return d;}
+            if(motion.completed){
                 // One bounded correction uses measured finite-train entry energy.
                 // Rebuild the entire route, terrain placement and operation zones;
                 // never stretch an FVD curve or substitute a prescribed speed.
-                for(size_t h=0;h<feedback.airtimeSpeed.size();++h)feedback.airtimeSpeed[h]=replayValueAt(d.simulation.frames,ports.airtimeEntry[h]);
-                double exitSpeed=replayValueAt(d.simulation.frames,ports.reversalExit);
+                for(size_t h=0;h<feedback.airtimeSpeed.size();++h)feedback.airtimeSpeed[h]=replayValueAt(motion.frames,ports.airtimeEntry[h]);
+                double exitSpeed=replayValueAt(motion.frames,ports.reversalExit);
                 feedback.reversalEnergyCorrection=ports.reversalSpeedHint*ports.reversalSpeedHint-exitSpeed*exitSpeed;
-                d=candidate(req,i,cancel,feedback,ports);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);
-                if(d.simulation.cancelled){d.report.fail("CANCELLED","Generation cancelled");return d;}
+                d=candidate(req,i,cancel,feedback,ports);
+                if(progress)progress(i,"Simulating energy-corrected geometry");
+                motion=simulateMotion(d.track,d.operations,req.train,req.simulationStep,cancel);
+                if(motion.cancelled){d.simulation.cancelled=true;d.report.fail("CANCELLED","Generation cancelled");return d;}
             }
-            if(d.simulation.completed){improveBanking(d);d.simulation=simulate(d.track,d.operations,req.train,req.simulationStep,cancel);}
+            if(motion.completed)improveBanking(d,motion.frames);
+            // These replays read frozen track/drive data. Structure construction
+            // writes separate members; all workers join before d can be retired.
+            std::atomic<bool> stopFine{false};
+            auto coarse=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,req.train,req.simulationStep,cancel);});
+            std::future<SimulationResult> fine;
+            if(motion.completed)fine=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,req.train,req.simulationStep*.5,[&]{return stopFine.load()||(cancel&&cancel());});});
+            if(progress)progress(i,"Replaying final geometry while constructing station and supports");
             d.station=buildStation(d.track,req.terrain,req.train,cancel);
             placeSupports(d,cancel);
             d.inversionDimensions=measureInversionDimensions(d.track,cancel);
             if(progress)progress(i,"Checking measured targets and clearance");
             d.report=validateGeometry(d.track,req.terrain,req.limits,req.train,d.supports,cancel);
             auto structures=validateDesignStructures(d,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());
+            d.simulation=coarse.get();
             evaluateTargets(d);
             if(d.report.valid()&&d.simulation.completed&&d.simulation.report.valid()&&!d.simulation.cancelled){
                 if(progress)progress(i,"Checking independent half-step simulation");
-                verifyConvergence(d,cancel);
-                if(d.simulation.cancelled)return d;
+                if(fine.valid())verifyConvergenceWith(d,[&]{return fine.get();},cancel);
+                else verifyConvergence(d,cancel);
             }
+            if(fine.valid()){stopFine.store(true);fine.wait();}
+            if(d.simulation.cancelled)return d;
             remember(&d,i);if(d.accepted()){
                 double duration=movingRideSeconds(d);
                 if(duration<=180)return withHistory(std::move(d),"accepted-within-moving-duration-goal");

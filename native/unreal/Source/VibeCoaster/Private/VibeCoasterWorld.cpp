@@ -74,6 +74,7 @@ struct FCoasterRuntime
     double PresentedDistance = -1;
     int32 NextChunk = 0, NextTie = 0, NextSupport = 0, NextStation = 0;
     double RideTime = 0, Distance = 0, Speed = 0;
+    double RequestStarted = 0, CommitStarted = 0;
     size_t TraceIndex = 0;
     int32 Seat = 0;
     bool Paused = true, Overview = false;
@@ -188,6 +189,7 @@ void AVibeCoasterWorld::Cancel()
 void AVibeCoasterWorld::Generate(const coaster::GenerationRequest& Request)
 {
     Cancel();
+    Runtime->RequestStarted = FPlatformTime::Seconds();
     FJobRequest Work; Work.Request = Request; Work.Revision = Runtime->Revision;
     Runtime->Queued = MoveTemp(Work);
     Runtime->Message = TEXT("Generating and validating on CPU...");
@@ -196,6 +198,7 @@ void AVibeCoasterWorld::Generate(const coaster::GenerationRequest& Request)
 void AVibeCoasterWorld::Load()
 {
     Cancel();
+    Runtime->RequestStarted = FPlatformTime::Seconds();
     FJobRequest Work; Work.Kind = EWork::Load; Work.Path = DesignPath(); Work.Revision = Runtime->Revision;
     Runtime->Queued = MoveTemp(Work);
     Runtime->Message = TEXT("Loading and revalidating complete saved geometry...");
@@ -277,9 +280,13 @@ void AVibeCoasterWorld::StartQueuedJob()
             if (!Design->accepted()) { Result.Message = Failure(*Design); return Result; }
             if (Design->simulation.frames.empty()) { Result.Message = TEXT("Accepted design has no trace; no ride committed."); return Result; }
             State->Stage.store(1);
+            const double PreparationStarted = FPlatformTime::Seconds();
             auto Prepared = MakeShared<VibeMesh::FPreparedRide, ESPMode::ThreadSafe>();
             Prepared->Design = MoveTemp(Design); Prepared->Revision = Work.Revision;
             if (!VibeMesh::Prepare(*Prepared, Cancelled)) { Result.Message = Prepared->Error; return Result; }
+            UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu meshPreparationSeconds=%.3f chunks=%d ties=%d supports=%d stationInstances=%d"),
+                Work.Revision, FPlatformTime::Seconds() - PreparationStarted, Prepared->Chunks.Num(),
+                Prepared->Ties.Num(), Prepared->Supports.Num(), Prepared->Station.Num());
             Result.Prepared = MoveTemp(Prepared);
         }
         catch (const std::exception& Error) { Result.Message = TEXT("Request failed; active ride retained: ") + FString(UTF8_TO_TCHAR(Error.what())); }
@@ -297,6 +304,7 @@ void AVibeCoasterWorld::PollJob()
     {
         if (Result.Prepared && Result.Prepared->Design->accepted())
         {
+            Runtime->CommitStarted = FPlatformTime::Seconds();
             Runtime->Prepared = MoveTemp(Result.Prepared);
             Runtime->NextChunk = Runtime->NextTie = Runtime->NextSupport = Runtime->NextStation = 0;
             Staging = GetWorld()->SpawnActor<AVibeCoasterAssembly>();
@@ -337,10 +345,9 @@ void AVibeCoasterWorld::CommitChunks()
     if (!Runtime->Prepared || !Staging) return;
     auto& Prepared = *Runtime->Prepared;
     if (Prepared.Revision != Runtime->Revision) { Retire(Staging); Staging = nullptr; Runtime->Prepared.Reset(); return; }
-    const double Deadline = FPlatformTime::Seconds() + .002;
-    // Sections are bounded: up to 6,144 vertices for batched cliff backdrop. At most one section and
-    // 64 instances per tick; the 2 ms budget is cooperative, not a frame-time guarantee.
-    if (Runtime->NextChunk < Prepared.Chunks.Num())
+    const double Deadline = FPlatformTime::Seconds() + .004;
+    // Commit multiple bounded sections per tick, yielding between calls.
+    while (Runtime->NextChunk < Prepared.Chunks.Num() && FPlatformTime::Seconds() < Deadline)
     {
         auto& Chunk = Prepared.Chunks[Runtime->NextChunk++];
         auto* Mesh = NewObject<UProceduralMeshComponent>(Staging);
@@ -357,16 +364,25 @@ void AVibeCoasterWorld::CommitChunks()
         Staging->Chunks.Add(Mesh);
         Chunk = VibeMesh::FChunk{}; // Release CPU vertex copies once committed.
     }
-    int32 Budget = 64;
-    while (Budget > 0 && Runtime->NextTie < Prepared.Ties.Num() && FPlatformTime::Seconds() < Deadline)
-    { Staging->Ties->AddInstance(Prepared.Ties[Runtime->NextTie++], false); --Budget; }
-    while (Budget > 0 && Runtime->NextSupport < Prepared.Supports.Num() && FPlatformTime::Seconds() < Deadline)
-    { Staging->Supports->AddInstance(Prepared.Supports[Runtime->NextSupport++], false); --Budget; }
-    while (Budget > 0 && Runtime->NextStation < Prepared.Station.Num() && FPlatformTime::Seconds() < Deadline)
+    TArray<FTransform> Batch;
+    Batch.Reserve(256);
+    const auto AddBatches = [&](UInstancedStaticMeshComponent* Component, const TArray<FTransform>& Transforms, int32& Next)
     {
-        const auto& Part = Prepared.Station[Runtime->NextStation++];
+        while (Next < Transforms.Num() && FPlatformTime::Seconds() < Deadline)
+        {
+            const int32 Count = FMath::Min(256, Transforms.Num() - Next);
+            Batch.Reset(); Batch.Append(Transforms.GetData() + Next, Count);
+            Component->AddInstances(Batch, false, false, false);
+            Next += Count;
+        }
+    };
+    AddBatches(Staging->Ties, Prepared.Ties, Runtime->NextTie);
+    AddBatches(Staging->Supports, Prepared.Supports, Runtime->NextSupport);
+    while (Runtime->NextStation < Prepared.Station.Num() && FPlatformTime::Seconds() < Deadline)
+    {
+        const auto Kind = Prepared.Station[Runtime->NextStation].Kind;
         UInstancedStaticMeshComponent* Component = nullptr;
-        switch (Part.Kind)
+        switch (Kind)
         {
             case VibeMesh::EStationInstanceKind::CubeSteel: Component = Staging->StationSteel; break;
             case VibeMesh::EStationInstanceKind::CubeConcrete: Component = Staging->StationConcrete; break;
@@ -376,7 +392,10 @@ void AVibeCoasterWorld::CommitChunks()
             case VibeMesh::EStationInstanceKind::Post: Component = Staging->StationPosts; break;
         }
         check(Component);
-        Component->AddInstance(Part.Transform, false); --Budget;
+        Batch.Reset();
+        while (Runtime->NextStation < Prepared.Station.Num() && Batch.Num() < 256 && Prepared.Station[Runtime->NextStation].Kind == Kind)
+            Batch.Add(Prepared.Station[Runtime->NextStation++].Transform);
+        Component->AddInstances(Batch, false, false, false);
     }
     if (Runtime->NextChunk != Prepared.Chunks.Num() || Runtime->NextTie != Prepared.Ties.Num() || Runtime->NextSupport != Prepared.Supports.Num() || Runtime->NextStation != Prepared.Station.Num()) return;
     Retire(Active); Active = Staging; Staging = nullptr;
@@ -388,6 +407,8 @@ void AVibeCoasterWorld::CommitChunks()
         Runtime->ComparisonLines.Add(FString(UTF8_TO_TCHAR(Line.c_str())));
     for (int32 I = 0; I < Runtime->Design->request.train.cars; ++I) Active->Cars->AddInstance(FTransform::Identity);
     Active->SetActorHiddenInGame(false);
+    UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu sceneSubmittedSeconds=%.3f sceneCommitSeconds=%.3f"),
+        Runtime->Revision, FPlatformTime::Seconds() - Runtime->RequestStarted, FPlatformTime::Seconds() - Runtime->CommitStarted);
     Runtime->Message = Runtime->Design->request.targets.requireIntensity
         ? TEXT("Accepted against configured record targets and reference. Space to ride.")
         : TEXT("PHYSICS-PROOF accepted. Intensity comparison disabled by your preset. Space to ride.");

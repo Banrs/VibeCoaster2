@@ -74,6 +74,17 @@ TrackSample Track::sampleSpan(size_t i,double u) const{
     Vec3 up=rotate(projected/magnitude,tangent,value(span.bank,u));
     return {value(span.c,u),tangent,(d.first-tangent*dot(tangent,d.first))/(q*q),up,unit(cross(tangent,up)),knots[i].element};
 }
+Vec3 Track::tangent(double distance) const{
+    size_t hint=spans.size();return tangent(distance,hint);
+}
+Vec3 Track::tangent(double distance,size_t& hint) const{
+    const auto at=locate(distance,hint);const auto& c=spans[at.span].c;
+    Vec3 derivative=c[7]*7.;
+    for(int i=6;i>=1;--i)derivative=derivative*at.parameter+c[i]*double(i);
+    const double magnitude=norm(derivative);
+    if(!std::isfinite(magnitude)||magnitude<=0)throw std::runtime_error("Degenerate canonical tangent");
+    return derivative/magnitude;
+}
 std::array<double,6> Track::bankPolynomial(size_t i) const{if(i>=spans.size())throw std::runtime_error("Invalid canonical bank span");return spans[i].bank;}
 
 TrackKinematics sampleSpanKinematics(const Track& track,size_t i,double u){

@@ -32,6 +32,16 @@ static void verifyJoins(const Track& t){
     }
     check(highOrder,"Nontrivial fixture exercises c6 and c7");
     auto copy=t;copy.rebuild();check(copy.spans.size()==t.spans.size()&&copy.length==t.length,"Rebuild length determinism");
+    size_t hint=t.spans.size()+5;
+    for(double s=-2;s<t.length+2;s+=.37){
+        close(t.tangent(s,hint),t.sample(s).tangent,0,"Cached gravity tangent remains bit-exact across knots, endpoints and wrapped distances");
+        const auto a=t.locate(s,hint),b=t.locate(s);
+        check(a.span==b.span&&a.parameter==b.parameter,"Lookup hint does not alter canonical interpolation");
+    }
+    for(double s:{t.length*.7,0.,t.length*2.1,-t.length*.3,t.length*.2}){
+        const auto a=t.locate(s,hint),b=t.locate(s);
+        check(a.span==b.span&&a.parameter==b.parameter,"Arbitrary backward jumps and seam wraps invalidate stale hints");
+    }
     for(size_t i=0;i<t.spans.size();++i){for(int k=0;k<8;++k)close(t.spans[i].c[k],copy.spans[i].c[k],0,"Septic coefficient determinism");for(int k=0;k<6;++k){close(t.spans[i].referenceUp[k],copy.spans[i].referenceUp[k],0,"Reference frame cache determinism");check(t.spans[i].bank[k]==copy.spans[i].bank[k],"Bank cache determinism");}}
 }
 static void reportPrecision(){
