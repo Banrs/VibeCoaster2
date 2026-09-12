@@ -1,5 +1,4 @@
 #include "coaster/coaster.hpp"
-#include "coaster/layout_modules.hpp"
 #include "coaster/fvd.hpp"
 #include "baseline_jets.hpp"
 #include "flow_bridge.hpp"

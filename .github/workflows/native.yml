@@ -23,9 +23,9 @@ jobs:
       - name: Configure independent C++ core
         run: cmake -S native -B native/build-cmake -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build native/build-cmake --config Release --parallel 2 --target coaster_cli fvd_tests layout_modules_tests baseline_jets_tests flow_bridge_tests connector_profile_tests
+        run: cmake --build native/build-cmake --config Release --parallel 2 --target coaster_cli coaster_convergence fvd_tests baseline_jets_tests flow_bridge_tests connector_profile_tests support_tests structures_tests
       - name: Test changed authoring and real CLI contracts
-        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --stop-on-failure --timeout 600 -R "^(fvd|layout_modules|baseline_jets|flow_bridge|connector_profile|cli_arguments)$"
+        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --stop-on-failure --timeout 600 -R "^(fvd|baseline_jets|flow_bridge|connector_profile|cli_arguments)$"
       - name: Check representative complete rides at 960 and 1920 Hz
         if: runner.os == 'Windows'
         shell: pwsh
