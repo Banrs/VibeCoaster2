@@ -31,7 +31,7 @@ int main(int argc,char** argv){try{
         else if(key=="--preset"){if(value=="physics-proof")r.targets.requireIntensity=false;else if(value=="all-records")r.targets.requireIntensity=true;else throw std::runtime_error("Unknown preset");}
         else throw std::runtime_error("Unknown option: "+key);
     }
-    if(command=="generate")d=generate(r);
+    if(command=="generate")d=generate(r,{},[](int candidate,const std::string& message){std::cerr<<"candidate="<<candidate<<' '<<message<<'\n';});
     std::string json=reportJson(d);double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();json.pop_back();json+=",\"generationSeconds\":"+std::to_string(seconds)+"}";
     if(!jsonPath.empty())write(jsonPath,json+"\n");if(!tracePath.empty()&&!d.track.spans.empty())trace(d,tracePath);
     if(!planPath.empty())write(planPath,d.planningDiagnostics.empty()?"null\n":d.planningDiagnostics+"\n");

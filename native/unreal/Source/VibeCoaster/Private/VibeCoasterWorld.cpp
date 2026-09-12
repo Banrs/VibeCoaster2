@@ -18,6 +18,7 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformTime.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -25,6 +26,7 @@
 
 namespace
 {
+DEFINE_LOG_CATEGORY_STATIC(LogCoasterGeneration, Log, All);
 enum class EWork { Generate, Load, Save };
 struct FJobState { bool IsSave = false; std::atomic<bool> Cancel{false}; std::atomic<int32> Candidate{0}; std::atomic<int32> Stage{0}; };
 struct FJobRequest
@@ -217,8 +219,19 @@ void AVibeCoasterWorld::StartQueuedJob()
     Runtime->Running = true;
     Runtime->Future = Async(EAsyncExecution::ThreadPool, [Work, State]() -> FJobResult
     {
+        const double Started = FPlatformTime::Seconds();
         FJobResult Result; Result.Revision = Work.Revision; Result.WasSave = Work.Kind == EWork::Save;
         const coaster::Cancel Cancelled = [State] { return State->Cancel.load(); };
+        if (Work.Kind == EWork::Generate)
+        {
+            const auto& R = Work.Request;
+            UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu version=%s seed=%llu terrain=%s preset=%s maxCandidates=%d step=%.17g"),
+                Work.Revision, UTF8_TO_TCHAR(coaster::generatorVersion), R.seed, UTF8_TO_TCHAR(R.terrain.name().c_str()),
+                R.targets.requireIntensity ? TEXT("all-records") : TEXT("physics-proof"), R.maxCandidates, R.simulationStep);
+            UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu targets: heightMeters=%.17g speedMps=%.17g inversionHeightMeters=%.17g launchSeconds=%.17g referenceExposure=%.17g referenceId=%s"),
+                Work.Revision, R.targets.height, R.targets.speed, R.targets.inversionHeight, R.targets.launchSeconds,
+                R.targets.referenceExposure, UTF8_TO_TCHAR(R.targets.referenceId.c_str()));
+        }
         try
         {
             std::string Error;
@@ -242,7 +255,24 @@ void AVibeCoasterWorld::StartQueuedJob()
                 if (!coaster::loadDesign(Path, *Design, Error, Cancelled))
                 { Result.Message = TEXT("Load rejected; active ride retained: ") + FString(UTF8_TO_TCHAR(Error.c_str())); return Result; }
             }
-            else *Design = coaster::generate(Work.Request, Cancelled, [State](int N, const std::string&) { State->Candidate.store(N); });
+            else
+            {
+                *Design = coaster::generate(Work.Request, Cancelled, [State, Revision = Work.Revision, Started](int N, const std::string& Message)
+                {
+                    State->Candidate.store(N);
+                    UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu candidate=%d elapsedSeconds=%.3f %s"),
+                        Revision, N, FPlatformTime::Seconds() - Started, UTF8_TO_TCHAR(Message.c_str()));
+                });
+                const FString ReportPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectLogDir() / TEXT("LastGeneration.json"));
+                IFileManager::Get().MakeDirectory(*FPaths::GetPath(ReportPath), true);
+                const std::string Json = coaster::reportJson(*Design);
+                const bool Written = FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(Json.c_str())), *ReportPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+                UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu finished: accepted=%d cancelled=%d candidate=%d elapsedSeconds=%.3f errors=%llu report=%s"),
+                    Work.Revision, Design->accepted() ? 1 : 0, Cancelled() || Design->simulation.cancelled ? 1 : 0,
+                    Design->candidate, FPlatformTime::Seconds() - Started,
+                    static_cast<uint64>(Design->report.errors.size() + Design->simulation.report.errors.size()), *ReportPath);
+                if (!Written) UE_LOG(LogCoasterGeneration, Warning, TEXT("request=%llu could not write generation report: %s"), Work.Revision, *ReportPath);
+            }
             if (Cancelled()) return Result;
             if (!Design->accepted()) { Result.Message = Failure(*Design); return Result; }
             if (Design->simulation.frames.empty()) { Result.Message = TEXT("Accepted design has no trace; no ride committed."); return Result; }
@@ -254,6 +284,8 @@ void AVibeCoasterWorld::StartQueuedJob()
         }
         catch (const std::exception& Error) { Result.Message = TEXT("Request failed; active ride retained: ") + FString(UTF8_TO_TCHAR(Error.what())); }
         catch (...) { Result.Message = TEXT("Request failed with an unknown native error; active ride retained."); }
+        if (!Result.Message.IsEmpty()) UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu elapsedSeconds=%.3f %s"),
+            Work.Revision, FPlatformTime::Seconds() - Started, *Result.Message);
         return Result;
     });
 }
