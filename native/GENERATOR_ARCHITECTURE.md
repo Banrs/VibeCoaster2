@@ -1,8 +1,8 @@
 # v083 generator architecture
 
-The itinerary rewrite is implemented and under validation. It has not been promoted or merged. [V083_PROGRESS.md](V083_PROGRESS.md) records the current gates; [VALIDATION.md](VALIDATION.md) distinguishes snapshots. The earlier proposal is preserved in `artifacts/flow-intent-v083-20260910/integration-20260911/generator-architecture-before-41.md`.
+The itinerary rewrite gives generation, terrain placement and hardware one source-based flow. [V083_PROGRESS.md](V083_PROGRESS.md) records verification; [VALIDATION.md](VALIDATION.md) distinguishes snapshots and promotion evidence. The earlier proposal is preserved in `artifacts/flow-intent-v083-20260910/integration-20260911/generator-architecture-before-41.md`.
 
-Current implementation is source59, stopped at the user's requested [handoff](NEXT_CHAT.md). The source48 control remains preserved as `3b63f16`, with green three-platform CI. The user's Falcon's Flight comparison demonstrated long unpowered approaches and unused level motor reservations. The replacement gives route sizing, terrain transport and hardware one inlet-based actual work interval, ranks energy-consistent orders by actual length, and optimises the terrain-measured footprint. Physically necessary straight length remains allowed; the attempted heading-only closure was rejected and preserved. [Current qualification](V083_INTEGRATION.md) distinguishes tested controls from the remaining final-source gates.
+The continuation starts from the preserved source59 [handoff](NEXT_CHAT.md). The user's Falcon's Flight comparison demonstrated long unpowered approaches and unused level motor reservations. The replacement gives route sizing, terrain transport and hardware one inlet-based actual work interval, ranks energy-consistent orders by actual length, and optimises the terrain-measured footprint. Physically necessary straight length remains allowed; the attempted heading-only closure was rejected and preserved. [Current qualification](V083_INTEGRATION.md) distinguishes tested controls from the remaining final-source gates.
 
 ## Governing instruction, verbatim
 
@@ -50,7 +50,7 @@ The generation-only sidecar's `sourceSpeedMps` is the finite-train energy refere
 
 Loop and Immelmann authoring first tests the preferred pulse with the selected train and existing force evaluator. If its duration exposure fails, bounded scalar interval solving selects an interior constructive pulse that satisfies the allowed inlet-speed interval. Indiscriminately lowering a peak can worsen its duration violation. This selection precedes circuit placement and adds no complete-ride attempts. An infeasible physical source family rejects the request.
 
-The private source simulation entry point shares the complete ride's integrator and force histories. Public APIs, CLI arguments, saves and exact-version checks remain unchanged. Final whole-ride simulation remains decisive.
+The private source simulation entry point shares the complete ride's integrator and force histories. Public headers, CLI arguments, saves and exact-version checks remain unchanged from source59. Earlier approved experimental FVD authoring interfaces differ from main's older implementation. Final whole-ride simulation remains decisive.
 
 ### Route and terrain
 
@@ -62,7 +62,11 @@ Closing the route changes its passive lengths. Before source intent is frozen, t
 
 Placement queries terrain height and slope in its transformed frame. Its bounded site set is ranked by the sampled footprint. Source heights, station allowance, energy recovery and crossing separation must be feasible at the same site. A terrain floor above a source allowance is physical infeasibility, not malformed solver input.
 
+Route distances, authored derivatives, passive transports and motion bounds are constructed once per placed build before trying sites. Terrain floors, station queries and world-coordinate crossings remain site-dependent. This removes repeated calculations without sharing mutable constraints across feedback builds.
+
 The first terrain/train assessment supplies actual rises, occupied speeds and exposure to size the final footprint. Later feedback holds that footprint fixed while resolving heights and installed hardware. Moving every crossing during every correction would change the coupled problem rather than converge it.
+
+Turn capacity covers both the measured speed and the source's required exit speed. An underperforming motor in the first replay cannot justify a turn that would fail after the motor reaches its unchanged target. The terrain solve still limits passive turn energy, and actual force acceptance remains independent.
 
 A site selection is a preference under the current physical constraints. The joint height solve tests the previous site first, continuing it when feasible and considering the existing alternatives when it cannot fit. A cached site cannot veto resized geometry, and a heuristic score cannot unnecessarily displace a feasible placement while feedback settles. The higher-target twelve-car and canyon42 regressions cover both sides of this ownership boundary without changing the station allowance, source targets or rebuild budget.
 
@@ -84,9 +88,13 @@ The later booster nominal rating is 0.8g within selected limits. Sizing uses the
 
 After the first measured footprint sizing, coupled feedback uses one midpoint update. Source phases, occupied turn speeds, link speeds and motor inlets must agree within 0.5 m/s, with at most eight geometry builds. A partial trace can correct a measured motor inlet in that budget; an unchanged stalled ride does not retry.
 
+Passive terrain correction compares the required and observed energy at both boundaries of that section. With drag retention `a`, the local residual is `(requiredExit² - observedExit²) - a * (requiredEntry² - observedEntry²)`. This subtracts energy error propagated from the upstream source, whose motor already owns its correction. Independent spatial RK4 tests cover low and high upstream energies, six- and twelve-car trains, and lossy and lossless transport. The transformed hills37 request reproduces the previous double correction and undersized-turn failure.
+
 Final bank smoothing is retained. Foundation width follows terrain slope, anchoring/steel clearance and the existing depth limit. If another branch blocks a tower, an additional outreach direction follows that actual obstruction within existing offsets. It does not exempt the collision or increase placement limits.
 
 The per-support member budget is derived from the existing 600 m tower family and 16 m tiers: at most 620 members. This removes the conflicting independent 512 cap while retaining all constructed steel, geometric dimensions and the 60,000-member total bound. A saved twelve-car canyon regression verifies that the correction leaves its complete track unchanged.
+
+Unreal's reference-availability row and generation preflight use the core's `validateReference` contract. A scalar exposure and identifier alone cannot advertise processed benchmark availability. The existing input automation tests absent, scalar-only, malformed and structurally valid synthetic metadata, including preservation of physical targets when selecting proof mode.
 
 ## Validation and promotion
 

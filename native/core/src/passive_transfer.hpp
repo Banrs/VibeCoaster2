@@ -10,6 +10,16 @@ inline PathEnergyStep pathEnergyStep(double length,double heightChange,double ac
     const double x=2*drag*length,attenuation=std::exp(-x),weight=x>1e-10?-std::expm1(-x)/x:1-x*.5;
     return {attenuation,2*(acceleration*length-gravity*heightChange)*weight};
 }
+// Compare the local passive work at both observed boundaries. An upstream
+// source's energy error propagates through drag; correcting it again here
+// would give the motor and terrain two owners for the same missing energy.
+inline double passiveEnergyResidual(double length,const TrainConfig& train,
+    double plannedEntry,double actualEntry,double plannedExit,double actualExit){
+    const double retention=pathEnergyStep(length,0,0,
+        .5*train.airDensity*train.dragCdA/(train.cars*train.carMass)).attenuation;
+    return plannedExit*plannedExit-actualExit*actualExit-
+        retention*(plannedEntry*plannedEntry-actualEntry*actualEntry);
+}
 struct PassiveTransferEstimate { bool reached{}; double speed{}; };
 struct PassiveTransfer {
     // w_exit = retention*w_entry + offsetSpeedSquared, where w=v^2

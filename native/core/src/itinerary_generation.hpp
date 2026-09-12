@@ -225,6 +225,9 @@ inline Operation sourceMotor(const GenerationRequest& request,const RideSource& 
     return rideMotor(request,DriveKind::Boost,source.entrySpeed+.5,acceleration);
 }
 inline CircuitElement ridePort(const RideSource& source,double speed,double normalG){
+    // Size for both delivered and required source energy. A motor still being
+    // corrected cannot justify a tighter turn that fails once it meets intent.
+    speed=std::max(speed,source.exitSpeed);
     const auto& end=source.geometry.points.back();const double bank=std::acos(1/normalG);
     const double ramp=speed*std::max(1.875*bank/(80*pi/180),std::sqrt((10*std::sqrt(3.)/3)*bank/(150*pi/180)));
     return {end.frame.position,std::atan2(end.frame.tangent.y,end.frame.tangent.x),end.distance,
@@ -371,6 +374,83 @@ inline CircuitGeometry placeRide(const GenerationRequest& request,const RideRout
     std::vector<CircuitOccurrence> occurrences;
     for(auto id:route.order)occurrences.push_back({route.sources[id].geometry,rideInletHeight(request,route.sources[id])});
     auto local=composeCircuit(occurrences,route.layout,{},0,cancel);
+    // Distances, authored vertical derivatives and connecting motion bounds
+    // belong to the composed route. A site's horizontal rigid transform cannot
+    // change them; only terrain floors, station datum and world crossings vary.
+    const auto distance=circuitDistances(local.track);const size_t count=local.track.knots.size();
+    const size_t stationBegin=size_t(std::lower_bound(distance.begin(),distance.end(),local.track.length-100)-distance.begin());
+    const double half=(request.train.cars-1)*request.train.spacing*.5;
+    std::vector<double> height(count);std::vector<BaselineJet> authoredJets(count);
+    for(size_t i=0;i<count;++i){const auto& knot=local.track.knots[i];
+        height[i]=knot.position.z;
+        const auto kinematics=sampleSpanKinematics(local.track,std::min(i,local.track.spans.size()-1),i+1==count?1:0);
+        authoredJets[i]={height[i],knot.tangent.z,knot.curvature.z,kinematics.curvatureS.z};
+    }
+    std::vector<BaselineTransport> transports;
+    std::vector<BaselineMotionBounds> motion;
+    for(size_t i=0;i<route.order.size();++i){if(route.sources[route.order[i]].role==RideRole::Climb)continue;
+        const auto next=route.order[(i+1)%route.order.size()];const auto& destination=route.sources[next];
+        const auto first=local.sources[i].last;auto last=i+1<route.order.size()?local.sources[i+1].first:stationBegin;
+        if(next&&!destination.airtime()&&destination.role!=RideRole::Dive)last=local.links[i].workFirst;
+        // Selected passive source intent is fixed before placement. This
+        // shared solve supplies its inlet energy; a first trace does not
+        // replace the source and change the entire route's footprint.
+        double minimum=0,maximum=INFINITY;
+        if(destination.airtime())
+            minimum=maximum=std::sqrt(destination.entrySpeed*destination.entrySpeed+feedback.passiveEnergyCorrection[next]);
+        // Recover surplus incoming kinetic energy as height before the
+        // motor. The same solve owns that height and its reachable inlet;
+        // a later rebuild does not switch this rail into a trim brake.
+        if((destination.forceSource()&&!destination.airtime())||destination.role==RideRole::Climb)maximum=destination.entrySpeed;
+        transports.push_back({first,next?last:local.links[i].workFirst,route.sources[route.order[i]].exitSpeed,minimum,maximum,
+            local.links[i].turn.last,route.sources[route.order[i]].exitSpeed});
+        const auto id=route.order[i];const double grade=2.;
+        const auto& turn=route.layout.turns[i];double planarRate=0;
+        if(turn.length>0)for(int part=0;part<64;++part){const double a=double(part)/64,b=double(part+1)/64,u=std::clamp(.5,a,b);
+            const double bank=turn.peakBank*smooth(b),qPrime=30*u*u*(1-u)*(1-u);
+            planarRate=std::max(planarRate,std::tan(bank)/std::cos(bank)*turn.peakBank*qPrime*feedback.turnSpeed[id]/turn.ramp);}
+        // A connecting profile can follow sustained nonpositive load.
+        // Its authoring rate must also allow the existing 0-to-2 g
+        // transition duration, before allocating the planar contribution.
+        const double onset=std::min(request.limits.maxJerkGps,2/zeroToTwoMinimumSeconds);
+        if(planarRate>=onset)throw TerrainTransferInfeasible("Authored turn leaves no vertical profile onset budget");
+        const double minimumSpeed=route.layout.minimumSpeeds[i];
+        const double turnDuration=std::max(feedback.linkDuration[id],(2*turn.ramp+turn.radius*std::abs(turn.angle))/minimumSpeed);
+        const auto turnEnd=local.links[i].turn.last;
+        const double recoveryDuration=(distance[last]-distance[turnEnd])/minimumSpeed;
+        // One resultant load budget owns turning and vertical recovery.
+        // Geometry coefficients are sampled authoring estimates; the QP
+        // bounds its complete C3 derivatives continuously, and canonical
+        // finite-train simulation remains the independent acceptance gate.
+        for(size_t span=first;span<last;++span){double horizontalMin=1,horizontalMax=0,metricRate=0,planar=0,seatRotation=0;
+            // A later descent's peak speed does not resize the earlier
+            // planar turn. Each phase uses its own finite-train exposure.
+            const double speed=span<turnEnd?feedback.turnSpeed[id]:feedback.linkSpeed[id];
+            const double verticalRate=onset-(span<turnEnd?planarRate:0);
+            const double duration=span<turnEnd?turnDuration:recoveryDuration;
+            const double positive=std::min(request.limits.maxVerticalG,historicalForceLimit(ForceAxis::Vertical,true,duration));
+            for(double parameter:{0.,.5,1.}){const auto k=sampleSpanKinematics(local.track,span,parameter);const auto t=k.sample.tangent,c=k.sample.curvature;
+                const double h=std::hypot(t.x,t.y);horizontalMin=std::min(horizontalMin,h);horizontalMax=std::max(horizontalMax,h);
+                metricRate=std::max(metricRate,std::abs((t.x*c.x+t.y*c.y)/(h*h)));
+                planar=std::max(planar,speed*speed*std::abs(cross(t,c).z)/(gravity*h*h*h));
+                seatRotation=std::max(seatRotation,request.train.seatHeight*speed*speed*dot(k.upS,k.upS)/gravity);
+            }
+            if(planar>=positive)throw TerrainTransferInfeasible("Planar curve exhausts the complete connecting-profile force budget");
+            const double negative=std::min(-request.limits.minVerticalG,historicalForceLimit(ForceAxis::Vertical,false,duration))-seatRotation;
+            if(negative<=0)throw TerrainTransferInfeasible("Frame rotation exhausts the negative rider-force budget");
+            const double verticalCapacity=std::sqrt(positive*positive-planar*planar);
+            const double upper=(verticalCapacity-1)*gravity/(speed*speed);
+            // The positive resultant budget bounds both signs of its
+            // vertical component. Negative rider load additionally bounds
+            // that component; horizontal turning is not negative load.
+            const double lower=(-std::min(negative,verticalCapacity)-1/std::hypot(1.,grade/horizontalMin))*gravity/(speed*speed);
+            // q_horizontal=(z_ss-(h_s/h)*z_s)/h^2. Reserving the full
+            // bounded metric term keeps these rows in authored arc units.
+            motion.push_back({span,span+1,grade,lower*horizontalMin*horizontalMin+metricRate*grade,
+                upper*std::pow(upper>=0?horizontalMin:horizontalMax,2)-metricRate*grade,
+                verticalRate*gravity/(speed*speed*speed)});
+        }
+    }
     struct Site {Vec3 origin;double heading,score;int id;};std::vector<Site> sites;
     const auto& terrain=request.terrain;
     // Query the landscape in its own transformed frame. No terrain-family
@@ -393,15 +473,11 @@ inline CircuitGeometry placeRide(const GenerationRequest& request,const RideRout
         auto result=local;auto& track=result.track;
         for(auto& knot:track.knots){knot.position=site.origin+sourceYaw(knot.position,site.heading);
             knot.tangent=sourceYaw(knot.tangent,site.heading);knot.curvature=sourceYaw(knot.curvature,site.heading);knot.up=sourceYaw(knot.up,site.heading);}
-        // Rigid placement leaves canonical station distances unchanged.
-        const auto distance=circuitDistances(track);const size_t count=track.knots.size();
-        std::vector<double> floor(count),target(count),height(count);std::vector<BaselineJet> authoredJets(count);
+        std::vector<double> floor(count),target(count);
         for(size_t i=0;i<count;++i){const auto& knot=track.knots[i];const auto up=rotate(knot.up,knot.tangent,knot.bank);
             const TrackSample frame{knot.position,knot.tangent,knot.curvature,up,cross(knot.tangent,up),knot.element};
-            height[i]=knot.position.z;floor[i]=terrainEnvelopeDatum(terrain,request.limits,frame,knot.element==Element::Turn);
+            floor[i]=terrainEnvelopeDatum(terrain,request.limits,frame,knot.element==Element::Turn);
             target[i]=terrain.height(knot.position.x,knot.position.y)+request.limits.minClearance+4;
-            const auto kinematics=sampleSpanKinematics(local.track,std::min(i,local.track.spans.size()-1),i+1==count?1:0);
-            authoredJets[i]={height[i],knot.tangent.z,knot.curvature.z,kinematics.curvatureS.z};
         }
         for(size_t occurrence=0;occurrence<route.order.size();++occurrence){const auto role=route.sources[route.order[occurrence]].role;
             if(role!=RideRole::TallHill&&role!=RideRole::Immelmann)continue;
@@ -409,9 +485,7 @@ inline CircuitGeometry placeRide(const GenerationRequest& request,const RideRout
             for(size_t i=interval.first;i<=interval.last;++i)if((role==RideRole::TallHill||track.knots[i].up.z<-.5)&&height[i]>maximum){maximum=height[i];apex=i;}
             const auto p=track.knots[apex].position;floor[apex]=std::max(floor[apex],terrain.height(p.x,p.y)+(role==RideRole::TallHill?request.targets.height:request.targets.inversionHeight)+4-height[apex]);
         }
-        const size_t stationBegin=size_t(std::lower_bound(distance.begin(),distance.end(),track.length-100)-distance.begin());
         double stationGround=INFINITY;
-        const double half=(request.train.cars-1)*request.train.spacing*.5;
         for(double along=-half-30;along<=half+50;along+=2)for(double side:{-8.,8.}){
             const auto p=site.origin+sourceYaw({along,side,0},site.heading);stationGround=std::min(stationGround,terrain.height(p.x,p.y));}
         std::vector<BaselineAnchor> anchors;
@@ -436,71 +510,6 @@ inline CircuitGeometry placeRide(const GenerationRequest& request,const RideRout
                 if(std::abs(determinant)<1e-8)continue;const double u=cross(c-a,e).z/determinant,v=cross(c-a,b).z/determinant;
                 if(u<0||u>1||v<0||v>1)continue;
                 crossings.push_back({i,j,u,v,9,true});
-            }
-        }
-        std::vector<BaselineTransport> transports;
-        std::vector<BaselineMotionBounds> motion;
-        for(size_t i=0;i<route.order.size();++i){if(route.sources[route.order[i]].role==RideRole::Climb)continue;
-            const auto next=route.order[(i+1)%route.order.size()];const auto& destination=route.sources[next];
-            const auto first=result.sources[i].last;auto last=i+1<route.order.size()?result.sources[i+1].first:stationBegin;
-            if(next&&!destination.airtime()&&destination.role!=RideRole::Dive)last=result.links[i].workFirst;
-            // Selected passive source intent is fixed before placement. This
-            // shared solve supplies its inlet energy; a first trace does not
-            // replace the source and change the entire route's footprint.
-            double minimum=0,maximum=INFINITY;
-            if(destination.airtime())
-                minimum=maximum=std::sqrt(destination.entrySpeed*destination.entrySpeed+feedback.passiveEnergyCorrection[next]);
-            // Recover surplus incoming kinetic energy as height before the
-            // motor. The same solve owns that height and its reachable inlet;
-            // a later rebuild does not switch this rail into a trim brake.
-            if((destination.forceSource()&&!destination.airtime())||destination.role==RideRole::Climb)maximum=destination.entrySpeed;
-            transports.push_back({first,next?last:result.links[i].workFirst,route.sources[route.order[i]].exitSpeed,minimum,maximum,
-                result.links[i].turn.last,route.sources[route.order[i]].exitSpeed});
-            const auto id=route.order[i];const double grade=2.;
-            const auto& turn=route.layout.turns[i];double planarRate=0;
-            if(turn.length>0)for(int part=0;part<64;++part){const double a=double(part)/64,b=double(part+1)/64,u=std::clamp(.5,a,b);
-                const double bank=turn.peakBank*smooth(b),qPrime=30*u*u*(1-u)*(1-u);
-                planarRate=std::max(planarRate,std::tan(bank)/std::cos(bank)*turn.peakBank*qPrime*feedback.turnSpeed[id]/turn.ramp);}
-            // A connecting profile can follow sustained nonpositive load.
-            // Its authoring rate must also allow the existing 0-to-2 g
-            // transition duration, before allocating the planar contribution.
-            const double onset=std::min(request.limits.maxJerkGps,2/zeroToTwoMinimumSeconds);
-            if(planarRate>=onset)throw TerrainTransferInfeasible("Authored turn leaves no vertical profile onset budget");
-            const double minimumSpeed=route.layout.minimumSpeeds[i];
-            const double turnDuration=std::max(feedback.linkDuration[id],(2*turn.ramp+turn.radius*std::abs(turn.angle))/minimumSpeed);
-            const auto turnEnd=result.links[i].turn.last;
-            const double recoveryDuration=(distance[last]-distance[turnEnd])/minimumSpeed;
-            // One resultant load budget owns turning and vertical recovery.
-            // Geometry coefficients are sampled authoring estimates; the QP
-            // bounds its complete C3 derivatives continuously, and canonical
-            // finite-train simulation remains the independent acceptance gate.
-            for(size_t span=first;span<last;++span){double horizontalMin=1,horizontalMax=0,metricRate=0,planar=0,seatRotation=0;
-                // A later descent's peak speed does not resize the earlier
-                // planar turn. Each phase uses its own finite-train exposure.
-                const double speed=span<turnEnd?feedback.turnSpeed[id]:feedback.linkSpeed[id];
-                const double verticalRate=onset-(span<turnEnd?planarRate:0);
-                const double duration=span<turnEnd?turnDuration:recoveryDuration;
-                const double positive=std::min(request.limits.maxVerticalG,historicalForceLimit(ForceAxis::Vertical,true,duration));
-                for(double parameter:{0.,.5,1.}){const auto k=sampleSpanKinematics(local.track,span,parameter);const auto t=k.sample.tangent,c=k.sample.curvature;
-                    const double h=std::hypot(t.x,t.y);horizontalMin=std::min(horizontalMin,h);horizontalMax=std::max(horizontalMax,h);
-                    metricRate=std::max(metricRate,std::abs((t.x*c.x+t.y*c.y)/(h*h)));
-                    planar=std::max(planar,speed*speed*std::abs(cross(t,c).z)/(gravity*h*h*h));
-                    seatRotation=std::max(seatRotation,request.train.seatHeight*speed*speed*dot(k.upS,k.upS)/gravity);
-                }
-                if(planar>=positive)throw TerrainTransferInfeasible("Planar curve exhausts the complete connecting-profile force budget");
-                const double negative=std::min(-request.limits.minVerticalG,historicalForceLimit(ForceAxis::Vertical,false,duration))-seatRotation;
-                if(negative<=0)throw TerrainTransferInfeasible("Frame rotation exhausts the negative rider-force budget");
-                const double verticalCapacity=std::sqrt(positive*positive-planar*planar);
-                const double upper=(verticalCapacity-1)*gravity/(speed*speed);
-                // The positive resultant budget bounds both signs of its
-                // vertical component. Negative rider load additionally bounds
-                // that component; horizontal turning is not negative load.
-                const double lower=(-std::min(negative,verticalCapacity)-1/std::hypot(1.,grade/horizontalMin))*gravity/(speed*speed);
-                // q_horizontal=(z_ss-(h_s/h)*z_s)/h^2. Reserving the full
-                // bounded metric term keeps these rows in authored arc units.
-                motion.push_back({span,span+1,grade,lower*horizontalMin*horizontalMin+metricRate*grade,
-                    upper*std::pow(upper>=0?horizontalMin:horizontalMax,2)-metricRate*grade,
-                    verticalRate*gravity/(speed*speed*speed)});
             }
         }
         try{

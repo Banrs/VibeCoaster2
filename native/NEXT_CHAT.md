@@ -1,73 +1,45 @@
-# Start here: v083 checkpoint
+# Source64 integration record
 
-Work stopped at the user's request on 12 September 2026. This is a tested development checkpoint, **not a completed integration or release**. Resume only in the next session.
+**Every required local gate passes on source64.** Read [qualification](V083_INTEGRATION.md), [progress](V083_PROGRESS.md), and the [promotion record](artifacts/flow-intent-v083-20260910/integration-20260911/promotion-64/) for the integration/main commit status. `complete.json` is written only after final integration CI, merge and main CI succeed; GitHub checks remain authoritative.
 
-- Repository: `D:\Coding\Codex\Vibecoasterjs`
-- Branch: `codex/flow-v083-checkpoint`; the latest commit is the handoff checkpoint.
-- Current source/build snapshot: **source59**, `validation-speed-59`.
-- Identity: **0.8.3-flow.1 / COASTER5**. Main has not been merged.
-- Read [AGENTS.md](../AGENTS.md), then [architecture](GENERATOR_ARCHITECTURE.md) and [current qualification](V083_INTEGRATION.md). [Progress](V083_PROGRESS.md) is the short checklist.
-- The [handoff directory](artifacts/flow-intent-v083-20260910/integration-20260911/handoff-20260912-source59/) contains source/binary/save hashes, the checkpoint receipt and the preserved pre-cleanup documents.
+- Repository: `D:\Coding\Codex\Vibecoasterjs`; integration branch: `codex/flow-v083-checkpoint`.
+- Frozen final source/build: `native/artifacts/flow-intent-v083-20260910/integration-20260911/qualification-64/`.
+- Identity: **0.8.3-flow.1 / COASTER5**. Public headers, CLI and test registration remain unchanged from source59. Earlier experimental FVD interfaces differ from historical main.
+- Read [AGENTS.md](../AGENTS.md) and [architecture](GENERATOR_ARCHITECTURE.md). Normal independent subagent use is authorized.
 
-## What is implemented
+## Verified behavior
 
-One source itinerary supplies routing, terrain placement and emission. Rigid source heights, C3 connectors, station datum, motor work and crossing separation share the terrain solve. Actual inlet-based booster sizing replaces unused zero-speed reservations; complete closed-route energy feasibility precedes order selection. Ordinary boosters retain their nominal 0.8g rating within existing force/power limits.
+One source itinerary owns routing, terrain placement and hardware. The fixed progression remains **cliff ascent → summit turns → dive → fastest launch → giant camelback**; other sources use physically feasible positions around it. Passive feedback corrects local work without counting upstream motor error twice. Turn capacity covers required and observed source speed. Site-independent placement calculations are shared within each build. UE reference availability uses the core validator; the obsolete post-generation missing-reference branch is removed.
 
-Only **cliff ascent → summit turns → dive → fastest launch → giant camelback** has fixed order. The loop, Immelmann and supporting airtime are placed around that block by physical feasibility. The same supported climb/dive applies on flat ground. No seed-specific generator branch is allowed.
+Source64 passes all **36 CTest suites**, **44 unchanged requests**, the **eight required saved-ride/organic audits**, Python/portable-wrapper checks and **ten real UE contracts**. Each ride accepts candidate zero and exactly replays with independent **960/1920 Hz** audits. Hills2 retains its explicit private crossover and full clearance. All eight saves match source63 byte-for-byte.
 
-The dedicated hills2 fixture requests a crossover through private `detail::generateRide(request, true)`; ordinary public generation may be uncrossed. Its independent audit requires a transverse crossing of nonlocal canonical branches and full clearance. This is an explicit fixture brief, not a hidden seed rule.
+The consolidated verifier checks raw results, requests, copied executables, 168 maintained inputs, 65 binaries, external UE compiler dependencies and the control comparison. Twenty-five runs retain the rejected historical control; all 40 matched positive motors keep their force/power ratings. Motor/quiet-tail/duration measurements are descriptive.
 
-Source57 removes repeated airtime construction by reusing successful results for the exact chain/speed within one route solve. No order is omitted, speed rounded or global cache introduced. CMake now exposes focused component/organic checks. CI runs components before integration and stops scheduling after a failure. Portable builds compile the core once.
+Graphify **0.9.51** is registered with eight references. The code-only index covers 125 files, including C++ headers/implementations. Five representative relationships were source-verified; three declaration-header parser limitations remain documented. The graph guides inspection and does not prove correctness.
 
-The latest support corrections:
-- Continuous steel terrain bounds separate horizontal travel from vertical extent. This fixes false footing failures without changing geometry/clearance tolerances.
-- The existing 600 m tower family can emit 620 members, contradicting the old independent 512 cap. Construction and the per-support resource bound now share the 600 m/16 m tier dimensions. The total 60,000-member budget and all physical limits remain unchanged.
+## Evidence
 
-## Exact stopping point
-
-Source59 builds all 28 portable executables in 128.05 seconds. Its focused support suite passes **30,259 checks**.
-
-The previously failing **canyon0 / 12-car** request now accepts candidate zero, saves, exactly replays and passes the independent 960/1920 Hz audit. Duration: 165.30520833371247 s. All **4,969 canonical knots are text-identical** to the rejected witness: the resource correction did not change its track.
-
-Save SHA256: `a74c395051f3eb3692eea1f4afc34b84dc40b51d8c8a34f2d67d17bf27183b4b`.
-
-Full source59 qualification has **not** run. Do not treat earlier green builds as qualifying it.
-
-## Resume in this order
-
-1. Inspect `git status`, the latest checkpoint commit and its GitHub CI. Preserve unrelated art. Do not merge this checkpoint.
-2. Use focused checks for any failure; the current support reproducer takes seconds. Complete the final native/CLI suite after affected checks pass. CMake has 36 registered tests; use `-L component` before `-L integration`, two workers and `--stop-on-failure`.
-3. Run the complete **44 predeclared requests** on final source in fresh evidence. Source57 stopped after 11 completed cases: 10 passed, canyon0/12 failed the resource cap. Two active cases were interrupted. Source59 fixes that failure but does not yet qualify the full matrix.
-4. Generate and independently save/replay/audit **flat5, flat7, flat42, hills2, hills9, canyon1, canyon24, canyon42** on final source. All require candidate zero, selected targets and 960/1920 Hz agreement. Hills2 uses the explicit internal crossover driver. Retain organic crests, variation, terrain adaptation and <35% straight-flat share.
-5. Complete Python tooling, portable wrapper checks and relevant real UE contracts on final code/saves. Compare motor lengths/speeds, quiet tails and duration with preserved controls. Update qualification with actual hashes/results.
-6. Review the final diff, commit/push coherent changes and obtain green final-commit Windows/Linux/macOS CI. **Only then merge to main and verify main CI.** Any unresolved required failure blocks merge.
-
-Do not restart architecture experiments or blindly replay the earlier prototype generators. The retained source59 snapshot is the starting point. The supplied Falcon angle scale is inaccurate; its shape is qualitative evidence, not a new grade or quiet-time threshold.
-
-## Where things are
+Paths below are under `native/artifacts/flow-intent-v083-20260910/integration-20260911/`.
 
 | Purpose | Location |
 |---|---|
-| Production C++ | `native/core/src`, `native/core/include` |
-| Permanent tests | `native/core/tests` |
-| Unreal integration | `native/unreal/Source` |
-| Build/test instructions | [tools/BUILDING.md](tools/BUILDING.md) |
-| Current frozen source and portable binaries | [validation-speed-59](artifacts/flow-intent-v083-20260910/integration-20260911/validation-speed-59/) |
-| Fixed failure, accepted save and exact knot parity | [support-budget-59-case5](artifacts/flow-intent-v083-20260910/integration-20260911/support-budget-59-case5/) |
-| Fast rejected-track witness and explanation | [support-diagnosis-58/README.md](artifacts/flow-intent-v083-20260910/integration-20260911/support-diagnosis-58/README.md) |
-| Eight accepted source57 controls | [itinerary-final-57](artifacts/flow-intent-v083-20260910/integration-20260911/itinerary-final-57/) |
-| Stopped source57 matrix | [architecture-matrix-57/interruption.json](artifacts/flow-intent-v083-20260910/integration-20260911/architecture-matrix-57/interruption.json) |
-| Predeclared matrix definition | [architecture-matrix.md](artifacts/flow-intent-v083-20260910/integration-20260911/architecture-matrix.md) |
+| Final source, builds and consolidated verification | `qualification-64/provenance.json`, `verified-local-gates.json` |
+| Eight saved rides and fixed request matrix | `itinerary-final-64/`, `architecture-matrix-64/` |
+| Every positive motor and preserved controls | `control-comparison-64/` |
+| Workflow, graph and independent review | `continuation-20260912/` |
+| Reproduced energy/turn failures | `case38-diagnosis-62/` |
+| Integration/main SHAs and CI receipts | `promotion-64/` |
+| Historical source59 checkpoint | `handoff-20260912-source59/` |
 
-The existing evidence drivers are `run_panel_57.py` and `matrix-runner-57/run.py` under that integration evidence directory. Both accept a frozen native source/build path; use a fresh output name. The panel also needs the evidence build containing `crossover_fixture.exe` and `replay_organic.exe`. The matrix retains all 44 definitions and two workers.
+## Continuing safely
 
-## Practical constraints
+1. Inspect the working tree, promotion receipts and GitHub checks. Preserve unrelated art and frozen evidence. If promotion is unfinished, finish final-commit three-platform CI before merging, then verify main CI.
+2. Any subsequent source correction needs a rebuilt, consistently hashed qualification. Retain all 36 suites, all 44 unchanged requests, the required eight rides, ten UE contracts and independent audits. Never substitute historical passes or seeds.
+3. Preserve selected targets, physical limits, eight whole-ride builds, 0.5 m/s feedback and exact-version saves. The existing panel/matrix drivers accept frozen source/build paths and require fresh output names.
+4. Follow the user's next scope. Packaging, benchmark qualification, POV review, FPS/load measurement and Mac/Metal runtime verification are outside this milestone.
 
-- Follow AGENTS.md's **Think Before Coding / Simplicity First** verbatim. Resolve shared constraints; do not tune seeds, add compensating retries or weaken physical acceptance.
-- Keep eight whole-ride builds, 0.5 m/s feedback, force/power limits, exact-version saves and mandatory rates. Use Codex's edit-file tool.
-- Work alone. The requested logic/skeptic, simplicity and performance audits are complete or stopped; their reports remain preserved. Do not restart agents or poll them.
-- Preserve failed/frozen evidence and `native/unreal/Content/Art/V072/Conventional1/`. Some evidence UE `Content` folders are junctions to real content. Do not recursively move/delete them.
-- Installed tools: Zig `native/.tools/zig-x86_64-windows-0.14.1/zig.exe`; CMake/CTest `native/.tools/cmake-package/cmake/data/bin/`; UE Python `D:/Games/Epic Games/UE_5.8/Engine/Binaries/ThirdParty/Python3/Win64/python.exe`. Use `-B`; plotting packages are in `native/.tools/python311`.
-- VS CMake configuration uses `Visual Studio 17 2022`, x64, `v143,version=14.38`, instance `D:/Toolchains/VS2022`, SDK `10.0.22621.0`. Installed toolchains may need sandbox escalation.
-- A preserved invalid internal Codex git ref can break automatic maintenance. Use command-local `git -c maintenance.auto=false`. If fetch needs repair, the established non-destructive command uses `-c transfer.hideRefs=refs/codex -c fetch.negotiationAlgorithm=noop fetch --refetch --no-auto-maintenance` with explicit main/checkpoint refs.
-- Packaging, benchmark qualification, POV review, measured FPS/load benchmarking and Mac/Metal runtime verification remain outside this milestone.
+Preserve `native/unreal/Content/Art/V072/Conventional1/`. Evidence UE `Content` directories can be junctions to real content; do not recursively move/delete them.
+
+Tool paths and focused/full commands are in [BUILDING.md](tools/BUILDING.md). VS uses `Visual Studio 17 2022`, x64, `v143,version=14.38`, instance `D:/Toolchains/VS2022`, SDK `10.0.22621.0`. Use UE Python with `-B`; plotting dependencies are in `native/.tools/python311`.
+
+Preserve the invalid internal Codex ref. Use command-local `git -c maintenance.auto=false`; if needed, the established fetch workaround adds `-c transfer.hideRefs=refs/codex -c fetch.negotiationAlgorithm=noop fetch --refetch --no-auto-maintenance` with explicit refs.

@@ -264,9 +264,15 @@ static void placementFeedback(){
     high.targets.requireIntensity=false;high.targets.height=250;high.targets.speed=85;high.maxCandidates=1;
     GenerationRequest canyon;canyon.seed=42;canyon.terrain.kind=TerrainKind::Canyon;
     canyon.targets.requireIntensity=false;canyon.maxCandidates=1;
+    GenerationRequest translated;translated.seed=37;translated.train.cars=6;
+    translated.terrain=Terrain::seeded(TerrainKind::Hills,translated.seed);
+    translated.terrain.offsetX=1300;translated.terrain.offsetY=-700;translated.terrain.headingRadians=.61;
+    translated.targets.requireIntensity=false;translated.maxCandidates=1;
     // Resizing must allow a new feasible site for the higher-target train,
     // while numerical feedback retains the canyon's already feasible site.
-    for(const auto& req:{high,canyon}){const auto d=generate(req);
+    // The transformed hills request exposed double-counted upstream energy
+    // during the first measured footprint rebuild.
+    for(const auto& req:{high,canyon,translated}){const auto d=generate(req);
         if(!d.accepted())std::cerr<<reportJson(d)<<'\n';
         check(d.accepted()&&d.candidate==0,"Placement continuation and reselection both pass complete physical acceptance on candidate zero");
         check(d.simulation.metrics.maxGroundHeight>=req.targets.height&&d.simulation.metrics.maxSpeed>=req.targets.speed,

@@ -148,7 +148,12 @@ Design detail::generateRide(const GenerationRequest& input,bool requireCrossing,
                         energyHistory<<",\"sourceEntryMps\":"<<source.entrySpeed<<",\"actualEntryMps\":"<<entry<<",\"sourceExitMps\":"<<source.exitSpeed<<",\"actualExitMps\":"<<exit;
                         if(source.forceSource()){
                             energyResidual=std::max(energyResidual,std::abs(entry-source.entrySpeed));
-                            if(source.airtime())next.passiveEnergyCorrection[id]+=source.entrySpeed*source.entrySpeed-entry*entry;
+                            if(source.airtime()){
+                                const auto& upstream=build.route.sources[build.route.order[occurrence-1]];
+                                const double upstreamEnd=distance[build.geometry.sources[occurrence-1].last];
+                                next.passiveEnergyCorrection[id]+=detail::passiveEnergyResidual(begin-upstreamEnd,req.train,
+                                    upstream.exitSpeed,replayValueAt(frames,upstreamEnd),source.entrySpeed,entry);
+                            }
                             for(const auto& phase:source.phases)
                                 energyResidual=std::max(energyResidual,std::abs(replayValueAt(frames,begin+phase.distance)-phase.speed));
                         }else if(id!=0)energyResidual=std::max(energyResidual,std::abs(entry-feedback.sourceEntry[id]));
@@ -264,9 +269,6 @@ Design detail::generateRide(const GenerationRequest& input,bool requireCrossing,
             bool intensityOnly=d.simulation.completed&&d.simulation.report.valid()&&d.report.errors.size()==1&&d.report.errors.front().code=="INTENSITY_TARGET";
             if(intensityOnly)return withHistory(std::move(d),"best-physically-valid-intensity-shortfall");
             last=std::move(d);
-            // Missing reference data cannot be repaired by searching other seeds.
-            bool onlyMissing=last.simulation.completed&&last.simulation.report.valid()&&last.report.errors.size()==1&&last.report.errors.front().code=="REFERENCE_UNAVAILABLE";
-            if(onlyMissing)return withHistory(std::move(last),"reference-unavailable");
         }catch(const std::exception& e){
             if(std::string(e.what()).rfind("SOURCE_FAMILY:",0)==0){remember(nullptr,i,"SOURCE_FAMILY");last.report.fail("SOURCE_FAMILY",e.what());return withHistory(std::move(last),"unsupported-source-family");}
             if(std::string(e.what())=="CANCELLED"||(cancel&&cancel())){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}

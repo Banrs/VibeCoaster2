@@ -4,6 +4,8 @@
 #include "Misc/ScopeExit.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
+#include "../../../../core/tests/reference_fixture.hpp"
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterSeedInputContract, "VibeCoaster.SeedInputContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
 {
@@ -58,6 +60,33 @@ bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
     TestEqual(TEXT("Reference guard retains the entered seed"), Controller->Settings.seed, uint64(123));
     TestEqual(TEXT("Missing-reference guard remains explicit"), Controller->InputError,
         FString(TEXT("ALL RECORDS unavailable: the measured I305/Pantherian force benchmark is missing.\nThis is not a failed seed search. PHYSICS-PROOF can test the other selected targets.")));
+
+    // Metadata fixtures exercise input eligibility only; no synthetic reference
+    // is installed as a production benchmark and this controller has no ride.
+    coaster::Targets Scalar;
+    Scalar.referenceExposure = 11; Scalar.referenceId = "SYNTHETIC scalar, not I305";
+    auto Malformed = syntheticReference(); Malformed.reference.median += 1;
+    for (const auto& Rejected : {coaster::Targets{}, Scalar, Malformed})
+    {
+        Controller->Settings.targets = Rejected;
+        Controller->RequestGeneration();
+        TestFalse(TEXT("Ineligible reference is blocked before starting generation"), Controller->InputError.IsEmpty());
+        TestTrue(TEXT("Ineligible reference is unavailable in the menu"), Controller->RowText(2).Contains(TEXT("UNAVAILABLE")));
+    }
+    Controller->Settings.targets = syntheticReference();
+    Controller->RequestGeneration();
+    TestTrue(TEXT("Structurally eligible processed reference passes input preflight"), Controller->InputError.IsEmpty());
+    TestFalse(TEXT("Structurally eligible reference is not shown as unavailable"), Controller->RowText(2).Contains(TEXT("UNAVAILABLE")));
+
+    Controller->Settings.targets = Scalar;
+    Controller->SelectedRow = 2; Controller->ChangeRow(1);
+    Controller->RequestGeneration();
+    TestTrue(TEXT("Explicit proof mode permits an unverified scalar diagnostic"), Controller->InputError.IsEmpty());
+    TestFalse(TEXT("Proof mode disables only the intensity comparison"), Controller->Settings.targets.requireIntensity);
+    TestTrue(TEXT("Proof mode preserves the scalar and selected physical targets"),
+        Controller->Settings.targets.referenceId == Scalar.referenceId && Controller->Settings.targets.referenceExposure == Scalar.referenceExposure &&
+        Controller->Settings.targets.height == Scalar.height && Controller->Settings.targets.speed == Scalar.speed &&
+        Controller->Settings.targets.inversionHeight == Scalar.inversionHeight && Controller->Settings.targets.launchSeconds == Scalar.launchSeconds);
     TestTrue(TEXT("Input validation never created a ride"), Controller->Ride == nullptr);
     return true;
 }

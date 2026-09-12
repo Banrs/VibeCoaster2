@@ -68,6 +68,24 @@ int main(){try{
             near(needed.speed,refined.speed,.0002,"Inverse required inlet converges under spatial step halving");
         }
     }
+    // Independently integrate two upstream energies through the same passive
+    // geometry. Neither a deficient nor an excessive inlet calls for terrain
+    // repair when the local transfer itself is unchanged.
+    for(int cars:{6,12})for(bool losses:{false,true}){
+        auto observedTrain=train;observedTrain.cars=cars;
+        if(!losses){observedTrain.dragCdA=0;observedTrain.rollingResistance=0;}
+        const auto planned=reference(hill,observedTrain,350,1050,55);
+        for(double inlet:{50.,60.}){
+            const auto actual=reference(hill,observedTrain,350,1050,inlet);
+            check(planned.reached&&actual.reached,"Both independent upstream energies traverse the passive hill");
+            near(detail::passiveEnergyResidual(700,observedTrain,55,inlet,planned.speed,actual.speed),0,1e-8,
+                "Upstream energy error cannot become a second terrain correction");
+            for(double localWork:{-30.,30.})
+                near(detail::passiveEnergyResidual(700,observedTrain,55,inlet,planned.speed,
+                    std::sqrt(actual.speed*actual.speed+localWork)),-localWork,1e-8,
+                    "Local work error retains its magnitude and sign independently of upstream energy");
+        }
+    }
     Operation launch{0,325,DriveKind::Launch,55,train.carMass*8,train.carMass*800,.5};launch.exitFadeMeters=20;
     auto sim=simulate(hill,{launch},train,1./960);check(sim.completed&&sim.report.valid(),"Independent launched then passive finite train completes");
     for(double finish:{600.,750.,1050.}){double initial=speedAt(sim,begin),observed=speedAt(sim,finish);

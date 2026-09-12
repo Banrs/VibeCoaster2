@@ -89,6 +89,12 @@ int main(int argc,char** argv){try{
     check(ride.size()==8,"Requested physical sources are present");
     for(const auto& source:ride){check(source.geometry.points.size()>4,"Each source has canonical geometry");
         check(source.exitSpeed>0,"Each source retains positive exit energy");}
+    for(const auto& source:ride){
+        const auto port=detail::ridePort(source,source.exitSpeed-3,4);
+        const double lateral=source.exitSpeed*source.exitSpeed/(gravity*port.turnRadius);
+        check(std::hypot(1.,lateral)<=4+1e-12,
+            "A deficient upstream motor cannot size a turn below the source's required exit-energy capacity");
+    }
     {
         auto crossingFeedback=feedback;
         const auto crossingRoute=detail::routeRide(request,ride,crossingFeedback,{},true);

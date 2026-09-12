@@ -84,7 +84,7 @@ void AVibeCoasterController::RequestGeneration()
     if (!ReadSeed(SeedText, Value))
     { InputError = TEXT("Seed is outside unsigned 64-bit range."); return; }
     Settings.seed = Value;
-    if (Settings.targets.requireIntensity && (!std::isfinite(Settings.targets.referenceExposure) || Settings.targets.referenceId.empty()))
+    if (Settings.targets.requireIntensity && !coaster::validateReference(Settings.targets).valid())
     {
         InputError = TEXT("ALL RECORDS unavailable: the measured I305/Pantherian force benchmark is missing.\nThis is not a failed seed search. PHYSICS-PROOF can test the other selected targets.");
         return;
@@ -145,7 +145,7 @@ FString AVibeCoasterController::RowText(int32 Row) const
     case 1: return TEXT("Terrain: ") + FString(UTF8_TO_TCHAR(Settings.terrain.name().c_str()));
     case 2:
         if (!Settings.targets.requireIntensity) return TEXT("Mode: PHYSICS-PROOF (intensity comparison OFF)");
-        return std::isfinite(Settings.targets.referenceExposure) && !Settings.targets.referenceId.empty()
+        return coaster::validateReference(Settings.targets).valid()
             ? TEXT("Mode: ALL RECORDS (configured reference)") : TEXT("Mode: ALL RECORDS — UNAVAILABLE: I305 benchmark missing");
     case 3: return FString::Printf(TEXT("Maximum track height above ground >= %.0f m"), Settings.targets.height);
     case 4: return FString::Printf(TEXT("Maximum speed >= %.1f km/h"), Settings.targets.speed * 3.6);
