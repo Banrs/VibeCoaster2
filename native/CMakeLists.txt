@@ -22,7 +22,7 @@ foreach(suite persistence_cancel baseline_jets flow_bridge connector_profile ref
   target_include_directories(${suite}_tests PRIVATE unreal/Source/VibeCoaster/Public)
   target_link_libraries(${suite}_tests PRIVATE coaster_core)
   if(suite STREQUAL "support")
-    add_test(NAME ${suite} COMMAND ${suite}_tests "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/fixtures/historical")
+    add_test(NAME ${suite} COMMAND ${suite}_tests "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/fixtures")
   else()
     add_test(NAME ${suite} COMMAND ${suite}_tests)
   endif()
@@ -32,7 +32,7 @@ set_tests_properties(persistence_cancel PROPERTIES TIMEOUT 600)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME cli_arguments COMMAND "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_cli_arguments.py" "$<TARGET_FILE:coaster_cli>")
+    "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/cli_arguments_test.py" "$<TARGET_FILE:coaster_cli>")
   set_tests_properties(cli_arguments PROPERTIES TIMEOUT 60)
 endif()
 
@@ -45,5 +45,5 @@ target_link_libraries(fvd_tests PRIVATE coaster_fvd)
 add_test(NAME fvd COMMAND fvd_tests)
 
 # Explicit matrix convergence tool, excluded from automatic CTest runs.
-add_executable(coaster_convergence tools/convergence/audit.cpp)
+add_executable(coaster_convergence core/src/convergence_main.cpp)
 target_link_libraries(coaster_convergence PRIVATE coaster_core)

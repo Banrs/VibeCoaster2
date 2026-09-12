@@ -1,17 +1,6 @@
-# Local agent configuration and workspaces
 .codex/
-.swarm/
-.worktrees/
-
-# Build outputs and frozen local evidence
-artifacts/
-.tools/
 build/
 build-cmake/
 __pycache__/
 *.pyc
-
-# User-supplied third-party recordings; retain locally, not in public commits.
 /RFDB Data/
-
-# Native-specific exceptions and UE output rules live under native/.

@@ -57,7 +57,7 @@ int main(){try{
     member.members[0].base=member.members[0].base+platform.up*20;member.members[0].top=member.members[0].top+platform.up*20;check(!supportStationCollision(member,d.station),"Distant canonical member stays clear");
     member.members.clear();member.base=platform.center-platform.forward;member.top=platform.center+platform.forward;check(supportStationCollision(member,d.station),"Legacy physical member uses same mutual clearance check");
     bool cancelled=false;try{supportStationCollision(member,d.station,[]{return true;});}catch(const std::exception& e){cancelled=std::string(e.what())=="CANCELLED";}check(cancelled,"Mutual clearance cancellation");check(code(validateDesignStructures(d,[]{return true;}),"CANCELLED"),"Design structure cancellation");
-    const auto fixtures=fs::path(__FILE__).parent_path()/"fixtures/historical/artifacts/integration-reference-audit";
+    const auto fixtures=fs::path(__FILE__).parent_path()/"fixtures";
     for(int i=1;i<=3;++i){const auto f=fixtures/("SYNTHETIC-legacy-v3-reference-"+std::to_string(i)+".coaster");const auto source=bytes(f);check(!source.empty(),"Historical fixture exists");Design retained=d;check(!loadDesign(f.string(),retained,error),"Old schema is explicitly unsupported");check(reportJson(retained)==reportJson(d),"Unsupported old schema leaves current accepted ride intact");check(bytes(f)==source,"Original historical fixture unchanged");}
     std::cout<<"PASS "<<checks<<" combined station/member completeness, mutual clearance, schema5 stripping, exact replay and unsupported-old-schema checks\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

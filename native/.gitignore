@@ -1,10 +1,6 @@
 /game/
 /checkpoints/
-/tools/__pycache__/
-/build/
 /build-cmake/
-/artifacts/
-/.tools/
 /unreal/Binaries/
 /unreal/Intermediate/
 /unreal/Saved/
@@ -16,5 +12,3 @@
 /structure-test-output/
 __pycache__/
 *.pyc
-!core/tests/fixtures/historical/artifacts/
-!core/tests/fixtures/historical/artifacts/**

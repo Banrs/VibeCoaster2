@@ -23,7 +23,7 @@ static void sameSupport(const Support& a,const Support& b){exact(a.base,b.base,"
 int main(int argc,char** argv){try{
     if(argc!=2)throw std::runtime_error("Pass native directory");fs::path native=fs::absolute(argv[1]),root=fs::path(__FILE__).parent_path().parent_path().parent_path(),out=root/"test-output";fs::create_directories(out);
     std::string error;int legacyCases=0,legacyRejected=0;
-    for(const auto& relative:{"artifacts/core-smoke-v021/0-hills.coaster","artifacts/core-smoke-v021/1-canyon.coaster","artifacts/core-smoke-v021/3-flat.coaster","artifacts/pacing-experiment/packed/42-hills.coaster","artifacts/pacing-experiment/packed/1-canyon.coaster","artifacts/pacing-experiment/packed/3-flat.coaster"}){
+    for(const auto& relative:{"legacy-v021-hills.coaster","legacy-v021-canyon.coaster","legacy-v021.coaster","pacing-hills.coaster","pacing-canyon.coaster","pacing-flat.coaster"}){
         fs::path path=native/relative;std::string original=bytes(path);check(!original.empty(),"Historical fixture exists");Design retained;retained.request.seed=98765;const auto before=reportJson(retained);
         check(!loadDesign(path.string(),retained,error),"Prior geometry schemas are explicitly unsupported");check(reportJson(retained)==before,"Unsupported load retains its destination");check(bytes(path)==original,"Historical fixture unchanged");++legacyRejected;
     }
