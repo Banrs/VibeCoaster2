@@ -111,7 +111,7 @@ void Track::rebuild(){
         for(int b=0;b<7;++b){for(int k=0;k<=b;++k)derivative[b]=derivative[b]+sp.c[k+1]*((k+1)*binomial(b,k)/binomial(6,k));double speed=dot(derivative[b],forward);
             if(!finite(derivative[b])||speed<h*.5||speed<norm(derivative[b])*.95)throw std::runtime_error("Canonical span is outside the supported tangent cone");minimumSpeed=std::min(minimumSpeed,speed);}
         for(int b=0;b<6;++b)secondBound=std::max(secondBound,6*norm(derivative[b+1]-derivative[b]));
-        if(secondBound/(minimumSpeed*minimumSpeed)>.2)throw std::runtime_error("Canonical span "+std::to_string(i)+" at "+std::to_string(length)+" m exceeds the interval curvature bound: "+std::to_string(secondBound/(minimumSpeed*minimumSpeed))+" /m");
+        if(secondBound/(minimumSpeed*minimumSpeed)>.2)throw std::runtime_error("Canonical span exceeds the interval curvature bound");
         sp.length=arc(sp,1);if(!std::isfinite(sp.length)||sp.length<1e-5||sp.length>200)throw std::runtime_error("Invalid canonical span length");length+=sp.length;spans.push_back(sp);
     }
     rebuildFramePolynomials(*this);
@@ -271,23 +271,25 @@ ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Li
     }
     // Central-chord model for nonadjacent branches;12 m wrap adjacency denotes
     // the same local rail. It is not an exemption for supports or station parts.
-    constexpr double step=2,cell=16;std::vector<Vec3> p;std::vector<double> ds;
+    constexpr double step=2,cell=16;std::vector<Vec3> p;std::vector<double> ds;std::vector<TrackSample> frames;
     int count=int(std::ceil(t.length/step));
     auto chordReport=chord_validation::validate(t,*sweep,count,cancel);if(!chordReport.valid())return chordReport;
     // True arc per chord <=2.1 m and continuous curvature <=.2 imply deviation
     // <=.2*2.1^2/8=.11025 m from the straight chord. Against the unchanged6 m
     // test, body radius4.2 + hardware radius.9 + two deviations leave>.679 m.
     p.reserve(count+1);
-    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;p.push_back(t.sample(s).position);ds.push_back(s);}
+    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=t.sample(s);p.push_back(q.position);ds.push_back(s);if(i<count)frames.push_back(q);
+        for(double side:{-1.5,1.5})for(double height:{-.8,2.4}){Vec3 e=q.position+q.right*side+q.up*height;double clear=e.z-terrain.height(e.x,e.y);if(clear<limits.minClearance+1.6&&r.errors.size()<10)r.fail("TERRAIN_CLEARANCE","Train envelope intersects terrain clearance",s,clear,limits.minClearance);}
+    }
     struct Key {int x,y,z;bool operator==(const Key&) const=default;};struct Hash{size_t operator()(Key k)const{return uint64_t(k.x)*73856093ull^uint64_t(k.y)*19349663ull^uint64_t(k.z)*83492791ull;}};
     std::unordered_map<Key,std::vector<int>,Hash> grid;
     for(int i=0;i<count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}Vec3 m=(p[i]+p[i+1])*.5;Key k{int(std::floor(m.x/cell)),int(std::floor(m.y/cell)),int(std::floor(m.z/cell))};
         for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)for(int z=-1;z<=1;++z){auto it=grid.find({k.x+x,k.y+y,k.z+z});if(it==grid.end())continue;for(int j:it->second){double sep=std::abs(ds[i]-ds[j]);sep=std::min(sep,t.length-sep);if(sep<12)continue;double d=segmentDistance(p[i],p[i+1],p[j],p[j+1]);if(d<6&&r.errors.size()<10)r.fail("TRACK_CLEARANCE","Nonadjacent central clearance chords are closer than the required distance",ds[i],d,6);}}
         grid[k].push_back(i);
     }
-    // One certificate covers every point of the full moving body, including
-    // longitudinal extent and configured headroom. Its unchanged .20 m motion
-    // reserve replaces the old sampled cross-section's extra 1.6 m margin.
+    // Retain the original 2 m corner gate and its +1.6 m reserve above. This
+    // additional certificate covers every point of the full moving body and
+    // compares its conservative lower bound to the configured minClearance.
     // Reuse this same prepared sweep for all support-member checks below.
     size_t terrainFrame=0;
     for(const auto& f:sweep->frames()){

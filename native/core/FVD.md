@@ -1,89 +1,86 @@
 # Force-vector section authoring
 
-The current four-corridor integration remains an uncommitted experiment under [architecture review](../GENERATOR_ARCHITECTURE.md). Its side-specific load and canyon placement choices below describe that experiment, not approved requirements for the general generator replacement.
+`designFvdSection()` in [fvd.hpp](include/coaster/fvd.hpp) authors an **open, gravity-only point-mass section** from force and roll profiles. It is compiled into `coaster_core`; the `coaster_fvd` CMake interface target remains for compatibility. Active 0.7 generation uses `designFvdAirtime()` to supply four seeded airtime source sections. This is hybrid circuit authoring, not an entire FVD circuit or an independently accepted `Design`.
 
-Working 0.8.3 uses independent force-authored source sections joined by terrain-aware routing. Source construction is an open point-mass problem; complete circuits use the separate finite-train simulator. Neither a reconstructed source nor a small speed residual is ride acceptance.
+## Coordinates, forces and equations
 
-## Intent, reference and acceptance
+All quantities use SI. The core has XY ground and Z up, with gravity vector `G = (0, 0, -g)` and `g = 9.80665 m/s²`. State consists of centerline position `r`, speed `v`, distance `s`, unit forward `T` and unit up `U`. The public right axis is **`R = cross(T, U)`**, matching `TrackSample.right`; for forward +X and up +Z, right is -Y.
 
-Reference telemetry and POVs inform each element's phases, proportions and pacing. They are not force targets to copy exactly or acceptance ceilings. Curvature acceleration is `v²/R`: changing speed by a factor `b` and local radius by `a` changes that contribution by `b²/a`. Gravity projected into the moving rider frame must then be added. This relation does not scale total rider g directly.
+`normalG` and `lateralG` are signed **non-gravitational specific-force components at the track centerline**, divided by `g`. They are not total world acceleration, finite-train forces, or forces at an elevated rider heartline. Positive normal points along `U`; positive lateral points along `R`. An upright horizontal 1g/0g section cancels gravity and stays straight. A 0g/0g section is ballistic.
 
-Choose load and phase duration together. Raising a positive peak with the same impulse duration can make a hill unnecessarily high or turn it beyond its intended pitch. Gravity similarity scales length by lambda and speed/time by sqrt(lambda), preserving dimensionless centerline force; explicitly modelled losses and finite rider offsets still require replay. The [phase atlas](../artifacts/flow-intent-v083-20260910/references/element-profiles/ATLAS.md) separates observed recordings, source intentions and generated outcomes.
-
-The stronger phases now use approximately +5g and −1.5g as nominal design intentions, allowing physically produced rider excursions within the separate acceptance profile. They are neither whole-ride averages nor clipping thresholds. The supporting sequence distinguishes strong airtime, mild floating relief, a still-positive crest and stronger closing airtime. Positive valleys remain connected. Actual FVD dimensions, phase duration, energy loss and finite-rider forces determine whether the intended sequence works; increasing an acceptance limit does not increase source forces.
-
-The selected signed-duration, onset, combined-load and reversal profile is assessed independently on all three riders at 960/1920 Hz. Its historical source and enhanced-restraint requirements are documented in [FORCE_GUIDELINES.md](FORCE_GUIDELINES.md). Source authoring bounds are not a standards certificate or a substitute for the complete physical restraint design.
-
-## Coordinates and equations
-
-SI coordinates use XY ground and Z up, gravity `G=(0,0,-g)`, `g=9.80665 m/s²`. State is centerline position `r`, speed `v`, distance `s`, forward `T`, up `U`, and integrated dissipated work per mass `W`. Public right is `R=cross(T,U)`, so +X forward/+Z up gives -Y right.
-
-Normal and lateral controls are signed non-gravitational centerline specific forces divided by g. They are neither world acceleration nor elevated finite-train rider loads. Upright horizontal 1g/0g stays straight; 0g/0g is ballistic.
+For controls `n = normalG`, `l = lateralG`, and `rho = rollRate`:
 
 ```text
-A       = G + g*normalG*U + g*lateralG*R
-loss    = rollingAcceleration + dragAccelerationCoefficient*v²
+A       = G + g*n*U + g*l*R
 dr/dt   = v*T
 ds/dt   = v
-dv/dt   = dot(G,T) - loss
-dW/dt   = loss*v
-dT/dt   = (A - T*dot(A,T))/v
-K       = (dT/dt)/v
-omega   = cross(T,dT/dt) + rollRate*T
-de/dt   = cross(omega,e), for each frame axis e
+dv/dt   = dot(G, T)
+dT/dt   = (A - T*dot(A, T)) / v
+K       = (dT/dt) / v
+omega   = cross(T, dT/dt) + rho*T
+de/dt   = cross(omega, e), for each frame axis e
 ```
 
-The generator passes `rollingAcceleration=g*rollingResistance` and `dragAccelerationCoefficient=0.5*airDensity*dragCdA/(cars*carMass)` to every active source. Defaults remain zero for analytic callers. There is no source propulsion. Audit `v²/2+g*r.z+W`; drag is not silently added to normal or lateral force.
+There is no longitudinal propulsion, drag or rolling-resistance term. Constant speed on a horizontal straight or horizontal banked circle follows naturally because gravity has zero tangent component; it is not an imposed constant-speed mode. With no losses, `v²/2 + g*r.z` is the conserved specific mechanical energy; the result reports its numerical drift.
 
-`rollRate` is physical twist about the tangent, not an Euler bank derivative. The full frame remains defined through vertical track and inversion.
+`rollRate` is physical **twist about the instantaneous tangent**, in radians/second. It is not the derivative of an Euler bank angle. For example, a constant-bank horizontal circle has vertical angular velocity and zero tangent twist. A complete frame is needed through vertical track and inversions; a world-up-derived Euler frame would be singular there.
 
-## Continuous controls, integration and independent replay
+Adjacent `FvdControl` values interpolate every channel with `S(u) = 10u³ - 15u⁴ + 6u⁵`, where `u` is normalized time between controls. Values and their first two time derivatives join continuously, with zero first/second derivatives at each control. Profiles are time-based only.
 
-Tabulated lateral and roll channels use quintic smoothstep. Normal controls additionally support an explicit first derivative, with zero second derivative at each knot. Quintic Hermite interpolation therefore preserves C2 force without requiring the load to stop changing at every authored control. The default zero slopes reproduce the original interpolation. Hill knees use nonzero slopes; an observation time does not become a new zero-slope control.
+## Integration, canonical fitting and replay
 
-One quaternion RK4 integrator in [fvd.cpp](src/fvd.cpp) handles every source family. Each control interval retains its boundaries and at least three steps. Integrated position, tangent, curvature and up become canonical knots; the existing septic centerline and quintic reference-frame fitting remain authoritative.
+[fvd.cpp](src/fvd.cpp) implements classical RK4 for position, speed, distance and a quaternion increment. The scalar-first quaternion obeys `dq/dt = (0, omega) * q / 2`. Stage rotations use normalized quaternions, while the quaternion derivative uses the raw stage value; the final increment is normalized. The same rotation acts on forward and up, preserving an SO(3) frame. Final orthonormalization removes rounding drift.
 
-A separate midpoint replay on the fitted track runs at twice the authoring resolution, integrating its own distance and speed. It measures `specific=v²*K+(dv/dt)*T-G`, projects that onto the canonical normal/lateral axes, and measures tangent twist from `v*dot(U_s,R)`. It does not substitute requested forces or stored speeds. Default residual tolerances are 0.02g, 0.02rad/s, 0.02m and 0.02m/s. These are sampled reconstruction checks, not continuous clearance or rider acceptance bounds.
+Each control interval is divided into uniform steps no larger than the requested `step`, with at least three steps per interval. Control boundaries are retained. Integrated position, tangent, curvature and physical up become canonical `Knot` values with bank zero. The existing `Track::rebuild()` fits its septic position and quintic reference-frame polynomials and enforces its unchanged canonical domain.
 
-Finite state, orthonormal frames, ordered controls, step/sample budgets and cancellation are checked. Unreachable energy, low speed, failed shooting and failed reconstruction remain explicit failures. No coordinate warp, speed clamp or endpoint reset repairs them.
+A separate **midpoint forward replay on that fitted Track** runs at twice the authoring time resolution. It integrates its own distance and gravity-coupled speed; target forces and stored speeds are not substituted for measured forces. At replay samples:
 
-## Source families
+```text
+dv/dt          = dot(G, Track.T)
+specific       = v²*Track.K + (dv/dt)*Track.T - G
+measuredNormal = dot(specific, Track.U) / g
+measuredLateral= dot(specific, Track.R) / g
+measuredTwist  = v * dot(Track.U_s, Track.R)
+```
 
-| Source | Solved behavior and composition contract |
-|---|---|
-| Tall hill | Requested height and force phases determine an independently solved ascent and descent with explicit losses. Actual span, exit speed and pose are outputs. The supported family is 220–280m and 75–90m/s when feasible. |
-| Airtime chain | Continuous pull-in, unloading, negative crest and recovery phases; descent closes the physical valley under rolling/drag losses. Connected hills share their real state. The requested port ramp fixes the final unload duration; the last valley hold is solved around it. An undersized final hill remains infeasible. |
-| Full loop | Jointly solve the complete pitch revolution, actual apex energy/height, and physical separation at the crossing arms. Twist produces lateral displacement through force; exit position and yaw remain outputs. No reflected descent or lateral geometric warp. |
-| Immelmann and pullout | One force/roll solve owns the true inverted apex, overlapping half-roll and lower upright valley. Position and heading remain free. The roll exit is an internal curved descending checkpoint, without a separate straight port or hold. |
+The assessment records maximum sampled normal/lateral/twist residuals and final distance/speed discrepancies. Defaults are 0.02g, 0.02 rad/s, 0.02m and 0.02m/s respectively. `integrated`, `canonicalBuilt`, and `assessment.performed/passed` distinguish the stages. A fit or residual failure remains a report error even when integration completed.
 
-The planar `designFvdPitch()` remains an independent half-loop API; production full loops use `designFvdLoop()` through the layout adapter. The governing pitch formulation follows [Nordmark and Essen, Eq. 8](https://arxiv.org/pdf/1007.1394).
+These are **sampled numerical diagnostics, not continuous bounds or an acceptance certificate**. They do not certify unsampled extrema, jerk, collision clearance or rider safety. `maxEnergyDrift` is diagnostic and is not itself a pass threshold.
 
-Full-loop `crossingOffset` means separation of the actual intersecting arms in the source's vertical projection. Endpoint offset alone is insufficient. Conservative canonical body sweeps must still clear; the failed endpoint-offset experiment is preserved in the [loop study](../artifacts/flow-intent-v083-20260910/fvd-chain/full-loop-study/REPORT.md).
+## Bounds and cancellation
 
-## Whole-route energy and terrain composition
+The API checks finite values, an orthonormal initial frame, strictly increasing controls beginning at zero, duration at most 60s, speeds in [0.5,250]m/s, position magnitude at most 100000m, curvature at most 0.15/m, forces within ±20g and twist within ±4pi rad/s. The integration step is in [0.0001,0.05]s; the sample budget is at most 50000. Angular increments above 0.1 rad are rejected with a request for smaller steps. Canonical fitting can impose additional restrictions.
 
-One ordered list of actual source occurrences owns identity, geometry, port poses and speed intent. All FVD sources retain their sampled canonical tangents, curvature and rider frames through the same rigid placement path. The connected cliff ascent → summit → dive → fastest launch → giant camelback progression is fixed; the loop, Immelmann and supporting airtime occupy physically compatible opening and return positions. [Architecture and scope](../GENERATOR_ARCHITECTURE.md).
+Low speed is rejected explicitly; it is never clamped into a plausible trajectory. Cancellation is polled during integration, knot preparation and replay. The existing bounded `Track::rebuild()` call has no cancellation callback. Always inspect cancellation and report errors, not just the presence of samples or a Track.
 
-Planar closure changes connecting lengths. Initial source selection therefore resolves airtime intent against the actual closed lengths before freezing those sources. Independent RK4 transport covers the previously conflicting order. The first real terrain/train assessment then sizes the final footprint; subsequent measured feedback holds that footprint and source geometry fixed.
+## Build, tests and evidence
 
-FVD point-model speed remains part of the source's authoring history. The circuit's phase-speed reference instead uses the selected train's mean potential and the existing passive loss model. This distinction matters at an apex occupied by a long train. Loop and Immelmann pulse selection also uses the shared finite-train simulator and unchanged force evaluator over the allowed inlet-speed interval; lowering a peak indiscriminately can worsen its duration exposure.
+From the repository root, with CMake and a C++20 toolchain available:
 
-One constrained solve owns rigid-source translations, C3 connecting profiles, level motor domains, the bounded shared station datum, passive train energy and nonlocal crossing separation. It uses the same proposed placement for all these constraints. A crossing's feasible over/under order is solved jointly; there is no post-placement lift, route-specific baseline repair or timing warp.
+```powershell
+cmake -S native -B native/build-fvd -G "Visual Studio 17 2022" -A x64
+cmake --build native/build-fvd --config Release --target fvd_tests
+ctest --test-dir native/build-fvd -C Release -R "^fvd$" --output-on-failure
+```
 
-Climb and dive retain their selected rise and certified active windows on every terrain. Placement queries the actual transformed terrain rather than reproducing a canyon formula or requiring named sources on its rim. Source and station height budgets remain hard constraints. Source-local and placed chord lengths may differ by roundoff; active-window validation retains the same1e-8m constraint tolerance and exact certified rise/window.
+The compatibility target inherits the core include path. The core uses `/W4 /fp:strict` on MSVC and `-Wall -Wextra -Wpedantic -ffp-contract=off` elsewhere. The optional Zig build and Unreal wrapper compile the same `fvd.cpp` source.
 
-Ordinary turns use their own maximum occupied train speed, complete roll ramps and the existing duration-dependent force budget. Short turns solve an attainable peak at that speed. Terrain bending shares the resultant budget, with a separate signed negative-load bound. Connector onset reserves the existing post-airtime transition requirement before allocating the remaining rate to vertical bending. These are authoring constraints; actual rider forces remain independently assessed.
+[fvd_tests.cpp](tests/fvd_tests.cpp) passed **4,232 checks** with MSVC 14.44 in the isolated [native test output directory](../unreal/Saved/NativeMSVC/20260907-082510-018/fvd-section/), then independently with MSVC 14.38 through CMake/CTest: [CTest summary](../unreal/Saved/CMakeIntegration/20260907-fvd/fvd-ctest.log), [complete test output](../unreal/Saved/CMakeIntegration/20260907-fvd/Testing/Temporary/LastTest.log). These local `Saved` paths are run evidence, not portable checked-in fixtures.
 
-Hills2 is the dedicated crossover fixture: canonical branches must be at least1,000m apart along the circuit and genuinely transverse, with complete clearance acceptance. Other fixtures retain crest roles, seeded variation, terrain adaptation and the under35% straight-flat-share regression. No source or turn parameter depends on a named seed.
+Tests cover analytic level 1g straight, constant-bank circular turn, ballistic 0g position/speed, orthonormality, actual step-halving convergence for varying force/roll profiles, invalid inputs, low-speed rejection, cancellation, and deliberate canonical residual rejection. They are analytic/synthetic software checks and make no real-ride reference claim.
 
-Ordinary boosters have a nominal0.8g rating within selected limits. Length uses the existing force/power/governor law, rolling and aerodynamic losses, complete-train occupancy, ramps and exit fades. Each motor receives its own measured inlet through the same feedback process. [Zamperla's published1.3g Lightning launch](https://www.zamperla.com/news/lightning-lsm-coaster-at-pne-vancouver) grounds the ordinary acceleration scale; that three-car installation does not qualify this game's high-speed power or train configuration.
+The first incorrect circular-test roll expectation is recorded in [first-test-output.txt](../unreal/Saved/NativeMSVC/20260907-082510-018/fvd-section/first-test-output.txt). A subsequent genuine midpoint-integrator force-fit failure is retained in [midpoint-residual-failure.txt](../unreal/Saved/NativeMSVC/20260907-082510-018/fvd-section/midpoint-residual-failure.txt). Quaternion RK4 resolved that discrepancy without relaxing the default residual tolerances.
 
-Physical rail lies inside its intended train-centre work domain by half a train at each end. The departure retains rail under the stopped train. Passive source observations occur after all cars clear preceding hardware. The height solve can recover surplus energy before a motor; downstream code does not repair it with a new trim or instantaneous speed assignment.
+## Production airtime adapter
 
-At most eight complete-ride geometry builds share one measured feedback path. Source inlet/apex/valley/exit speeds, maximum occupied turn/link speeds and each motor inlet must agree within0.5m/s. Coupled inputs use one midpoint update after the first terrain assessment. An unreached point supplies no observation; a partial trace can correct a measured motor inlet within the same budget. Cancellation remains explicit.
+`designFvdAirtime()` begins at a horizontal 1g port, smoothly raises normal force, transitions into the crest force, and solves the constant-crest hold until the track is horizontal at its apex. Mirroring the force history in time returns gravity-only integration to its entry elevation, heading and speed. Route planning uses its actual span; geometry is never stretched to fit a corridor. Guard straights and smooth force transitions provide level ports.
 
-Generation-only phase diagnostics distinguish finite-train `sourceSpeedMps` from FVD point-authoring `sourceSeconds` and centreline force history. Actual front/middle/rear forces and passage times are separately measured. Display traces are60Hz; acceptance uses full-rate simulation. Final geometry, terrain, vehicle/hardware envelopes, structures, selected targets, exact-version persistence and960/1920Hz convergence remain mandatory. Qualified reference evidence, packaged POV and performance review remain separate.
+Four sections use independently seeded push forces of 2.08 to 2.4g and crest forces of -0.22 to -0.08g. The first route uses 65m/s; one complete rebuild uses each section's actual finite-train entry speed from that replay. Each source-section replay must pass, and the route is solved again at the new dimensions. Final entry-speed residuals can remain after this single correction; it is not a converged whole-route FVD solve. Requested point forces are authoring inputs, not promised final rider-force traces. Final finite-train forces, drives, losses, rider offsets and all acceptance gates are evaluated on the joined circuit.
 
-## Verification
+Shared transition polynomials match sampled endpoint position/curvature jets and raw-up/bank derivatives, then undergo canonical resampling and compilation. The resulting endpoint jets are approximate; regression checks bound rider-force disturbance outside the join and require improvement with finer sampling. Major profile interiors and indexed motor zones remain, while passive connectors can carry the neighbouring curvature and banking.
 
-Build `coaster_core` and run the `fvd`, `layout_modules`, `force_envelope`, `passive_transfer`, `drive_profile`, `terrain_baseline`, `terrain_transfer`, `terrain_motion` and whole-circuit suites through CMake/CTest. FVD checks include analytic motion, independent energy/force reconstruction, actual step halving, C2 controls, reflection/similarity, physical crossing clearance, invalid inputs, cancellation and retained infeasible source cases. The baseline suite independently checks continuous bounds, station/source ownership, crossings, numerical rank, endpoint termination and derivative composition. Current evidence and limitations are in [VALIDATION.md](../VALIDATION.md).
+The adapter run passed 4,468 combined FVD checks with MSVC14.38 in `unreal/Saved/FvdIntegration/20260907-1/`, including independent energy, crest-force and level-port checks at three control settings. The first integrated flat42 circuit passed actual 960/1920Hz acceptance in `unreal/Saved/FoldedGenerator/20260907-3/`; packaged validation is separate.
+
+## Remaining full-circuit FVD work
+
+Full FVD generation still needs circuit closure and transition matching; force/power-limited drives and brakes with losses; finite-train speed/load coupling; rider offsets and their angular acceleration terms; and review of force/roll rates after canonical fitting. Every resulting full circuit must pass the existing geometry/structure clearance, finite-train simulation, actual step-halving convergence, target/reference, persistence and `Design::accepted()` gates described in [NUMERICS.md](NUMERICS.md). Section replay cannot bypass those requirements.

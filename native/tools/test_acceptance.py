@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acceptance as acc
 
 
-def convergence_obj(step=1/960):
+def convergence_obj(step=0.01):
     names = ["maxSpeed", "minVerticalG", "maxVerticalG", "maxLateralG", "maxLongitudinalG", "exposure10Seconds", "maxVerticalRateGps"]
     for seat in ("front", "middle", "rear"):
         names.append(seat + ".exposure10Seconds")
@@ -26,12 +26,6 @@ def convergence_obj(step=1/960):
             for field in ("minG", "maxG", "meanG", "mean1sMin", "mean1sMax", "mean10sMin", "mean10sMax"):
                 names.append(seat + "." + axis + "." + field)
             if axis == "vertical": names.append(seat + "." + axis + ".maxRateGps")
-        for axis in ("vertical", "lateral", "longitudinal"):
-            for field in ("minimumG", "maximumG", "minimumOnsetGps", "maximumOnsetGps"):
-                names.append(seat + ".forceEnvelope." + axis + "." + field)
-        for field, count in (("directional", 6), ("paired", 3), ("horizontalReversal", 2), ("durationExtent", 2)):
-            names.extend(seat + ".forceEnvelope." + field + str(i) for i in range(count))
-        names.extend(seat + ".forceEnvelope." + field for field in ("reducedPositive", "zeroToTwo", "enhancedLongitudinalOnset"))
     return {"performed": True, "passed": True, "coarseStep": step, "fineStep": step / 2, "maxSpeedRelativeError": 0., "maxForceRelativeError": 0.,
             "metrics": [{"name": n, "coarse": 0., "fine": 0., "absoluteDifference": 0., "tolerance": .01 if n == "maxSpeed" else .02} for n in names]}
 
@@ -43,33 +37,17 @@ def fixture_report(obj):
         parts = row["name"].split(".")
         if len(parts) == 1:
             metrics["maxJerkGps" if parts[0] == "maxVerticalRateGps" else parts[0]] = row["coarse"]
-        elif parts[1] != "forceEnvelope":
+        else:
             seat = seats[("front", "middle", "rear").index(parts[0])]
             if len(parts) == 2: seat[parts[1]] = row["coarse"]
             else: seat["axes"][("vertical", "lateral", "longitudinal").index(parts[1])][parts[2]] = row["coarse"]
-    values = {row["name"]: row["coarse"] for row in obj["convergence"]["metrics"]}
-    envelope = []
-    for name in ("front", "middle", "rear"):
-        prefix = name + ".forceEnvelope."
-        seat = {"performed": True, "passed": True, "axes": [
-            {field: values.get(prefix + axis + "." + field, 0.)
-             for field in ("minimumG", "maximumG", "minimumOnsetGps", "maximumOnsetGps")}
-            for axis in ("vertical", "lateral", "longitudinal")]}
-        for field, report_field, count in (("directional", "directionalG", 6), ("paired", "pairedSquaredUtilization", 3),
-                                          ("horizontalReversal", "horizontalReversalG", 2), ("durationExtent", "durationExtentSeconds", 2)):
-            seat[report_field] = [{"utilization": values.get(prefix + field + str(i), 0.)} for i in range(count)]
-        for field, report_field in (("reducedPositive", "reducedPositiveG"), ("zeroToTwo", "zeroToTwoSeconds"),
-                                    ("enhancedLongitudinalOnset", "enhancedLongitudinalOnsetGps")):
-            seat[report_field] = {"utilization": values.get(prefix + field, 0.)}
-        envelope.append(seat)
-    obj["forceEnvelope"] = {"sampleRateHz": 960, "seats": envelope}
     obj["metrics"] = metrics; obj["seatStatistics"] = seats
     return obj
 
 
 def strict_obj(seed=1, terrain="flat", preset="physics-proof", accepted=True,
                codes=None, completed=True, cancelled=False,
-               schema=1, gen=acc.EXPECTED_GENERATOR_VERSION, intensity=None):
+               schema=1, gen="0.5.0-geometry.2", intensity=None):
     if intensity is None:
         intensity = (preset == "all-records")
     if codes is None:
@@ -88,12 +66,12 @@ def strict_obj(seed=1, terrain="flat", preset="physics-proof", accepted=True,
 
 def case(seed=1, terrain="flat", preset="physics-proof", idx=0, cid="case_0000"):
     return {"index": idx, "id": cid, "seed": seed, "preset": preset,
-            "terrain": terrain, "candidates": 2, "step": 1/960}
+            "terrain": terrain, "candidates": 2, "step": 0.01}
 
 
 class ManifestTests(unittest.TestCase):
     def test_default_1000_balance(self):
-        m = acc.build_manifest(1000, 8, 1 / 960)
+        m = acc.build_manifest(1000, 8, 1 / 240)
         self.assertEqual(len(m), 1000)
         self.assertEqual(sum(1 for c in m if c["preset"] == "physics-proof"), 500)
         self.assertEqual(sum(1 for c in m if c["preset"] == "all-records"), 500)
@@ -102,13 +80,8 @@ class ManifestTests(unittest.TestCase):
             self.assertIn(sum(1 for c in m if c["terrain"] == t), (333, 334))
 
     def test_deterministic(self):
-        self.assertEqual(acc.build_manifest(12, 8, 1/960),
-                         acc.build_manifest(12, 8, 1/960))
-
-    def test_unsupported_acceptance_rates_are_rejected(self):
-        for step in (1/100, 1/240, 1/1920, float("nan")):
-            with self.subTest(step=step), self.assertRaises(ValueError):
-                acc.build_manifest(2, 8, step)
+        self.assertEqual(acc.build_manifest(12, 8, 0.01),
+                         acc.build_manifest(12, 8, 0.01))
 
 
 class A1StrictContractTests(unittest.TestCase):
@@ -236,30 +209,60 @@ def _cmd_paths(cmd):
 
 
 def _write_fake_cli(path, validate_mode="ok"):
-    path.write_text(f'''import json, sys
-from pathlib import Path
-sys.path.insert(0, {str(Path(__file__).resolve().parent)!r})
-from test_acceptance import strict_obj, convergence_obj, fixture_report
-a = sys.argv
-def g(key): return a[a.index(key)+1]
-validating = a[1] == "validate"
-if validating:
-    parts = Path(a[2]).read_text().split()
-    seed, terrain, preset, step = int(parts[1]), parts[2], parts[3], float(parts[4])
-    accepted = {validate_mode != "reject"!r}
-    codes = [] if accepted else ["REPLAY_REJECTED"]
-else:
-    seed, terrain, preset, step = int(g("--seed")), g("--terrain"), g("--preset"), float(g("--step"))
-    accepted = seed % 2 == 0 and preset == "physics-proof"
-    codes = [] if accepted else ["REFERENCE_UNAVAILABLE" if preset == "all-records" else "STRICT_REF"]
-    Path(g("--trace")).write_text("{{}}")
-    if accepted:
-        Path(g("--out")).write_text("COASTER %d %s %s %.17g payload" % (seed, terrain, preset, step))
-report = strict_obj(seed=seed, terrain=terrain, preset=preset, accepted=accepted, codes=codes)
-report["convergence"] = convergence_obj(step)
-Path(g("--json")).write_text(json.dumps(fixture_report(report)))
-sys.exit(0 if accepted else 2)
-''', encoding="utf-8")
+    if validate_mode == "reject":
+        validate_block = (
+            "  jp.write_text(json.dumps({'schemaVersion':1,"
+            "'generatorVersion':'0.5.0-geometry.2','seed':seed,'terrain':terrain,"
+            "'preset':preset,'intensityRequired':inten,'accepted':False,"
+            "'completed':True,'cancelled':False,'candidate':0,'topology':'t',"
+            "'lengthMeters':1,'targets':{},'metrics':{},'convergence':convergence_obj(step),"
+            "'errors':[{'code':'REPLAY_REJECTED','message':'m','distance':0,"
+            "'actual':0,'limit':0}],'warnings':[]}))\n"
+            "  sys.exit(2)\n"
+        )
+    else:
+        validate_block = (
+            "  jp.write_text(json.dumps({'schemaVersion':1,"
+            "'generatorVersion':'0.5.0-geometry.2','seed':seed,'terrain':terrain,"
+            "'preset':preset,'intensityRequired':inten,'accepted':True,"
+            "'completed':True,'cancelled':False,'candidate':0,'topology':'t',"
+            "'lengthMeters':1,'targets':{},'metrics':{},'convergence':convergence_obj(step),'errors':[],"
+            "'warnings':[]}))\n"
+            "  sys.exit(0)\n"
+        )
+    script = (
+        "import json,sys\n"
+        "from pathlib import Path\n"
+        "a=sys.argv\n"
+        "def g(k):\n"
+        "  return a[a.index(k)+1] if k in a else None\n"
+        "if len(a)>1 and a[1]=='validate':\n"
+        "  f=Path(a[2]); jp=Path(g('--json'))\n"
+        "  txt=f.read_text() if f.exists() else ''\n"
+        "  parts=txt.split()\n"
+        "  seed=int(parts[1]) if len(parts)>=4 and parts[0]=='COASTER' else -1\n"
+        "  terrain=parts[2] if len(parts)>=4 else 'flat'\n"
+        "  preset=parts[3] if len(parts)>=4 else 'physics-proof'\n"
+        "  step=float(parts[4]) if len(parts)>=5 else .01\n"
+        "  inten=(preset=='all-records')\n"
+        + validate_block +
+        "seed=int(g('--seed')); terrain=g('--terrain'); preset=g('--preset')\n"
+        "jp=Path(g('--json')); tr=Path(g('--trace')); out=Path(g('--out'))\n"
+        "step=float(g('--step'))\n"
+        "inten=(preset=='all-records')\n"
+        "if seed%2==0 and not inten:\n"
+        "  jp.write_text(json.dumps({'schemaVersion':1,'generatorVersion':'0.5.0-geometry.2','seed':seed,'terrain':terrain,'preset':preset,'intensityRequired':inten,'accepted':True,'completed':True,'cancelled':False,'candidate':0,'topology':'t','lengthMeters':1,'targets':{},'metrics':{},'convergence':convergence_obj(step),'errors':[],'warnings':[]}))\n"
+        "  tr.write_text('{}'); out.write_text('COASTER %d %s %s %.17g payload'%(seed,terrain,preset,step))\n"
+        "  sys.exit(0)\n"
+        "else:\n"
+        "  code='REFERENCE_UNAVAILABLE' if preset=='all-records' else 'STRICT_REF'\n"
+        "  jp.write_text(json.dumps({'schemaVersion':1,'generatorVersion':'0.5.0-geometry.2','seed':seed,'terrain':terrain,'preset':preset,'intensityRequired':inten,'accepted':False,'completed':True,'cancelled':False,'candidate':0,'topology':'t','lengthMeters':1,'targets':{},'metrics':{},'convergence':convergence_obj(step),'errors':[{'code':code,'message':'m','distance':0,'actual':0,'limit':0}],'warnings':[]}))\n"
+        "  tr.write_text('{}')\n"
+        "  sys.exit(2)\n"
+    )
+    import inspect
+    script = script.replace("json.dumps({", "json.dumps(fixture_report({").replace("'warnings':[]}))", "'warnings':[]})))")
+    path.write_text(inspect.getsource(convergence_obj) + "\n" + inspect.getsource(fixture_report) + "\n" + script, encoding="utf-8")
 
 
 class A1ValidateTests(unittest.TestCase):
@@ -387,7 +390,7 @@ class A3ResumeTests(unittest.TestCase):
         c = case()
         bad = {"version": 2, "id": c["id"], "index": 0, "seed": 1,
                "preset": "physics-proof", "terrain": "flat", "candidates": 2,
-               "step": 1/960, "category": "accepted", "accepted": False,
+               "step": 0.01, "category": "accepted", "accepted": False,
                "errorCodes": [], "elapsed": -99, "returncode": 2,
                "timeout": False}
         import tempfile
@@ -402,7 +405,7 @@ class A3ResumeTests(unittest.TestCase):
         for elapsed in (float("nan"), float("inf"), -1.0):
             rec = {"version": 2, "id": c["id"], "index": 0, "seed": 1,
                    "preset": "physics-proof", "terrain": "flat",
-                   "candidates": 2, "step": 1/960, "category": "rejected",
+                   "candidates": 2, "step": 0.01, "category": "rejected",
                    "accepted": False, "errorCodes": ["X"], "elapsed": elapsed,
                    "returncode": 2, "timeout": False}
             with tempfile.TemporaryDirectory() as td:
@@ -415,7 +418,7 @@ class A3ResumeTests(unittest.TestCase):
             self.assertIsNone(acc.load_result_json(str(p), c))
             old = {"version": 1, "id": c["id"], "index": 0, "seed": 1,
                    "preset": "physics-proof", "terrain": "flat",
-                   "candidates": 2, "step": 1/960, "category": "accepted",
+                   "candidates": 2, "step": 0.01, "category": "accepted",
                    "accepted": True, "errorCodes": [], "elapsed": 1.0,
                    "returncode": 0, "timeout": False}
             p.write_text(json.dumps(old), encoding="utf-8")
@@ -433,7 +436,7 @@ class A3ResumeTests(unittest.TestCase):
             self.assertEqual(rec["category"], "accepted")
             exp = {"cliSha256": rec["cliSha256"], "timeout": rec["generationTimeout"],
                    "validateTimeout": rec["validateTimeout"],
-                   "reportSchemaVersion": 1, "generatorVersion": acc.EXPECTED_GENERATOR_VERSION,
+                   "reportSchemaVersion": 1, "generatorVersion": "0.5.0-geometry.2",
                    "validationPolicy": acc.VALIDATION_POLICY}
             c = case(seed=2, cid="case_0001", idx=1)
             self.assertTrue(acc.verify_resume_evidence(rec, c, str(out), exp))
@@ -449,7 +452,7 @@ class A3ResumeTests(unittest.TestCase):
             cli_file = Path(td) / "cli.exe"
             cli_file.write_bytes(b"v1")
             # Old manifest with different timeout and no sha binding.
-            old_cases = acc.build_manifest(2, 2, 1/960)
+            old_cases = acc.build_manifest(2, 2, 0.01)
             (out / "manifest.json").write_text(json.dumps(
                 {"version": 2, "count": 2, "candidates": 2, "step": 0.01,
                  "timeout": 9999, "validateTimeout": 9999,
@@ -491,7 +494,7 @@ class A3ResumeTests(unittest.TestCase):
             with mock.patch.object(subprocess, "run", side_effect=side_effect):
                 rc = acc.main(["--cli", str(cli_file), "--out-dir", str(out),
                                "--count", "2", "--timeout", "0.1",
-                               "--candidates", "2", "--step", str(1/960),
+                               "--candidates", "2", "--step", "0.01",
                                "--resume", "--samples", "2"])
             self.assertTrue(calls, "stale results must be rerun, not reused")
             # Two strict rejections: gates pass (no infra) but nothing fabricated.

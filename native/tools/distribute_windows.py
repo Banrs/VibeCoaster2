@@ -57,19 +57,17 @@ def distribute(package, output, version):
         shutil.copy2(repository / name, folder / name)
     (folder / 'Play VibeCoaster.cmd').write_bytes(
         b'@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
-        b'start "" "%~dp0VibeCoaster.exe" %*\r\n')
+        b'start "" "%~dp0VibeCoaster.exe" -windowed -ResX=1600 -ResY=900 -ExecCmds="t.MaxFPS 60"\r\n')
     (folder / 'README-FIRST.txt').write_text(f'''VibeCoaster {version} - Windows development preview
 
-Extract the entire ZIP before playing. Open Play VibeCoaster.cmd or
-VibeCoaster.exe. New profiles use the desktop's native resolution in a
-borderless window, with no frame-rate cap or VSync. Saved settings are retained;
-the launcher also forwards any command-line options you supply.
+Extract the entire ZIP before playing. Open Play VibeCoaster.cmd for a
+1600x900 window capped at 60fps, or VibeCoaster.exe for normal saved settings.
 Keep Engine and VibeCoaster folders beside the executable. Unreal Editor,
 Blender and a compiler are not needed to play.
 
 First ride:
 1. Use Up/Down to select Mode, then Left/Right to choose PHYSICS-PROOF.
-2. Select Canyon and seed 9 for the reviewed example.
+2. Select Canyon and seed 42 for the reviewed example.
 3. Press Enter to generate, then Space to ride. Tab shows/hides setup.
 4. During riding: 1/2/3 select front/middle/rear, M overview, R restart.
 5. F5 saves; F9 loads. C comparison; T telemetry. Alt+F4 quits.

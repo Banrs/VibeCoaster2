@@ -1,5 +1,4 @@
 #include "coaster/coaster.hpp"
-#include "coaster/force_envelope.hpp"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -29,35 +28,6 @@ bool supportedVersion(const std::string& version){return version==generatorVersi
 uint64_t checksum(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
 std::string quote(const std::string& s){std::ostringstream o;o<<'"';for(unsigned char c:s){switch(c){case '"':o<<"\\\"";break;case '\\':o<<"\\\\";break;case '\n':o<<"\\n";break;case '\r':o<<"\\r";break;case '\t':o<<"\\t";break;default:if(c<32)o<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<int(c)<<std::dec;else o<<c;}}o<<'"';return o.str();}
 void number(std::ostream& o,double x){if(std::isfinite(x))o<<x;else o<<"null";}
-void forceEnvelopeJson(std::ostream& o,const SimulationResult& simulation,double step){
-    o<<",\"forceEnvelope\":{\"profile\":"<<quote(forceEnvelopeProfile)
-     <<",\"modelRequirements\":"<<quote(forceEnvelopeModelRequirements)
-     <<",\"modelRequirementsStatus\":\"design requirements; restraint verification pending\""
-     <<",\"scope\":\"Historical force assessment; not complete F2291 certification\",\"sampleRateHz\":";number(o,1/step);
-    o<<",\"filter\":\"5 Hz fourth-order single-pass Butterworth, steady-state initialized\""
-     <<",\"onset\":\"Centered 100 ms least-squares slope on each filtered rider axis\""
-     <<",\"directionOrder\":[\"+z\",\"-z\",\"+y\",\"-y\",\"+x\",\"-x\"],\"pairOrder\":[\"zy\",\"zx\",\"yx\"],\"seatOrder\":[\"front\",\"middle\",\"rear\"],\"seats\":[";
-    auto value=[&](const ForceEnvelopeCase& c){
-        o<<"{\"utilization\":";number(o,c.utilization);o<<",\"actual\":";number(o,c.actual);o<<",\"limit\":";number(o,c.limit);
-        o<<",\"startSeconds\":";number(o,c.startSeconds);o<<",\"durationSeconds\":";number(o,c.durationSeconds);o<<'}';
-    };
-    auto cases=[&](const char* name,const auto& values){o<<','<<quote(name)<<":[";bool comma=false;for(const auto& c:values){if(comma)o<<',';comma=true;value(c);}o<<']';};
-    for(size_t seat=0;seat<simulation.forceEnvelope.size();++seat){
-        if(seat)o<<',';const auto& f=simulation.forceEnvelope[seat];
-        o<<"{\"performed\":"<<(f.performed?"true":"false")<<",\"passed\":"<<(f.performed&&!f.cancelled&&f.report.valid()?"true":"false")<<",\"axes\":[";
-        for(size_t axis=0;axis<3;++axis){if(axis)o<<',';const auto& a=f.axes[axis];
-            o<<"{\"minimumG\":";number(o,a.minimumG);o<<",\"maximumG\":";number(o,a.maximumG);
-            o<<",\"minimumOnsetGps\":";number(o,a.minimumOnsetGps);o<<",\"maximumOnsetGps\":";number(o,a.maximumOnsetGps);
-            o<<",\"minimumOnsetTimeSeconds\":";number(o,a.minimumOnsetTimeSeconds);o<<",\"maximumOnsetTimeSeconds\":";number(o,a.maximumOnsetTimeSeconds);o<<'}';
-        }
-        o<<']';cases("directionalG",f.directional);cases("pairedSquaredUtilization",f.paired);
-        cases("horizontalReversalG",f.horizontalReversal);cases("durationExtentSeconds",f.durationExtent);
-        o<<",\"reducedPositiveG\":";value(f.reducedPositive);o<<",\"zeroToTwoSeconds\":";value(f.zeroToTwo);
-        o<<",\"enhancedLongitudinalOnsetGps\":";value(f.enhancedLongitudinalOnset);
-        o<<",\"reducedPositiveFromSeconds\":";number(o,f.reducedPositiveFromSeconds);o<<'}';
-    }
-    o<<"]}";
-}
 void vec(std::ostream& o,Vec3 v){o<<v.x<<' '<<v.y<<' '<<v.z<<' ';}
 void vec(std::istream& i,Vec3& v){i>>v.x>>v.y>>v.z;}
 std::string extensionTail(const Design& d,Cancel cancel){
@@ -114,7 +84,6 @@ std::string reportJson(const Design& d){
     o<<",\"maxSpeedRelativeError\":";number(o,c.maxSpeedRelativeError);o<<",\"maxForceRelativeError\":";number(o,c.maxForceRelativeError);o<<",\"metrics\":[";
     bool convergenceComma=false;for(const auto& metric:c.metrics){if(convergenceComma)o<<',';convergenceComma=true;o<<"{\"name\":"<<quote(metric.name)<<",\"coarse\":";number(o,metric.coarse);o<<",\"fine\":";number(o,metric.fine);o<<",\"absoluteDifference\":";number(o,metric.absoluteDifference);o<<",\"tolerance\":";number(o,metric.tolerance);o<<'}';}o<<"]}";
     o<<",\"intensityComparison\":\"Maximum over physical front/middle/rear seats of the strongest ten-second integral of max(vertical_g,0); configured reference identity is external\"";
-    forceEnvelopeJson(o,d.simulation,d.request.simulationStep);
     auto object=[&](const char* name,const std::vector<std::pair<const char*,double>>& fields){o<<','<<quote(name)<<":{";bool first=true;for(auto [key,value]:fields){if(!first)o<<',';first=false;o<<quote(key)<<':';number(o,value);}o<<'}';};
     const auto& terrain=d.request.terrain;object("terrainProfile",{{"verticalScale",terrain.verticalScale},{"horizontalScale",terrain.horizontalScale},{"offsetXMeters",terrain.offsetX},{"offsetYMeters",terrain.offsetY},{"headingRadians",terrain.headingRadians},{"cliffHeightMeters",terrain.cliffHeight},{"cliffWidthMeters",terrain.cliffWidth},{"globalSlopeBound",terrain.slopeBound()}});
     const auto& l=d.request.limits;object("limits",{{"minVerticalG",l.minVerticalG},{"maxVerticalG",l.maxVerticalG},{"maxLateralG",l.maxLateralG},{"maxLongitudinalG",l.maxLongitudinalG},{"maxJerkGps",l.maxJerkGps},{"minClearance",l.minClearance},{"maxLateralRateGps",l.maxLateralRateGps},{"maxLongitudinalRateGps",l.maxLongitudinalRateGps}});

@@ -298,6 +298,7 @@ def figure_for_ride(trace: dict, source_path: Path, source_hash: str,
     the numeric series actually attached to the plan/elevation/3D artists,
     so tests can assert the axis mapping (plan=x/y, elevation=s/z)."""
     frames = trace["frames"]
+    geo = trace["geometry"]
     times = [float(fr["time"]) for fr in frames]
     speeds = [float(fr["speed"]) for fr in frames]
     seats_v = [[float(fr["seats"][s][0]) for fr in frames] for s in range(3)]
@@ -343,17 +344,12 @@ def figure_for_ride(trace: dict, source_path: Path, source_hash: str,
 
     # 3. 3D canonical path (x, y ground, z up), colored by element.
     ax = fig.add_subplot(grid[1, 0], projection="3d")
-    coordinates = {}
-    for e, x, y, z in zip(gelem, gx, gy, gz):
-        if e not in coordinates:
-            coordinates[e] = ([], [], [])
-        xs, ys, zs = coordinates[e]
-        xs.append(x)
-        ys.append(y)
-        zs.append(z)
+    elems = sorted(set(gelem))
     paths3d = []
-    for k, e in enumerate(sorted(coordinates)):
-        xs, ys, zs = coordinates[e]
+    for k, e in enumerate(elems):
+        xs = [gx[i] for i in range(len(geo)) if gelem[i] == e]
+        ys = [gy[i] for i in range(len(geo)) if gelem[i] == e]
+        zs = [gz[i] for i in range(len(geo)) if gelem[i] == e]
         ax.scatter(xs, ys, zs, s=6, color=f"C{k % 10}", label=f"elem {e}")
         paths3d.append({"element": e, "x": xs, "y": ys, "z": zs})
     ax.set_xlabel("x (m)")

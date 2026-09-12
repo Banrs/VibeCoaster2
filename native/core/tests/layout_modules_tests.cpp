@@ -1,5 +1,4 @@
 #include "coaster/layout_modules.hpp"
-#include "../src/source_geometry.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -8,9 +7,10 @@ int checks=0;
 void check(bool value,const char* message){++checks;if(!value)throw std::runtime_error(message);}
 void near(double value,double expected,double tolerance,const char* message){check(std::isfinite(value)&&std::abs(value-expected)<=tolerance,message);}
 void nearVector(Vec3 value,Vec3 expected,double tolerance,const char* message){near(norm(value-expected),0,tolerance,message);}
-void good(const EnergyLoopModule& module){
-    if(!module.report.valid())for(const auto& error:module.report.errors)std::cerr<<error.code<<": "<<error.message<<'\n';
-    check(module.geometryBuilt&&module.canonicalBuilt&&module.report.valid()&&module.assessment.passed,"Continuous energy-authored full loop builds and replays");
+void good(const ReversingModule& m){
+    for(const auto& e:m.report.errors)std::cerr<<e.code<<": "<<e.message<<'\n';
+    check(m.geometryBuilt&&m.canonicalBuilt&&!m.cancelled&&m.report.valid(),"Open module builds canonical geometry");
+    check(!m.track.closed,"Module never claims circuit closure");
 }
 void checkJoins(const Track& track){
     for(size_t i=1;i<track.spans.size();++i){
@@ -24,103 +24,111 @@ void checkJoins(const Track& track){
         nearVector(a.upSS,b.upSS,2e-8,"C2 frame join");
     }
 }
-void checkSourcePlacement(const Track& source,double landmark){
-    const detail::SourceGeometry geometry(source,Element::Inversion,{landmark});
-    const Vec3 origin{123,-456,37};
-    const auto yaw=[](Vec3 p){return Vec3{-p.y,p.x,p.z};};
-    bool found=false;Track placed;placed.closed=false;
-    for(size_t i=0;i<geometry.points.size();++i){
-        const auto& point=geometry.points[i];const auto frame=detail::placeSourceFrame(point.frame,origin,pi/2);
-        const auto actual=source.sample(point.distance);found|=point.distance==landmark;
-        nearVector(frame.position,origin+yaw(actual.position),1e-10,"Placed source uses actual canonical positions");
-        nearVector(frame.tangent,yaw(actual.tangent),1e-12,"Source placement preserves tangents");
-        nearVector(frame.curvature,yaw(actual.curvature),1e-12,"Source placement preserves curvature");
-        nearVector(frame.up,yaw(actual.up),1e-12,"Source placement preserves the physical force frame");
-        placed.knots.push_back({frame.position,frame.tangent,frame.curvature,frame.up,0,frame.element});
+void checkModule(const ReversingModuleRequest& request,const ReversingModule& m){
+    good(m);const bool imm=request.kind==ReversingModuleKind::Immelmann;double sign=imm?1:-1;
+    nearVector(m.exit.forward,request.entry.forward*(-1),1e-13,"True direction-reversing module exit");
+    nearVector(m.exit.up,request.entry.up,1e-13,"Half-roll returns exit to upright");
+    nearVector(m.exit.position,request.entry.position+request.entry.forward*(imm?-request.rollLength:request.rollLength)+request.entry.up*(sign*request.height),2e-10,"Exact endpoint pose includes height and longitudinal displacement");
+    check(imm?m.pitchEndIndex==m.rollBeginIndex:m.rollEndIndex==m.pitchBeginIndex,"Pitch and roll order matches the selected element");
+    auto pitchMid=m.track.knots[(m.pitchBeginIndex+m.pitchEndIndex)/2];
+    nearVector(pitchMid.tangent,request.entry.up*sign,2e-13,"Half-loop passes vertical with correct ascent/descent direction");
+    const auto& inverted=m.track.knots[imm?m.pitchEndIndex:m.pitchBeginIndex];
+    nearVector(inverted.up,request.entry.up*(-1),1e-13,"Pitch/roll junction is physically inverted");
+    if(imm)near(dot(inverted.position-request.entry.position,request.entry.up),request.height,2e-10,"Inverted apex reaches the requested local module height");
+    double rollAngleSign=dot(m.track.knots[(m.rollBeginIndex+m.rollEndIndex)/2].up,cross(m.track.knots[m.rollBeginIndex].tangent,m.track.knots[m.rollBeginIndex].up));
+    check(rollAngleSign*request.rollDirection>.99,"Roll handedness is explicit");
+    for(size_t index:{size_t(0),m.track.knots.size()-1}){
+        near(norm(m.track.knots[index].curvature),0,1e-14,"Zero curvature at open module ports");
     }
-    check(found,"Nonuniform physical landmark is retained exactly");placed.rebuild();checkJoins(placed);
-    near(placed.length,source.length,2e-5,"Placed source retains canonical arc length");
-    for(double s=1;s<source.length-1;s+=2.3){
-        const auto expected=source.sample(s),actual=placed.sample(s);
-        nearVector(actual.position,origin+yaw(expected.position),3e-5,"Resampled placement retains source interior");
-        nearVector(actual.curvature,yaw(expected.curvature),2e-5,"Resampled placement retains physical curvature between controls");
-        const auto originalForce=measureSeatForces(source,s,45,0,0),placedForce=measureSeatForces(placed,s,45,0,0);
-        near(placedForce.vertical,originalForce.vertical,.005,"Placed source preserves independent rider normal force");
-        near(placedForce.lateral,originalForce.lateral,.005,"Placed source preserves independent rider lateral force");
+    for(double distance:{0.,m.track.length}){
+        auto q=sampleKinematics(m.track,distance);
+        near(norm(q.curvatureS),0,1e-10,"Straight guards give zero curvature derivative at ports");
+        near(norm(q.upS),0,1e-10,"Zero first frame derivative at ports");
+        near(norm(q.upSS),0,1e-10,"Zero second frame derivative at ports");
     }
+    for(double s=0;s<=m.track.length;s+=.37){
+        auto q=m.track.sample(s);check(finite(q.position)&&finite(q.tangent)&&finite(q.up)&&finite(q.curvature),"Canonical sampled frame is finite");
+        near(norm(q.tangent),1,2e-12,"Unit canonical tangent");near(norm(q.up),1,2e-12,"Unit canonical up");near(dot(q.tangent,q.up),0,2e-12,"Orthonormal canonical frame");
+    }
+    checkJoins(m.track);
+    // The generator consumes AuthoredPoint up hints, so also check that path.
+    Track recompiled=compile(m.points,false);checkJoins(recompiled);
+    nearVector(recompiled.sample(0).up,request.entry.up,2e-9,"Up hints survive the generator-facing compile path");
+    nearVector(recompiled.sample(recompiled.length).up,request.entry.up,2e-9,"Exit up survives generator-facing compile");
 }
 }
 int main(){try{
-    const TrainConfig train;
-    for(double height:{55.,60.,68.}){
-        EnergyLoopModuleRequest loop;loop.height=height;loop.crossingOffset=0;
-        loop.rollingAcceleration=gravity*train.rollingResistance;
-        loop.dragAccelerationCoefficient=.5*train.airDensity*train.dragCdA/(train.cars*train.carMass);
-        auto full=buildEnergyLoopModule(loop);
-        good(full);checkJoins(full.track);
-        nearVector(full.exit.position,full.samples.back().position,0,"The module exposes its actual integrated endpoint");
-        nearVector(full.exit.forward,Vec3{1,0,0},1e-7,"Full pitch loop restores forward heading");
-        nearVector(full.exit.up,Vec3{0,0,1},1e-7,"Full pitch loop restores upright without frame roll");
-        const double apexDistance=full.apex.distance;auto q=full.track.sample(apexDistance);
-        near(q.position.z,height,1e-4,"Loop apex retains requested source height");
-        nearVector(q.up,Vec3{0,0,-1},1e-6,"Full loop crest is inverted");
-        auto force=measureSeatForces(full.track,apexDistance,full.apex.speed,0,0);
-        near(force.vertical,loop.apexNormalG,.003,"Full-loop apex preserves positive support instead of a flat hanging reset");
-        check(full.samples.back().speed<full.samples.front().speed-.1,"The module retains real depletion across the whole loop");
-        near(full.loopEntry.distance,loop.portLength,1e-5,"Entry guard length includes its real losses");
-        near(full.samples.back().distance-full.loopExit.distance,loop.portLength,1e-5,"Exit guard length includes its real losses");
-        loop.crossingOffset=18;auto offset=buildEnergyLoopModule(loop);
-        good(offset);checkJoins(offset.track);
-        nearVector(offset.crossingExit.position-offset.crossingEntry.position,{0,18,0},1e-5,"Actual low crossing arms retain the requested separation");
-        check(offset.exit.forward.y<-.3,"The laterally separated module retains its genuine changed exit heading");
-        for(size_t i=0;i<offset.samples.size();i+=127){const auto& s=offset.samples[i];const auto actual=offset.track.sample(s.distance);
-            nearVector(actual.position,s.position,1e-6,"The module preserves integrated canonical positions without post-warp");
-            nearVector(actual.tangent,s.forward,1e-7,"The module preserves integrated canonical tangents");
-            nearVector(actual.up,s.up,1e-7,"The module preserves the actual force frame");
-            nearVector(actual.curvature,s.curvature,1e-6,"The module preserves loss-aware source curvature");
+    ReversingModuleRequest request;
+    auto immelmann=buildReversingModule(request);checkModule(request,immelmann);
+    auto repeated=buildReversingModule(request);good(repeated);
+    check(repeated.points.size()==immelmann.points.size(),"Deterministic sample count");
+    for(size_t i=0;i<repeated.points.size();++i){nearVector(repeated.points[i].position,immelmann.points[i].position,0,"Deterministic geometry");nearVector(repeated.points[i].upHint,immelmann.points[i].upHint,0,"Deterministic orientation");}
+    request.kind=ReversingModuleKind::DiveLoop;request.rollDirection=-1;
+    auto dive=buildReversingModule(request);checkModule(request,dive);
+    // A connector is the caller's responsibility: laterally separating the
+    // reversed dive entry prevents coincident modules without hidden closure.
+    request.entry=immelmann.exit;request.entry.position=request.entry.position+cross(request.entry.forward,request.entry.up)*60;
+    auto paired=buildReversingModule(request);good(paired);
+    nearVector(paired.exit.forward,immelmann.entry.forward,1e-13,"Paired reversing modules restore the initial heading");
+    near(dot(paired.exit.position-immelmann.entry.position,immelmann.entry.up),0,1e-10,"Paired reversing modules restore height");
+    near(std::abs(dot(paired.entry.position-immelmann.exit.position,cross(request.entry.forward,request.entry.up))),60,1e-12,"Caller-provided lateral separation is retained");
+    request=ReversingModuleRequest{};request.entry.position={123,-456,37};double heading=.71;
+    request.entry.forward={std::cos(heading),std::sin(heading),0};request.height=128;request.rollLength=221;request.sampleSpacing=1.2;request.rollDirection=-1;
+    auto rotated=buildReversingModule(request);checkModule(request,rotated);
+    request.sampleSpacing=.6;auto refined=buildReversingModule(request);good(refined);
+    near(refined.pitchLength,rotated.pitchLength,0,"Requested geometry dimensions do not depend on tessellation");
+    nearVector(refined.exit.position,rotated.exit.position,2e-10,"Refining samples does not move endpoint ports");
+    near(refined.track.length,rotated.track.length,2e-4,"Canonical length converges under sample refinement");
+    // Pitch and roll progression are independent shape controls. Dimensions
+    // change the integrated geometry, with 1/scale curvature under uniform
+    // scaling; a named topology alone is not a force or record certificate.
+    for(double shape:{-.6,-.25,.3,.6}){
+        ReversingModuleRequest shaped;shaped.height=80+35*(shape+.6);shaped.rollLength=140+80*(shape+.6);
+        shaped.pitchShape=shape;shaped.rollShape=-shape;shaped.rollDirection=shape<0?-1:1;
+        shaped.kind=shape<0?ReversingModuleKind::DiveLoop:ReversingModuleKind::Immelmann;
+        auto m=buildReversingModule(shaped);checkModule(shaped,m);
+        check(m.sampledMaxCurvature>0&&std::isfinite(m.sampledMaxFrameTwistPerMeter),"Sampled curvature/twist diagnostics are finite");
+        std::cout<<"shape="<<shape<<" height="<<shaped.height<<" pitch_length="<<m.pitchLength<<" sampled_max_curvature="<<m.sampledMaxCurvature<<" equivalent_ascent_energy_speed_mps="<<std::sqrt(2*gravity*shaped.height)<<'\n';
+    }
+    ReversingModuleRequest small;small.height=70;small.rollLength=100;small.portLength=8;small.sampleSpacing=.75;small.pitchShape=.3;small.rollShape=-.4;
+    auto smallModule=buildReversingModule(small);good(smallModule);
+    auto large=small;large.height*=2;large.rollLength*=2;large.portLength*=2;large.sampleSpacing*=2;
+    auto largeModule=buildReversingModule(large);good(largeModule);
+    near(largeModule.track.length,2*smallModule.track.length,1e-8,"Uniform scaling doubles canonical path length");
+    near(largeModule.sampledMaxCurvature,smallModule.sampledMaxCurvature*.5,2e-10,"Uniform scaling halves curvature");
+    near(largeModule.sampledMaxFrameTwistPerMeter,smallModule.sampledMaxFrameTwistPerMeter*.5,2e-10,"Uniform scaling halves spatial twist");
+    auto rounder=small;rounder.pitchShape=-.3;auto rounderModule=buildReversingModule(rounder);good(rounderModule);
+    check(std::abs(rounderModule.pitchLength-smallModule.pitchLength)>1,"Shape control changes integrated proportions at fixed height");
+    // A compound inversion keeps the centerline and endpoints while sharing
+    // pitch and physical roll over a finite arc, rather than stopping one
+    // motion completely before the other begins.
+    for(auto kind:{ReversingModuleKind::Immelmann,ReversingModuleKind::DiveLoop})for(int hand:{-1,1}){
+        auto compound=small;compound.kind=kind;compound.rollDirection=hand;compound.rollOverlap=.3;
+        auto m=buildReversingModule(compound);good(m);checkJoins(m.track);
+        auto separate=compound;separate.rollOverlap=0;auto original=buildReversingModule(separate);good(original);
+        nearVector(m.exit.position,original.exit.position,1e-12,"Compound roll preserves endpoint position");
+        nearVector(m.exit.up,original.exit.up,1e-12,"Compound roll restores exit orientation");
+        near(m.track.length,original.track.length,1e-9,"Compound roll does not compress the centerline");
+        bool simultaneous=false;
+        for(size_t i=m.pitchBeginIndex;i<m.pitchEndIndex;++i){
+            auto q=sampleSpanKinematics(m.track,i,.5);
+            simultaneous|=norm(q.sample.curvature)>1e-4&&std::abs(dot(q.upS,q.sample.right))>1e-3;
         }
+        check(simultaneous,"Pitch and roll must actually overlap");
+        checkJoins(compile(m.points,false));
+        check(m.sampledMaxFrameTwistPerMeter<original.sampledMaxFrameTwistPerMeter,"Sharing the roll arc reduces its peak spatial twist");
     }
-    EnergyLoopModuleRequest request;auto base=buildEnergyLoopModule(request),repeated=buildEnergyLoopModule(request);
-    good(base);good(repeated);
-    checkSourcePlacement(base.track,base.apex.distance);
-    const auto reversal=designFvdImmelmann(FvdImmelmannRequest{});
-    check(reversal.section.assessment.passed&&reversal.section.report.valid(),"Immelmann source for placement test is valid");
-    checkSourcePlacement(reversal.section.track,reversal.rollExit.distance);
-    check(base.points.size()==repeated.points.size(),"Deterministic sample count");
-    for(size_t i=0;i<base.points.size();++i){nearVector(repeated.points[i].position,base.points[i].position,0,"Deterministic geometry");nearVector(repeated.points[i].upHint,base.points[i].upHint,0,"Deterministic orientation");}
-    request.entry.position={123,-456,37};const double heading=.71;request.entry.forward={std::cos(heading),std::sin(heading),0};
-    auto rotated=buildEnergyLoopModule(request);good(rotated);checkJoins(rotated.track);
-    near(rotated.track.length,base.track.length,1e-7,"Rigid world placement preserves length");
-    check(rotated.points.size()==base.points.size(),"Rigid placement preserves source sampling");
-    const auto transform=[&](Vec3 p){return Vec3{p.x*std::cos(heading)-p.y*std::sin(heading),p.x*std::sin(heading)+p.y*std::cos(heading),p.z};};
-    for(size_t i=0;i<base.points.size();++i){const auto p=base.points[i].position;
-        nearVector(rotated.points[i].position,request.entry.position+transform(p),1e-7,"Placement rotates actual force-authored geometry");}
-    nearVector(rotated.exit.forward,transform(base.exit.forward),1e-10,"World placement retains the real rotated exit heading");
-    nearVector(rotated.apex.position,request.entry.position+transform(base.apex.position),1e-10,"Actual source apex checkpoint follows world placement");
-    for(size_t i=0;i<base.samples.size();i+=127){const auto& a=base.samples[i];const auto& b=rotated.samples[i];
-        nearVector(b.position,request.entry.position+transform(a.position),1e-10,"Integrated source history follows rigid placement");
-        near(b.speed,a.speed,0,"Rigid placement cannot alter source speed");near(b.dissipatedWorkPerMass,a.dissipatedWorkPerMass,0,"Rigid placement cannot alter dissipated work");
-        const auto force=measureSeatForces(rotated.track,b.distance,b.speed,0,0);
-        near(force.vertical,dot(a.curvature*(a.speed*a.speed)+Vec3{0,0,gravity},a.up)/gravity,1e-5,"World canonical geometry retains the actual source normal-force history");
-        near(force.lateral,0,1e-5,"The rotated physical bank produces the intended centerline body-lateral force");
-    }
-    auto placedReplay=designFvdSection(rotated.authoring);
-    check(placedReplay.assessment.passed&&placedReplay.report.valid(),"World-placed authoring reproduces an independently integrated canonical section");
-    nearVector(placedReplay.samples.back().position,rotated.exit.position,1e-6,"Actual world-space exit is derived by integration, not only transformed presentation points");
-    near(placedReplay.samples.back().speed,rotated.samples.back().speed,1e-6,"World-space source replay preserves the actual speed");
-    auto reject=[](EnergyLoopModuleRequest r){auto value=buildEnergyLoopModule(r);check(!value.report.valid()&&!value.geometryBuilt&&!value.canonicalBuilt,"Unsupported loop authoring is rejected explicitly");};
-    auto invalid=request;invalid.height=NAN;reject(invalid);
-    invalid=request;invalid.apexSpeed=NAN;reject(invalid);
-    invalid=request;invalid.crossingOffset=INFINITY;reject(invalid);
-    invalid=request;invalid.entry.up=invalid.entry.forward;reject(invalid);
-    invalid=request;invalid.portLength=1;reject(invalid);
-    invalid=request;invalid.maxSamples=15;reject(invalid);
-    invalid=request;invalid.rollingAcceleration=-.01;reject(invalid);
-    invalid=request;invalid.dragAccelerationCoefficient=NAN;reject(invalid);
-    auto cancelledLoop=buildEnergyLoopModule(EnergyLoopModuleRequest{},[]{return true;});
-    check(cancelledLoop.cancelled&&!cancelledLoop.geometryBuilt,"Full-loop authoring propagates cancellation");
-    int polls=0;cancelledLoop=buildEnergyLoopModule(request,[&]{return ++polls>20;});
-    check(cancelledLoop.cancelled&&!cancelledLoop.geometryBuilt,"Full-loop source shooting propagates cancellation");
-    std::cout<<"PASS "<<checks<<" full-loop checks: force-authored dimensions, crest load, canonical G3/C2 joins, deterministic geometry, rigid placement, invalid input and cancellation\n";
+    auto reject=[](ReversingModuleRequest r,const char* expected){auto value=buildReversingModule(r);check(!value.report.valid()&&!value.geometryBuilt&&!value.canonicalBuilt&&value.report.errors.front().code==expected,"Unsupported geometry is rejected explicitly");};
+    request=ReversingModuleRequest{};request.height=NAN;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.pitchShape=.66;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.rollShape=INFINITY;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.rollOverlap=.41;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.entry.up=request.entry.forward;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.portLength=1;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.rollDirection=0;reject(request,"LAYOUT_MODULE_INPUT");
+    request=ReversingModuleRequest{};request.maxSamples=15;reject(request,"LAYOUT_MODULE_BUDGET");
+    auto cancelled=buildReversingModule(ReversingModuleRequest{},[]{return true;});check(cancelled.cancelled&&!cancelled.geometryBuilt&&!cancelled.canonicalBuilt&&!cancelled.report.valid(),"Cancelled authoring cannot be mistaken for completed geometry");
+    int polls=0;cancelled=buildReversingModule(ReversingModuleRequest{},[&]{return ++polls>=3;});check(cancelled.cancelled&&!cancelled.geometryBuilt&&!cancelled.report.valid(),"Cancellation during geometry authoring");
+    std::cout<<"PASS "<<checks<<" reversing-module checks: genuine pitch/roll order, endpoint poses, inverted apex, canonical G3/C2 joins, deterministic variation, invalid input and cancellation\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

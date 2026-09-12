@@ -1,37 +1,34 @@
 # VibeCoaster native game
 
-Source development is **0.8.3-flow.1 / COASTER5**. The current Windows engineering preview remains **0.8.2-terrain.1**, built from `6f23a9e`; the unfinished source iteration has not replaced its launcher. The verification below belongs to that published package. See [work in progress](WORK_IN_PROGRESS.md).
+Active source and Windows preview are **0.8.0-flow.1 / COASTER5**.
 
-Fresh profiles use desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off. Saved player settings remain respected, and distribution launchers forward command-line options.
-
-
-**Windows engineering preview: 0.8.2-terrain.1-6f23a9e.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.2-terrain.1-6f23a9e) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
+**Windows preview: 0.8.0-flow.1.** [Download and play](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.0-flow.1) · [Delivery status and controls](DELIVERY.md) · [Build from source](tools/BUILDING.md)
 
 Extract the entire Windows ZIP, then open **Play VibeCoaster.cmd** or
 **VibeCoaster.exe**. Unreal Editor, Blender and a compiler are not required to
-play. Keep the Engine and VibeCoaster folders alongside the EXE.
+play. The launcher uses a 1600×900 window capped at 60fps. Keep the Engine and
+VibeCoaster folders alongside the EXE.
 
-Choose **PHYSICS-PROOF**, **Canyon**, seed **9**, press Enter to generate, then
+Choose **PHYSICS-PROOF**, **Canyon**, seed **42**, press Enter to generate, then
 Space to ride. Up/Down selects a setting; Left/Right changes it. Tab shows setup,
 1/2/3 selects front/middle/rear while riding, M overview, R restart, F5 save,
 F9 load, and Alt+F4 exit. Other seeds vary the dimensions and placement within the
 current folded route family.
 
-**ALL RECORDS requires a qualified I305/Pantherian reference.** Authentic supplied
-and additional retrieved recordings are available; their calibration, mounting and
-comparable configuration are not yet sufficient for the strict benchmark. PHYSICS-PROOF tests the remaining selected
+**ALL RECORDS is unavailable** until authentic eligible I305/Pantherian reference
+recordings are supplied and curated. PHYSICS-PROOF tests the remaining selected
 targets; it does not claim an intensity record or silently substitute a benchmark.
 
 ## Existing implementation
 
 This is the single active C++/UE5 game. The obsolete TypeScript/browser
 implementation was archived and removed at the user's request. Source geometry/save
-identity is **0.8.3-flow.1 / COASTER5**; development artifacts and older releases' saves require their matching application.
+identity is **0.8.0-flow.1 / COASTER5**; older saves require the preserved older app.
 
 - Canonical G3 septic centreline and C2 orientation shared by dynamics, rendering,
   rider forces, clearance and saved geometry.
-- Seeded folded circuits with crossings, a loss-aware force-authored tall signature,
-  full pitch loop, joint-force reversal/pullout, banked turns and force-authored crests.
+- Seeded folded circuits with crossings, a record hill, full pitch loop, true
+  Immelmann/dive reversals, banked turns and force-authored crest sections.
 - Flat, hills and canyon landscapes; canyon shelf settings vary from 195–225 m.
   Actual local-ground height, terrain relief and station-relative height are
   distinct measurements.
@@ -47,18 +44,16 @@ identity is **0.8.3-flow.1 / COASTER5**; development artifacts and older release
 
 ## Current verification and limits
 
-All 26 local CTest suites passed across the full run and targeted fixture rerun.
-Six targeted circuits passed independent saved replay and 960/1920 Hz convergence,
-reaching final braking in 140.027–172.440 s. Windows build/cook/package and seven
-UE contracts passed. Two fresh packaged terrain/seat runs passed complete
-traversal and save/load; extracted startup and all 48 runtime hashes were verified.
-See [DELIVERY.md](DELIVERY.md) for scope. Frozen evidence, failed runs and older
-binaries remain preserved. This package has no new performance acceptance claim.
+The 0.8 panel accepted 18/18 proof rides with exact saved replay and independent
+convergence; 15/18 reach final braking within the soft 180 s target. Windows
+build/cook/package and six UE contracts passed. Complete scripted terrain/seat
+runs exercise ride controls and save/reload. See [DELIVERY.md](DELIVERY.md) for
+timing, source checks and their limits. Large frozen evidence, failed runs and
+historical binaries remain local under ignored artifact folders.
 
-The foundation is not complete: strict reference qualification, actual Mac/Metal tests,
-coherent terrain-directed layout/flow, drive/support engineering and continuous human
-POV/keyboard review remain. No ASTM compliance, structural certification or
-telemetry calibration is claimed.
+The foundation is not complete: authentic reference data, actual Mac/Metal tests,
+more convincing scenery and continuous human POV/keyboard review remain. No ASTM
+compliance, structural certification or telemetry calibration is claimed.
 
 [Numerics](core/NUMERICS.md) · [FVD scope](core/FVD.md) ·
 [Force guideline scope](core/FORCE_GUIDELINES.md) · [Unreal setup](unreal/README.md) ·

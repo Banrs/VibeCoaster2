@@ -1,26 +1,22 @@
-# Current train and restraint requirements
-
-The runtime uses the user's simple conventional car at `/Game/Art/V072/Conventional2/SM_TrainCar`. The 0.8.3 higher-force profile requires supported upright seating, padded upper-torso restraint and special uplift restraint provisions; these are design requirements awaiting model/ride-analysis verification. Read the [current modelling brief](MODELLING_BRIEF.md) before revising the train. The meshes below are preserved art history, not proof that these requirements are met.
-
-## Preserved high-speed train — v004
+# Current high-speed train — v004
 
 ## Connected track webbing - pacing.2
 
 The active tie assembly is `/Game/Art/V072/TrackWeb1/SM_TrackTieWeb`: original ties plus two inward-bevelled diagonal webs. [Editable Blender source](source/track/20260908-tie-v002/TrackTieWeb_v002.blend) and [actual oblique render](review/20260908-tie-v002/track-web-oblique.png). Its 660 triangles are checked against the newly shared canonical solids; five UE contracts pass. The older review-only web mentioned below remains historical and was not promoted. Train and station assets remain in V072/Import1.
 
-
-The current original car is **Aero Wedge 2030**, authored and actually rendered in Blender5.2.1 through the local safe-mode MCP. [Design and staged source](blender/train_stages_v004/DESIGN_BRIEF.md), [editable Blender file](source/train/20260908-train-v004/VibeCoaster_HighSpeedTrain_Review.blend), [actual front render](review/20260908-4/train-front.png). Runtime assets use the independently verified original-FBX + UE yaw90 convention in `/Game/Art/V072/Import1`; the thin clear shield has an explicit translucent shader and graph readback. Actual front/middle/rear packaged frames were inspected; shields remained transparent in those frames. Footprint, rail pivot, spacing and rider eye remain unchanged. The prior rounded v003 train was rejected by the user and remains preserved below as history.
-
-# Original coaster art
-
-Active authoring tool is Blender **5.2.1 LTS**, installed at `D:/Toolchains/Blender/blender-5.2.1-windows-x64/blender.exe`. Its portable profile and the pinned local Blender MCP live under D:/Toolchains. Actual MCP initialization, scene inspection and modelling passed on 5.2.1. The earlier 4.5 installation and failed model attempts are preserved. Project MCP registration is in `.codex/config.toml` at the repository root; the current session also uses the actual guarded stdio client in `blender/mcp_run.py`.
-
-The train was built through the 12 separate `blender/train_stages_v003/` calls. Blender must finish scene activation before dependency-graph evaluation; a combined call crashed during base visibility evaluation. The successful editable source is `source/train/20260908-train-v003/VibeCoaster_Train_Review.blend`, with original runtime GLB/FBX exports under the matching exports folder. The station/track/support kit is `source/environment/EnvironmentKit.blend`. These are original locally authored models, without external asset services or ground textures.
-
-The runtime car is 2.55 by 1.70 m, with a rail-midpoint pivot. One car mesh replaces five primitive instances. Camera height, train mass/spacing and finite-train simulation are unchanged. Station slabs, roofs, posts and track ties stay inside their existing canonical solids; generic station remainders retain exact cube geometry. Procedural rails and persisted support member endpoints remain authoritative. The separately modelled wheel bogie, rail-to-spine web and saved tower assembly are review assets, not additional approved moving/contact solids.
-
-## Actual import and review
-
-`review/20260907-3/train-manifest.json` and `review/20260907-2/environment-manifest.json` record actual Blender output. Original FBX imports with explicit UE yaw +90 degrees passed the independent one-metre/forward/rider-right witness and all seven mesh/material checks. The final receipt is `../unreal/Saved/ArtImport/v071_20260908_yaw90/receipt.json`; runtime assets use `/Game/Art/V071/Import3/`. Earlier failed imports and the unnecessary reflected export experiment remain separate. Use `import/import-spec-v071-yaw90.json` and `../unreal/scripts/import_art_v071.py` as the recorded convention; an existing destination is never overwritten.
-
-Actually viewed Blender renders include train front/rear/1.2 m eye line, station overview/human scale, isolated tie/web, and the complete adaptive tower. See `review/20260907-3/` and the station views in `review/20260907-2/`. These images establish model appearance, not packaged POV or performance. The integrated Windows package passed five UE contracts and three complete terrain/seat ride/save/load checks; fourteen actual packaged screenshots were inspected. See [the delivery report](../artifacts/flow-art-v071-20260908/REPORT.md). No performance benchmark is claimed while Cities: Skylines is competing for GPU/CPU resources.
+
+The current original car is **Aero Wedge 2030**, authored and actually rendered in Blender5.2.1 through the local safe-mode MCP. [Design and staged source](blender/train_stages_v004/DESIGN_BRIEF.md), [editable Blender file](source/train/20260908-train-v004/VibeCoaster_HighSpeedTrain_Review.blend), [actual front render](review/20260908-4/train-front.png). Runtime assets use the independently verified original-FBX + UE yaw90 convention in `/Game/Art/V072/Import1`; the thin clear shield has an explicit translucent shader and graph readback. Actual front/middle/rear packaged frames were inspected; shields remained transparent in those frames. Footprint, rail pivot, spacing and rider eye remain unchanged. The prior rounded v003 train was rejected by the user and remains preserved below as history.
+
+# Original coaster art
+
+Active authoring tool is Blender **5.2.1 LTS**, installed at `D:/Toolchains/Blender/blender-5.2.1-windows-x64/blender.exe`. Its portable profile and the pinned local Blender MCP live under D:/Toolchains. Actual MCP initialization, scene inspection and modelling passed on 5.2.1. The earlier 4.5 installation and failed model attempts are preserved. Project MCP registration is in `.codex/config.toml` at the repository root; the current session also uses the actual guarded stdio client in `blender/mcp_run.py`.
+
+The train was built through the 12 separate `blender/train_stages_v003/` calls. Blender must finish scene activation before dependency-graph evaluation; a combined call crashed during base visibility evaluation. The successful editable source is `source/train/20260908-train-v003/VibeCoaster_Train_Review.blend`, with original runtime GLB/FBX exports under the matching exports folder. The station/track/support kit is `source/environment/EnvironmentKit.blend`. These are original locally authored models, without external asset services or ground textures.
+
+The runtime car is 2.55 by 1.70 m, with a rail-midpoint pivot. One car mesh replaces five primitive instances. Camera height, train mass/spacing and finite-train simulation are unchanged. Station slabs, roofs, posts and track ties stay inside their existing canonical solids; generic station remainders retain exact cube geometry. Procedural rails and persisted support member endpoints remain authoritative. The separately modelled wheel bogie, rail-to-spine web and saved tower assembly are review assets, not additional approved moving/contact solids.
+
+## Actual import and review
+
+`review/20260907-3/train-manifest.json` and `review/20260907-2/environment-manifest.json` record actual Blender output. Original FBX imports with explicit UE yaw +90 degrees passed the independent one-metre/forward/rider-right witness and all seven mesh/material checks. The final receipt is `../unreal/Saved/ArtImport/v071_20260908_yaw90/receipt.json`; runtime assets use `/Game/Art/V071/Import3/`. Earlier failed imports and the unnecessary reflected export experiment remain separate. Use `import/import-spec-v071-yaw90.json` and `../unreal/scripts/import_art_v071.py` as the recorded convention; an existing destination is never overwritten.
+
+Actually viewed Blender renders include train front/rear/1.2 m eye line, station overview/human scale, isolated tie/web, and the complete adaptive tower. See `review/20260907-3/` and the station views in `review/20260907-2/`. These images establish model appearance, not packaged POV or performance. The integrated Windows package passed five UE contracts and three complete terrain/seat ride/save/load checks; fourteen actual packaged screenshots were inspected. See [the delivery report](../artifacts/flow-art-v071-20260908/REPORT.md). No performance benchmark is claimed while Cities: Skylines is competing for GPU/CPU resources.

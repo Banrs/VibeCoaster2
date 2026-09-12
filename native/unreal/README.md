@@ -1,12 +1,5 @@
 # VibeCoaster native Unreal game - review checkpoint
 
-Active source is **0.8.3-flow.1 / COASTER5** and remains under engineering review. The current published package is **0.8.2-terrain.1**, source `6f23a9e`. Its seven UE contracts, Windows build/cook/package, two generated terrain/seat traversal/save/load runs, extracted startup and 48 runtime hashes passed. [Current delivery and visual limits](../DELIVERY.md) distinguish that preserved package from [source work in progress](../WORK_IN_PROGRESS.md). No v083 packaged performance or Mac/Metal runtime claim is made.
-
-Stators, brake fins and station equipment follow the saved operation zones. The active Conventional2 open train and its import/build evidence are described in [the integration checkpoint](../art/review/20260909-train-v005-open/INTEGRATION.md), including the preserved failed first import and remaining mechanical/artwork limits.
-
-## Preserved 0.8.0 package
-
-
 Current application and numerical/save identity are **0.8.0-flow.1 / COASTER5**.
 Windows UHT, editor/game build, six UE contracts, cooking and packaging passed;
 complete packaged terrain/seat checks and the scoped visual review are recorded
@@ -50,7 +43,7 @@ The packaging script creates a **fresh** `Packaged/run-<UTC timestamp>` archive 
 
 To play in the editor after preparation, open `native/unreal/VibeCoaster.uproject`, open `/Game/Maps/Ride`, and select Play. All runtime actors, lighting and HUD are native C++; the map is deliberately minimal. A packaged game uses that same cooked map.
 
-The bootstrap runs `scripts/create_content.py` through Epic's editor Python API. It creates seven real material assets (including the texture-free slope palette) and `Ride.umap`; those generated binaries are ignored by Git. Existing content is preserved. If an existing material needs redesign, edit it in the editor. Python and Editor Scripting Utilities are editor-only plugins. The runtime uses the built-in ProceduralMeshComponent plugin for canonical rails/terrain/supports, original Blender5.2.1 meshes under `/Game/Art/V072/Conventional2` (train), `/Game/Art/V072/Import1` (station) and `/Game/Art/V072/TrackWeb1` (tie/web), and exact cube fallbacks for unsupported station dimensions. The same source `.uasset` models and materials must accompany Mac builds. No paid plugin is required. See [art import and source workflow](../art/README.md); packaging requires all six runtime meshes and all eight UE contracts, including accepted-canyon render capacity.
+The bootstrap runs `scripts/create_content.py` through Epic's editor Python API. It creates seven real material assets (including the texture-free slope palette) and `Ride.umap`; those generated binaries are ignored by Git. Existing content is preserved. If an existing material needs redesign, edit it in the editor. Python and Editor Scripting Utilities are editor-only plugins. The runtime uses the built-in ProceduralMeshComponent plugin for canonical rails/terrain/supports, original Blender5.2.1 train/station/tie meshes under `/Game/Art/V072/Import1` (train/station) and `/Game/Art/V072/TrackWeb1` (tie/web), and exact cube fallbacks for unsupported station dimensions. The same source `.uasset` models and materials must accompany Mac builds. No paid plugin is required. See [art import and source workflow](../art/README.md); packaging requires all six runtime meshes and all six UE contracts.
 
 Each Windows attempt retains logs, its bootstrap receipt and UE automation reports under `native/unreal/Saved/BuildRuns/<timestamp>`, including failed attempts. Build temporary files use `Saved/Temp`; DDC uses `Saved/DerivedDataCache`. A failed process, missing bootstrap receipt, missing asset, missing named test success, or missing fresh executable stops the packaging script.
 
@@ -58,7 +51,7 @@ For macOS preparation and packaging, use [MACOS.md](MACOS.md) and `scripts/packa
 
 ## Riding and generating
 
-The initial mode is **ALL RECORDS**. It requires an eligible processed I305/Pantherian reference group. Authentic RFDB files are present locally but their strict qualification remains unresolved, and raw recordings are not bundled. There is no automatic fallback or preaccepted failed candidate.
+The initial mode is **ALL RECORDS**. It is explicitly unavailable while the I305 exposure benchmark is missing; raw RFDB reference data is not bundled. There is no automatic fallback or preaccepted failed candidate.
 
 Choose **PHYSICS-PROOF** yourself in the setup menu to disable only intensity comparison. Height, speed, inversion-height, launch, geometric and provisional force constraints still apply. Accepted proof rides remain visibly labeled `PHYSICS-PROOF; intensity untested`.
 
@@ -78,7 +71,7 @@ Choose **PHYSICS-PROOF** yourself in the setup menu to disable only intensity co
 | F5 | Save the current accepted geometry |
 | F9 | Load and revalidate saved geometry |
 
-The production generator combines a force-authored tall signature, full loop, Immelmann/pullout and two airtime chains with seeded banked turns and terrain transfers. Sources undergo independent replay; the joined circuit then passes complete finite-train dynamics and 960/1920 Hz verification. This remains a bounded hybrid grammar. See [FVD scope](../core/FVD.md) and the current checkpoint report for exact evidence.
+The production generator combines seeded geometric modules with four FVD-authored crest sections. Their smooth force profiles undergo independent source replay; the joined circuit then passes complete finite-train dynamics and 960/1920 Hz verification. It is not yet a fully force-profile-authored circuit generator. See [FVD scope](../core/FVD.md) and the current checkpoint report for exact evidence.
 
 Generation starts paused after a complete successful commit. One train follows the accepted CPU simulation trace; visual interpolation never runs a separate physics model. The ride stops at the trace end and waits for Restart. A hitch longer than 100 ms slows playback rather than jumping the view forward.
 
@@ -88,16 +81,17 @@ The requested settings remain independent of the active ride. An invalid request
 
 Use the repository's reference processing workflow to obtain the **comparable maximum 10-second positive vertical specific-force exposure in g·s**, with a source identity that records the actual trace/provenance. Do not use a peak-g number, an invented value, or an uncalibrated accelerometer magnitude. This integration does not verify provenance from a numeric value.
 
-After producing an eligible reference group through the repository's processing workflow, select its file in `Config/DefaultGame.ini` before packaging, or in the active profile's `Saved/Config/Windows/Game.ini` (`WindowsEditor` for editor play), then restart the game/editor session.
+After obtaining that processed result, add the following section to `Config/DefaultGame.ini` before packaging, or to the active build's `Saved/Config/Windows/Game.ini` (`WindowsEditor` for editor play). Replace both placeholders with the processed value and an identifiable source record. Restart the game/editor session.
 
 ```ini
 [CoasterReference]
-File=<path to the processed reference file>
+Exposure10Seconds=<processed numeric g-seconds value>
+ReferenceId=<source identity and processing/version identity>
 ```
 
-Relative paths resolve under the project's `Saved` directory. An explicitly selected file that fails parsing does not fall back to scalar settings. Typed recording metadata preserves observed spread and provenance without independently verifying calibration or authenticity.
+A processed reference file can instead be selected with `File=<absolute file path>` in `[CoasterReference]`; relative paths resolve under the project's `Saved` directory. An explicitly selected file that fails parsing does not fall back to the scalar settings. Typed recording metadata preserves observed spread and provenance without independently verifying calibration or authenticity.
 
-The shared core validator checks the processed group's method, recording identities and comparable conditions. A manually configured `Exposure10Seconds`/`ReferenceId` pair is unverified and cannot authorize all-record acceptance. The qualified threshold and recording metadata persist with an accepted design. Selecting PHYSICS-PROOF changes only `requireIntensity`.
+The parser requires a positive finite value and a nonempty identity. The HUD labels it **user-configured**; it does not claim independent verification. The exact reference threshold and ID are persisted with the accepted design. All-record mode will then call the core acceptance gate with that reference; selecting PHYSICS-PROOF changes only `requireIntensity`.
 
 ## Geometry, threading and persistence
 

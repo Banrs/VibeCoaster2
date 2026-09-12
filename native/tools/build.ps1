@@ -56,7 +56,6 @@ $CoreSources = @(
   (Join-Path $SrcDir "track.cpp"),
   (Join-Path $SrcDir "frame.cpp"),
   (Join-Path $SrcDir "drive_profile.cpp"),
-  (Join-Path $SrcDir "force_envelope.cpp"),
   (Join-Path $SrcDir "convergence.cpp"),
   (Join-Path $SrcDir "simulation.cpp"),
   (Join-Path $SrcDir "generation.cpp"),
@@ -89,52 +88,17 @@ if ($Configuration -eq "Debug") {
   $OptFlags = @("-O2")
 }
 
-# Pinned warning + FP flags shared by the core and every executable.
+# Pinned warning + FP flags shared by both binaries.
 $CommonFlags = @("-std=c++20", "-ffp-contract=off", "-Wall", "-Wextra") + $OptFlags
-
-$PythonCommand = $null
-$PythonPrefixArgs = @()
-if ($Test) {
-  $PythonCandidates = @()
-  if (-not [string]::IsNullOrWhiteSpace($env:PYTHON)) {
-    $PythonCandidates += [pscustomobject]@{ Command = $env:PYTHON; PrefixArgs = @() }
-  }
-  $PythonCandidates += @(
-    [pscustomobject]@{ Command = "python3"; PrefixArgs = @() },
-    [pscustomobject]@{ Command = "python"; PrefixArgs = @() },
-    [pscustomobject]@{ Command = "py"; PrefixArgs = @("-3") }
-  )
-  foreach ($Candidate in $PythonCandidates) {
-    $Resolved = Get-Command $Candidate.Command -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -eq $Resolved) { continue }
-    $PreviousErrorActionPreference = $ErrorActionPreference
-    try {
-      $ErrorActionPreference = "Continue"
-      & $Resolved.Source @($Candidate.PrefixArgs) "-c" "import sys; raise SystemExit(0 if sys.version_info.major == 3 else 1)" *> $null
-      $CandidateExit = $LASTEXITCODE
-    } finally {
-      $ErrorActionPreference = $PreviousErrorActionPreference
-    }
-    if ($CandidateExit -eq 0) {
-      $PythonCommand = $Resolved.Source
-      $PythonPrefixArgs = @($Candidate.PrefixArgs)
-      break
-    }
-  }
-  if ($null -eq $PythonCommand) {
-    Write-Error "-Test requires an available Python 3 interpreter for native/tools/test_cli_arguments.py. Set PYTHON to its executable path or put python3, python, or py on PATH. No tools were downloaded." -ErrorAction Continue
-    exit 1
-  }
-}
 
 $CliOut = Join-Path $BuildDir "coaster_cli.exe"
 $TestsOut = Join-Path $BuildDir "coaster_tests.exe"
 
-function Invoke-Zig {
+function Invoke-ZigCxx {
   param([string[]]$ZigArgs, [string]$Label)
   & $Compiler @ZigArgs
   if ($LASTEXITCODE -ne 0) {
-    Write-Error "$Label failed (zig exit=$LASTEXITCODE). See output above."
+    Write-Error "$Label failed (zig c++ exit=$LASTEXITCODE). See output above."
     exit 1
   }
 }
@@ -143,23 +107,12 @@ Write-Host "Compiler : $Compiler"
 Write-Host "Config   : $Configuration"
 Write-Host "BuildDir : $BuildDir"
 
-# Compile the shared core once, just as the CMake build does. Rebuild every
-# object on invocation so changed headers and flags cannot leave stale code.
-$CoreObjects = @()
-foreach ($Source in $CoreSources) {
-  $Object = Join-Path $BuildDir ([System.IO.Path]::GetFileNameWithoutExtension($Source) + ".obj")
-  Invoke-Zig -Label "$Source compile" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, "-c", $Source, "-o", $Object))
-  $CoreObjects += $Object
-}
-$CoreLibrary = Join-Path $BuildDir "coaster_core.lib"
-if (Test-Path -LiteralPath $CoreLibrary) { Remove-Item -LiteralPath $CoreLibrary }
-Invoke-Zig -Label "coaster_core archive" -ZigArgs (@("ar", "rcs", $CoreLibrary) + $CoreObjects)
-
-Invoke-Zig -Label "coaster_cli build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, $MainSource, $CoreLibrary, "-o", $CliOut))
+Invoke-ZigCxx -Label "coaster_cli build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir) + $CoreSources + @($MainSource, "-o", $CliOut))
 Write-Host "Built $CliOut"
 
+$NeedTests = $Test -or (Test-Path -LiteralPath $TestSource)
 if (Test-Path -LiteralPath $TestSource) {
-  Invoke-Zig -Label "coaster_tests build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, $TestSource, $CoreLibrary, "-o", $TestsOut))
+  Invoke-ZigCxx -Label "coaster_tests build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir) + $CoreSources + @($TestSource, "-o", $TestsOut))
   Write-Host "Built $TestsOut"
 } elseif ($Test) {
   Write-Error "Requested -Test but '$TestSource' is missing (test executable still in progress by core agent)."
@@ -184,10 +137,11 @@ if ($Test) {
 # Independent experiment suites preserve the scientific/property tests from each input.
 $AdapterInclude = Join-Path $NativeDir "unreal/Source/VibeCoaster/Public"
 $Historical = Join-Path $TestsDir "fixtures/historical"
-foreach ($Name in @("terrain_transfer", "terrain_motion", "passive_transfer", "terrain_envelope", "persistence_cancel", "terrain_baseline", "circuit_layout", "reference", "support", "support_family", "layout_modules", "organic_generation", "terrain_profile", "fvd", "dimensions", "clearance", "track_web", "station", "structures", "geometry", "frame_force", "terrain", "convergence", "drive_profile", "force_envelope")) {
+foreach ($Name in @("persistence_cancel", "baseline_jets", "flow_bridge", "connector_profile", "reference", "support", "support_family", "layout_modules", "organic_generation", "terrain_profile", "fvd", "dimensions", "clearance", "track_web", "station", "structures", "geometry", "frame_force", "terrain", "convergence", "drive_profile")) {
   $Source = Join-Path $TestsDir ($Name + "_tests.cpp")
   $Binary = Join-Path $BuildDir ($Name + "_tests.exe")
-  Invoke-Zig -Label ($Name + " tests build") -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, "-I", $AdapterInclude, $Source, $CoreLibrary, "-o", $Binary))
+  $SuiteSources = $CoreSources
+  Invoke-ZigCxx -Label ($Name + " tests build") -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, "-I", $AdapterInclude) + $SuiteSources + @($Source, "-o", $Binary))
   if ($Test) {
     $TestArgs = @()
     if ($Name -eq "support") { $TestArgs = @($Historical) }
@@ -199,15 +153,4 @@ foreach ($Name in @("terrain_transfer", "terrain_motion", "passive_transfer", "t
 # Explicit acceptance evidence tool; deliberately not run by -Test.
 $ConvergenceSource = Join-Path $ToolsDir "convergence/audit.cpp"
 $ConvergenceOut = Join-Path $BuildDir "coaster_convergence.exe"
-Invoke-Zig -Label "coaster_convergence build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, $ConvergenceSource, $CoreLibrary, "-o", $ConvergenceOut))
-
-if ($Test) {
-  $CliArgumentsTest = Join-Path $ToolsDir "test_cli_arguments.py"
-  & $PythonCommand @PythonPrefixArgs "-B" $CliArgumentsTest $CliOut
-  $CliTestExit = $LASTEXITCODE
-  if ($CliTestExit -ne 0) {
-    Write-Error "Real CLI tests failed (exit=$CliTestExit)." -ErrorAction Continue
-    exit $CliTestExit
-  }
-  Write-Host "Real CLI tests passed."
-}
+Invoke-ZigCxx -Label "coaster_convergence build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir) + $CoreSources + @($ConvergenceSource, "-o", $ConvergenceOut))

@@ -1,46 +1,4 @@
-# Windows engineering preview: 0.8.2-terrain.1-6f23a9e
-
-[Download the current Windows ZIP](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.2-terrain.1-6f23a9e), extract it completely, then open **Play VibeCoaster.cmd**. The repository launcher points to this verified build. Unreal Editor and Blender are not required. Fresh profiles use native borderless resolution, 100% internal resolution, no FPS cap and VSync off; saved settings remain respected.
-
-Choose **PHYSICS-PROOF**, **Canyon**, seed **9**, Enter to generate and Space to ride. F5 saves, F9 loads, 1/2/3 selects seats, M shows overview and R restarts. ALL RECORDS requires eligible authentic I305/Pantherian recordings.
-
-Source is `6f23a9e`, application/save identity **0.8.2-terrain.1 / COASTER5**. Terrain transfers follow the seeded cliff more closely, crossing clearance preserves clear underpasses, the station has a straight arrival, and turn sizing and loop braking account for actual speed/energy. Unused authoring implementations were removed. Older exact-version saves require their preserved older app.
-
-All 26 local native suites passed across the full run and targeted fixture rerun. Six targeted rides independently saved/replayed and passed 960/1920 Hz convergence, reaching final braking in 140.027-172.440 s. Seven Unreal contracts and actual Windows build/cook/package passed. Two fresh packaged runs passed generation, complete traversal, ordinary save/load, pause/restart and missing-reference refusal: flat42/rear stopped in 164.755 s; canyon9/front in 207.575 s. Seven rendered ride/overview frames and both extracted startup paths were inspected. This is selected-frame review, not continuous human POV/keyboard approval.
-
-All 48 extracted runtime files match their manifest. The extracted game and root bootstrap opened successfully at native 1920x1080, with MaxFPS 0, VSync 0 and ScreenPercentage 100. The ZIP is 338,574,334 bytes; SHA256 `23277570ed9fae6b8eb7ec34a6de43b039eb7166bad890a6fc972751634b7fe8` matches GitHub's uploaded asset digest. [Verification and visual findings](artifacts/terrain-routing-v082-20260910/package-v16/REVIEW.md).
-
-[Three-platform CI for the packaged numerical source](https://github.com/Banrs/VibeCoaster2/actions/runs/34450824684) builds and checks the portable core and Python tooling; it does not build the Unreal game on macOS.
-
-This remains an engineering preview. The canyon layout still has long approaches and a restricted folded footprint, with a sampled 91 m ascent-height outlier, tall signature supports and dark cliff lighting. Authentic strict-record proof, complete F2291/structural assessment, current-package FPS measurement and Mac/Metal runtime verification remain unfinished. Historical performance below does not apply to this package.
-
-## Preserved 0.8.1-intent.1-ae09f02 delivery
-
-The following controls, verification and observations belong to the older package and its former repository launcher.
-
-[Download the current Windows ZIP](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.1-intent.1-ae09f02), extract it completely, then open **Play VibeCoaster.cmd**. The repository's `native/Play VibeCoaster.cmd` points to this build. Unreal Editor and Blender are not required. Fresh profiles use desktop-native borderless resolution, 100% internal resolution and uncapped rendering with VSync off; saved settings remain respected. The launcher forwards command-line options.
-
-Choose **PHYSICS-PROOF**, terrain and seed, Enter to generate, then Space to ride. F5 saves; F9 loads. Tab toggles setup, 1/2/3 switches seats, M shows overview and R restarts. ALL RECORDS remains explicitly unavailable without eligible authentic I305/Pantherian recordings.
-
-Application and save identity are **0.8.1-intent.1 / COASTER5**, built from `ae09f0284a7055dffe4b374cca9dcb16e1f3f812`. The filename's commit suffix distinguishes older internal bundles; no frozen release was overwritten. This package includes the loss-aware force-authored tall signature, continuous canyon climb/trim transition, bounded whole-route energy feedback, exact-rate acceptance enforcement, conventional open train and persisted operation hardware.
-
-All 26 local CTest suites and [Windows/Linux/macOS core and Python CI](https://github.com/Banrs/VibeCoaster2/actions/runs/34413788049) passed. Eleven targeted circuits passed exact saved replay and independent 960/1920 Hz convergence, reaching final braking in 137.708–147.896 s. Seven UE contracts and Windows editor/game compilation, cooking and packaging passed with 195 source/config/art hashes unchanged.
-
-Three fresh packaged generation runs completed traversal, pause/restart/seat-pose, ordinary save/load, save cancellation and missing-reference refusal:
-
-| Case | Complete-stop duration |
-|---|---:|
-| Flat42, front seat | 166.194 s |
-| Hills9, middle seat | 170.921 s |
-| Canyon42, rear seat | 167.635 s |
-
-All 48 extracted runtime files match their manifest. Extracted startup was actually viewed and closed normally at desktop-native 1920x1080, with MaxFPS0/VSync0/ScreenPercentage100. The ZIP is 338,570,135 bytes; SHA256 is `41ecfa8f278a47004f499535a761b0675fa7fa5513d3545c92e01f814ed21368`, also verified against GitHub's uploaded asset digest. Local evidence is under `artifacts/generator-intent-v081/package-v2/`.
-
-This remains an engineering preview. Inspected packaged frames show improved crest/inversion pacing and visible hardware, but also long approaches, sparse macro layout, an elevated powered turn and a nearly level return over the canyon's falling terrain. The separate compact terrain itinerary is not in this generator. Continuous human POV/keyboard review, real drive/support engineering, broader seed/customization coverage and Mac/Metal runtime verification remain unfinished. No new FPS acceptance, authentic strict record or F2291 compliance is claimed. The scoped 0.8.0 performance results below do not apply to this package.
-
-## Preserved 0.8.0-flow.1 delivery
-
-The following evidence and launch settings belong to the older package.
+# Windows flow preview: 0.8.0-flow.1
 
 [Download the Windows ZIP](https://github.com/Banrs/VibeCoaster2/releases/tag/native-v0.8.0-flow.1).
 Extract it completely, then open **Play VibeCoaster.cmd** or **VibeCoaster.exe**.

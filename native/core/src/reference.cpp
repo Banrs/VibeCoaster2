@@ -25,11 +25,7 @@ double quantileExclusive(const std::vector<double>& x,int quartile){double index
 ValidationReport validateReference(const Targets& t){
     ValidationReport report;const auto& b=t.reference;
     auto fail=[&](const char* why){report.fail("REFERENCE_METADATA",why);};
-    if(!b.processed){
-        if(!b.method.empty()||!b.groupId.empty()||!b.recordings.empty())fail("Unprocessed reference contains typed metadata");
-        if(t.requireIntensity)report.fail("REFERENCE_UNAVAILABLE","All-record acceptance requires an eligible processed reference group; a manual scalar is unverified");
-        return report;
-    }
+    if(!b.processed){if(!b.method.empty()||!b.groupId.empty()||!b.recordings.empty())fail("Unprocessed reference contains typed metadata");return report;}
     if(b.method!="piecewise-linear-positive10s-v1"||b.groupId.rfind("rf-v1:",0)!=0||!hashOk(b.groupId.substr(6)))fail("Unsupported reference method or group identity");
     for(const auto* s:{&b.ride,&b.configuration,&b.seat,&b.device,&b.calibrationId})if(!textOk(*s))fail("Missing or oversized reference condition identity");
     if(b.recordings.size()<3||b.recordings.size()>256){fail("Reference needs 3 to 256 independent eligible recordings");return report;}

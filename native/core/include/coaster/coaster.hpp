@@ -13,7 +13,7 @@
 namespace coaster {
 constexpr double pi=3.14159265358979323846, gravity=9.80665;
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
-constexpr const char* generatorVersion="0.8.3-flow.1";
+constexpr const char* generatorVersion="0.8.0-immelmann.1";
 struct Vec3 {
     double x{},y{},z{};
     Vec3 operator+(Vec3 b) const { return {x+b.x,y+b.y,z+b.z}; }
@@ -83,9 +83,8 @@ struct Operation {
 // Merge exact adjacent, identical nonwrapping drive runs in authored order.
 void coalesceDriveProfiles(std::vector<Operation>&);
 struct Limits {
-    // Raw peak guards accompany the mandatory signed duration assessment.
-    // Higher limits assume the model provisions in force_envelope.hpp.
-    double minVerticalG{-2.8},maxVerticalG{6},maxLateralG{3},maxLongitudinalG{6};
+    // Provisional game envelope, NOT a calibrated or certified rider standard.
+    double minVerticalG{-1.5},maxVerticalG{5.5},maxLateralG{1.5},maxLongitudinalG{4.5};
     double maxJerkGps{20},minClearance{2};
     double maxLateralRateGps{std::numeric_limits<double>::quiet_NaN()},maxLongitudinalRateGps{std::numeric_limits<double>::quiet_NaN()};
 };
@@ -117,31 +116,9 @@ struct ValidationReport {
     bool valid() const {return errors.empty();}
     void fail(std::string code,std::string message,double s=0,double actual=0,double limit=0){errors.push_back({code,message,s,actual,limit});}
 };
-struct ForceEnvelopeCase {
-    double utilization{},actual{},limit{},startSeconds{},durationSeconds{};
-};
-struct ForceEnvelopeAxisSummary {
-    double minimumG{},maximumG{},minimumOnsetGps{},maximumOnsetGps{};
-    double minimumOnsetTimeSeconds{},maximumOnsetTimeSeconds{};
-};
-struct ForceEnvelopeAssessment {
-    bool performed{},cancelled{};
-    std::array<ForceEnvelopeCase,6> directional; // +z,-z,+y,-y,+x,-x; actual/limit in g.
-    std::array<ForceEnvelopeCase,3> paired; // z/y,z/x,y/x; squared ellipse utilization, limit 1.
-    std::array<ForceEnvelopeAxisSummary,3> axes; // z,y,x; filtered ranges and centered 100 ms slopes.
-    ForceEnvelopeCase reducedPositive,zeroToTwo; // g and seconds respectively.
-    ForceEnvelopeCase enhancedLongitudinalOnset; // Negative-load buildup, g/s, for the padded-OTS exception.
-    std::array<ForceEnvelopeCase,2> horizontalReversal; // y,x; actual/limit in g.
-    std::array<ForceEnvelopeCase,2> durationExtent; // positive z at >=2 g, nonzero y; seconds.
-    double reducedPositiveFromSeconds{std::numeric_limits<double>::infinity()};
-    ValidationReport report;
-};
 struct SeatForces { double vertical{},lateral{},longitudinal{}; };
 SeatForces measureSeatForces(const Track&,double distance,double speed,double tangentialAcceleration,double seatHeight);
-// Derived from the actual solver evaluation, never trusted from a saved ride.
-// Signed whole-train mechanical force excludes gravity, drag and rolling loss.
-struct DriveForces {double propulsion{},braking{};bool motorPresent{},brakePresent{};};
-struct Frame {double time{},distance{},speed{};std::array<SeatForces,3> seats;DriveForces drives;};
+struct Frame {double time{},distance{},speed{};std::array<SeatForces,3> seats;};
 struct AxisStatistics {
     double minG{},maxG{},meanG{},maxRateGps{};
     double mean1sMin{std::numeric_limits<double>::quiet_NaN()},mean1sMax{std::numeric_limits<double>::quiet_NaN()};
@@ -162,13 +139,8 @@ struct Metrics {
     double duration{},minGroundClearance{std::numeric_limits<double>::infinity()};
 };
 struct SimulationResult {
-    // Physical integration findings are separate from rider acceptance, so an
-    // unaccepted trajectory can still inform source-energy/terrain authoring.
     std::vector<Frame> frames; Metrics metrics; ValidationReport report;
-    // simulate maps assessment findings to rider track distance; case times stay seconds.
-    std::array<ForceEnvelopeAssessment,3> forceEnvelope;
     bool completed{},cancelled{};
-    bool forceEnvelopePassed() const {return std::all_of(forceEnvelope.begin(),forceEnvelope.end(),[](const ForceEnvelopeAssessment& f){return f.performed&&!f.cancelled&&f.report.valid();});}
 };
 using Cancel=std::function<bool()>;
 struct Support;
@@ -203,13 +175,7 @@ struct SupportMember {
     SupportMemberKind kind{SupportMemberKind::Steel}; bool spineContact{false};
 };
 struct Support {Vec3 base,top,attachment; bool hasAttachment{false}; double trackDistance{}; std::vector<SupportMember> members;};
-namespace detail {
-constexpr int supportTowerMaximumHeight=600,supportTowerTierHeight=16;
-}
-// Four feet, four top connectors and four outrigger members, plus sixteen
-// members per tier. The resource bound must admit the declared tower family.
-constexpr size_t maxSupportMembers=12+16*((detail::supportTowerMaximumHeight+detail::supportTowerTierHeight-1)/detail::supportTowerTierHeight);
-constexpr size_t maxTotalSupportMembers=60000;
+constexpr size_t maxSupportMembers=512,maxTotalSupportMembers=60000;
 ValidationReport validateSupportMembers(const Support&,const Terrain&,Cancel cancel={});
 
 enum class StationRole { Platform, Canopy, Post, Pier, Footing };
@@ -257,7 +223,7 @@ struct Design {
     std::string planningDiagnostics; // Derived generation-only sidecar.
     std::vector<InversionDimensions> inversionDimensions; // Recomputed canonical bounds, not persisted.
     ConvergenceAssessment convergence; // Recomputed; persisted telemetry is never trusted.
-    bool accepted() const {return report.valid()&&simulation.completed&&simulation.report.valid()&&simulation.forceEnvelopePassed()&&!simulation.cancelled&&request.simulationStep==1./960&&convergence.coarseStep==1./960&&convergence.fineStep==1./1920&&convergence.performed&&convergence.passed;}
+    bool accepted() const {return report.valid()&&simulation.completed&&simulation.report.valid()&&!simulation.cancelled&&convergence.performed&&convergence.passed;}
 };
 SimulationResult simulate(const Track&,const std::vector<Operation>&,const TrainConfig&,double step=1./960,Cancel cancel={});
 ValidationReport validateGeometry(const Track&,const Terrain&,const Limits&,const TrainConfig&,const std::vector<Support>&,Cancel cancel={});

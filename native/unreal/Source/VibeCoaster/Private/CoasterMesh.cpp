@@ -2,7 +2,6 @@
 #include "CoasterTerrainBackdrop.h"
 #include "coaster/support_mesh.hpp"
 #include "Math/RotationMatrix.h"
-#include <array>
 
 namespace VibeMesh
 {
@@ -10,6 +9,7 @@ namespace
 {
 constexpr int32 RingSides = 8;
 constexpr double ChunkMetres = 80, RailStep = 2;
+constexpr int32 MaxChunks = 4096, MaxVertices = 2000000, MaxInstances = 100000;
 void EngineTriangle(FChunk& Chunk, int32 A, int32 B, int32 C)
 {
     // UE's GenerateBoxMesh uses clockwise front faces: Cross(B-A, C-A) has
@@ -20,17 +20,6 @@ void EngineTriangle(FChunk& Chunk, int32 A, int32 B, int32 C)
 }
 void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double Begin, double End, double Side, double Height, double Radius)
 {
-    struct FCircleDirection { double Cos, Sin; };
-    static const auto Circle = []
-    {
-        std::array<FCircleDirection, RingSides> Directions{};
-        for (int32 J = 0; J < RingSides; ++J)
-        {
-            const double Angle = 2 * coaster::pi * J / RingSides;
-            Directions[J] = {std::cos(Angle), std::sin(Angle)};
-        }
-        return Directions;
-    }();
     const int32 Rings = Samples.Num();
     const int32 Base = Chunk.Vertices.Num();
     for (int32 I = 0; I < Rings; ++I)
@@ -40,7 +29,8 @@ void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double 
         const auto Centre = P.position + P.right * Side + P.up * Height;
         for (int32 J = 0; J < RingSides; ++J)
         {
-            const auto Normal = P.right * Circle[J].Cos + P.up * Circle[J].Sin;
+            const double Angle = 2 * coaster::pi * J / RingSides;
+            const auto Normal = P.right * std::cos(Angle) + P.up * std::sin(Angle);
             Chunk.Vertices.Add(Position(Centre + Normal * Radius));
             Chunk.Normals.Add(Direction(Normal));
             Chunk.UV.Add(FVector2D(S / 4, double(J) / RingSides));
@@ -56,164 +46,6 @@ void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double 
         }
     }
 }
-}
-TArray<FDriveHardwareRun> OperationHardwareRuns(const coaster::Track& Track, const std::vector<coaster::Operation>& Operations)
-{
-    using Kind = EDriveHardwareKind;
-    const double TrackLength = Track.length;
-    double StationApproach = TrackLength;
-    // The generator reserves at most the final 100 m for the level station
-    // return. Extend friction equipment only across contiguous spans that are
-    // actually horizontal and upright. Polynomial coefficient bounds cover the
-    // interiors too; a flat pair of endpoints is not sufficient.
-    for (auto It = Track.spans.rbegin(); It != Track.spans.rend(); ++It)
-    {
-        const auto& Span = *It;
-        double SpeedLower = coaster::norm(Span.c[1]), VerticalDerivative = std::abs(Span.c[1].z);
-        for (size_t I = 2; I < Span.c.size(); ++I)
-        { SpeedLower -= I * coaster::norm(Span.c[I]); VerticalDerivative += I * std::abs(Span.c[I].z); }
-        double FrameError = coaster::norm(Span.referenceUp[0] - coaster::Vec3{0,0,1});
-        for (size_t I = 1; I < Span.referenceUp.size(); ++I) FrameError += coaster::norm(Span.referenceUp[I]);
-        for (double Coefficient : Span.bank) FrameError += std::abs(Coefficient);
-        // Microradian tolerance accommodates canonical roundoff, not a banked
-        // turn or sloping canyon transfer masquerading as the station approach.
-        if (SpeedLower <= 0 || VerticalDerivative > 1e-6 * SpeedLower || FrameError > 1e-6) break;
-        StationApproach = FMath::Max(Span.start, TrackLength - 100.);
-        if (StationApproach <= TrackLength - 100.) break;
-    }
-    const auto Powered = [](const coaster::Operation& O) { return O.maxForce > 0 && O.maxPower > 0; };
-    const auto Motor = [](const coaster::Operation& O) { return O.kind == coaster::DriveKind::Launch || O.kind == coaster::DriveKind::Boost; };
-    std::vector<double> Cuts{0, StationApproach, TrackLength};
-    for (const auto& O : Operations) if (Powered(O)) { Cuts.push_back(O.start); Cuts.push_back(O.end); }
-    std::sort(Cuts.begin(), Cuts.end()); Cuts.erase(std::unique(Cuts.begin(), Cuts.end()), Cuts.end());
-    std::vector<bool> Paired(Operations.size(), false);
-    for (size_t I = 0; I < Operations.size(); ++I)
-    {
-        const auto& O = Operations[I];
-        if (O.kind == coaster::DriveKind::Brake)
-            Paired[I] = std::any_of(Operations.begin(), Operations.end(), [&](const coaster::Operation& Other)
-                { return Powered(Other) && Motor(Other) && Other.start == O.start && Other.end == O.end && Other.targetSpeed == O.targetSpeed; });
-    }
-    TArray<FDriveHardwareRun> Runs;
-    // Split at every physical boundary, including the station's wrapping seam.
-    // Opposing controllers with the same zone/target describe one stator bank;
-    // unlike overlapping targets (terminal transfer + stop) retain both lanes.
-    for (Kind K : {Kind::Stator, Kind::Brake, Kind::Station})
-        for (size_t I = 1; I < Cuts.size(); ++I)
-        {
-            const double Begin = Cuts[I - 1], End = Cuts[I], S = (Begin + End) * .5;
-            bool HasMotor = false, HasBrake = false, HasStation = false;
-            for (size_t J = 0; J < Operations.size(); ++J)
-            {
-                const auto& O = Operations[J];
-                if (!Powered(O) || !(O.start <= O.end ? S >= O.start && S < O.end : S >= O.start || S < O.end)) continue;
-                HasMotor |= Motor(O);
-                if (O.kind == coaster::DriveKind::Station)
-                {
-                    // Retain magnetic fins through the high-speed approach;
-                    // level pre-seam return and wrapped boarding track get hold equipment.
-                    if (O.start > O.end && S >= O.start && S < StationApproach) HasBrake = true;
-                    else HasStation = true;
-                }
-                if (O.kind == coaster::DriveKind::Brake)
-                    HasBrake |= !Paired[J];
-            }
-            const bool Present = K == Kind::Stator ? HasMotor : K == Kind::Station ? HasStation : HasBrake && !HasStation;
-            if (!Present) continue;
-            if (!Runs.IsEmpty() && Runs.Last().Kind == K && Runs.Last().End == Begin) Runs.Last().End = End;
-            else Runs.Add({Begin, End, K});
-        }
-    return Runs;
-}
-bool AppendOperationHardware(FPreparedRide& Out, const coaster::Track& Track,
-    const std::vector<coaster::Operation>& Operations, const coaster::Cancel& Cancel)
-{
-    // Original schematic dimensions, not manufacturer CAD. Stators occupy the
-    // left in-rail lane, brake/hold equipment the right. Both stay above the tie
-    // top (-.11 m), below the runtime chassis (.10 m), and inside the running rails.
-    // Motor/fin appearance follows Intamin LSM and InTraSys construction types;
-    // the persisted bounded controller remains the sole force authority.
-    int64 Vertices = 0;
-    for (const auto& Chunk : Out.Chunks) Vertices += Chunk.Vertices.Num();
-    for (const auto& Run : OperationHardwareRuns(Track, Operations))
-    {
-        FChunk Dark, Metal; Dark.Structure = true;
-        Dark.Hardware = Metal.Hardware = Run.Kind;
-        const auto Flush = [&](FChunk& Chunk)
-        {
-            if (Chunk.Vertices.IsEmpty()) return;
-            const bool Structure = Chunk.Structure;
-            Out.Chunks.Add(MoveTemp(Chunk)); Chunk = FChunk{};
-            Chunk.Structure = Structure; Chunk.Hardware = Run.Kind;
-        };
-        const auto Box = [&](FChunk& Chunk, double Begin, double End, double Y0, double Y1, double Z0, double Z1)
-        {
-            if (Chunk.Vertices.Num() + 24 > 960) Flush(Chunk);
-            const coaster::TrackSample Q[]{Track.sample(Begin), Track.sample(End)};
-            constexpr int Faces[6][4]{{0,4,6,2},{1,3,7,5},{0,1,5,4},{2,6,7,3},{0,2,3,1},{4,5,7,6}};
-            for (int Face = 0; Face < 6; ++Face)
-            {
-                const int32 Base = Chunk.Vertices.Num();
-                for (int J = 0; J < 4; ++J)
-                {
-                    const int Corner = Faces[Face][J]; const auto& P = Q[Corner & 1];
-                    const FVector V = Position(P.position + P.right * (Corner & 2 ? Y1 : Y0) + P.up * (Corner & 4 ? Z1 : Z0));
-                    const auto N = Face < 2 ? P.tangent : Face < 4 ? P.right : P.up;
-                    Chunk.Vertices.Add(V); Chunk.Normals.Add(Direction(N * (Face % 2 ? 1. : -1.)));
-                    Chunk.UV.Add(FVector2D(J == 1 || J == 2, J >= 2)); Out.Bounds += V;
-                }
-                // Core rider-right is tangent x up: this local frame is LH.
-                // Reflecting it into UE makes the RH box table counterclockwise;
-                // reverse only these locally-authored faces, not world-space solids.
-                EngineTriangle(Chunk, Base, Base + 2, Base + 1); EngineTriangle(Chunk, Base, Base + 3, Base + 2);
-            }
-            Vertices += 24;
-        };
-        for (double Begin = Run.Begin; Begin < Run.End; Begin += 3.)
-        {
-            if (Cancel && Cancel()) return false;
-            const double End = FMath::Min(Begin + 3., Run.End), Gap = FMath::Min(.045, (End - Begin) * .1);
-            const double A = Begin + Gap, B = End - Gap;
-            if (Run.Kind == EDriveHardwareKind::Stator)
-            {
-                Box(Dark, A, B, -.45, -.11, -.09, -.025); // mounting bed
-                Box(Metal, A, B, -.41, -.15, -.025, .035); // laminated stator
-                for (double S = A; S < B; S += .6)
-                    Box(Dark, S, FMath::Min(S + .045, B), -.41, -.15, .035, .045); // pole segmentation
-            }
-            else if (Run.Kind == EDriveHardwareKind::Brake)
-            {
-                Box(Dark, A, B, .12, .44, -.09, -.045);
-                Box(Metal, A, B, .266, .294, -.045, .075); // continuous upright braking fin
-            }
-            else
-            {
-                Box(Dark, A, B, .12, .44, -.09, -.06);
-                const double Mid = (A + B) * .5;
-                Box(Metal, A, Mid, .16, .24, -.06, .055); // opposing friction calipers
-                Box(Metal, A, Mid, .32, .40, -.06, .055);
-                const auto P = Track.sample((Mid + B) * .5);
-                const double Radius = FMath::Min(.065, (B - Mid) * .45);
-                const auto Wheel = coaster::supportMemberMesh({P.position + P.right * .21,
-                    P.position + P.right * .35, Radius, Radius, coaster::SupportMemberKind::Steel, false});
-                if (Dark.Vertices.Num() + int32(Wheel.positions.size()) > 960) Flush(Dark);
-                const int32 Base = Dark.Vertices.Num();
-                for (size_t I = 0; I < Wheel.positions.size(); ++I)
-                {
-                    const FVector V = Position(Wheel.positions[I]);
-                    Dark.Vertices.Add(V); Dark.Normals.Add(Direction(Wheel.normals[I]));
-                    Dark.UV.Add(FVector2D::ZeroVector); Out.Bounds += V;
-                }
-                for (size_t I = 0; I < Wheel.indices.size(); I += 3)
-                    EngineTriangle(Dark, Base + Wheel.indices[I], Base + Wheel.indices[I + 1], Base + Wheel.indices[I + 2]);
-                Vertices += Wheel.positions.size();
-            }
-            if (Vertices > MaxVertices || Out.Chunks.Num() + 2 > MaxChunks)
-            { Out.Error = TEXT("Operation hardware exceeds the render budget; active ride retained."); return false; }
-        }
-        Flush(Dark); Flush(Metal);
-    }
-    return true;
 }
 bool AppendStationBoxInstances(FPreparedRide& Out, const coaster::StationBox& Box,
     int32 SourceBoxIndex, coaster::Vec3 StationMidline, const coaster::Cancel& Cancel)
@@ -370,9 +202,6 @@ bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel)
     const auto StationMidline = D.track.sample(0).position;
     for (size_t I = 0; I < D.station.boxes.size(); ++I)
         if (!AppendStationBoxInstances(Out, D.station.boxes[I], int32(I), StationMidline, Cancel)) return false;
-    if (!AppendOperationHardware(Out, D.track, D.operations, Cancel)) return false;
-    Vertices = 0;
-    for (const auto& Chunk : Out.Chunks) Vertices += Chunk.Vertices.Num();
 
     // Fixed terrain query in SI. Sampling controls visual resolution only; it never
     // changes terrain heights or clearance validation to accommodate track.

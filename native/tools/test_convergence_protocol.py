@@ -28,20 +28,6 @@ class ConvergenceProtocolTests(unittest.TestCase):
     def test_different_request_step_rejected(self):
         self.rejected(lambda o: o['convergence'].__setitem__('coarseStep', .02), 'CONVERGENCE_STEP')
 
-    def test_matching_obsolete_rates_are_still_rejected(self):
-        o = strict_obj(); c = case(); c['step'] = .01
-        o['convergence'].update(coarseStep=.01, fineStep=.005)
-        self.assertEqual(acc.strict_report_check(o, c)[2], 'CONVERGENCE_STEP')
-
-    def test_envelope_evidence_is_required_and_bound(self):
-        self.rejected(lambda o: o.pop('forceEnvelope'), 'CONVERGENCE_ENVELOPE_BINDING')
-        self.rejected(lambda o: o['forceEnvelope']['seats'][0]['directionalG'].pop(), 'CONVERGENCE_ENVELOPE_BINDING')
-        self.rejected(lambda o: o['forceEnvelope']['seats'][1].__setitem__('passed', False), 'CONVERGENCE_ENVELOPE_BINDING')
-        self.rejected(lambda o: o['forceEnvelope']['seats'][2]['enhancedLongitudinalOnsetGps'].__setitem__('utilization', .1), 'CONVERGENCE_COARSE_BINDING')
-
-    def test_envelope_rows_cannot_be_omitted(self):
-        self.rejected(lambda o: o['convergence'].__setitem__('metrics', [r for r in o['convergence']['metrics'] if '.forceEnvelope.' not in r['name']]), 'CONVERGENCE_METRICS')
-
     def test_omitted_rear_statistic(self):
         self.rejected(lambda o: o['convergence']['metrics'].pop(), 'CONVERGENCE_METRICS')
 

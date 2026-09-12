@@ -1,8 +1,7 @@
 # Build the native game and numerical tools
 
-Current source: application and geometry/save identity 0.8.3-flow.1 / COASTER5.
-The published Windows package is an earlier release; this checkpoint has not
-been packaged. Mac/Metal runtime verification still needs a suitable Mac.
+Current source: application and geometry/save identity 0.8.0-flow.1 / COASTER5.
+Windows UE5.8.2 builds and packages successfully. Mac/Metal still needs a Mac.
 
 ## Current source build
 
@@ -14,52 +13,18 @@ cmake --build native/build-cmake --config Release --parallel 2
 ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2
 ```
 
-During development, build the changed target and select the relevant regression
-instead of regenerating every fixture. For example:
-
-```sh
-cmake --build native/build-cmake --config Release --target support_family_tests --parallel 2
-ctest --test-dir native/build-cmake -C Release -R '^support_terrain_footprints$' --output-on-failure
-```
-
-`circuit_components` and `station_terrain_footprints` also avoid complete ride
-generation. Organic integration is split into `organic_hills`, `organic_crossing`,
-`organic_canyon` and `organic_variety`; the last keeps repeatability and variation
-together without generating duplicate fixtures in separate tests.
-
-Run `ctest ... -L component` for the fast physical contracts, then
-`ctest ... -L integration` for complete generation and saved replay. CI requires
-both groups on Windows and macOS. Linux remains a possible future target; its
-tests and platform-specific work are not currently required. An unfiltered CTest
-run still runs everything;
-`ctest ... --rerun-failed --output-on-failure` repeats only failures from the last
-run in that build directory. Add `--stop-on-failure` to stop scheduling work after
-the first failure; CI uses this in both groups. A successful qualification still
-runs every check. Never use a focused pass as full qualification.
-
-The portable `native/tools/build.ps1` likewise compiles the core once into a
-static library before linking the CLI and tests. Every invocation rebuilds the
-objects with the current headers and flags; `-Test` runs every full native suite
-and the eight real CLI argument, generation-plan and saved-replay contracts
-against the newly built `native/build/coaster_cli.exe`. `-Test` requires an
-available Python 3 interpreter, using `PYTHON` when set or discovering `python3`,
-`python`, or `py -3` on `PATH`. Build-only invocations remain Zig-only, and the
-script never downloads either tool.
-
-CMake also registers real CLI argument tests when Python is available. Historical rejection fixtures under
+CMake registers 22 C++ suites, plus real CLI argument tests when Python is available. Historical rejection fixtures under
 `core/tests/fixtures/historical/artifacts` are required committed test inputs.
 The separate convergence CLI is built but does not run a matrix automatically.
 
-Packaging is outside the current checkpoint. For a later UE build/cook/package,
-follow [Unreal setup](../unreal/README.md). Imported
+For UE build/cook/package, follow [Unreal setup](../unreal/README.md). Imported
 runtime art is committed; Blender is not required. The editor bootstrap creates
 the map and seven base materials. Compilation is limited to two parallel actions
-to bound memory use. The following is the earlier 0.8.2 distribution example;
-do not label a new checkpoint build with that old version:
+to bound memory use. Build into a fresh timestamped package:
 
 ```powershell
 & .\native\unreal\scripts\package.ps1 -UnrealRoot 'D:\Games\Epic Games\UE_5.8'
-python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.8.2-terrain.1
+python native/tools/distribute_windows.py --package native/unreal/Packaged/<new-run>/Windows --output native/releases --version 0.8.0-flow.1
 ```
 
 The distribution helper requires Python 3.11+, verifies copied runtime files and
@@ -75,13 +40,6 @@ Python diagnostic tools/tests use the recorded plotting dependency:
 python -m pip install -r native/tools/requirements.txt
 python -B -m unittest discover -s native/tools -p "test_*.py" -v
 ```
-
-Current execution preference: run native simulations on CI. The
-[fixed qualification workflow](qualification/README.md) builds once and runs the
-unchanged 44 requests and eight required rides across four jobs, with two workers
-per job. Local compilation, static checks and Python tooling tests remain usable.
-Local Unreal work is paused at the user's request. Historical commands below do
-not override this preference.
 
 ## Historical 0.5.0 build and acceptance procedure
 
