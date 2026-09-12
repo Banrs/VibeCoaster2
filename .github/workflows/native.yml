@@ -30,7 +30,7 @@ jobs:
       - name: Test all remaining integration contracts
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --timeout 600 --output-junit integration-tests.xml -E "^(fvd|baseline_jets|flow_bridge|connector_profile|cli_arguments|geometry|frame_force|convergence|drive_profile|terrain_profile|dimensions|clearance|track_web|terrain)$"
-      - name: Check seed 42 controls and flat 39 regression at 960 and 1920 Hz
+      - name: Check candidate-zero terrain regressions at 960 and 1920 Hz
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: python
         run: |
@@ -41,15 +41,17 @@ jobs:
           executable = Path('native/build-cmake') / ('Release/coaster_cli.exe' if platform.system() == 'Windows' else 'coaster_cli')
           print(f'Native host: {platform.system()} {platform.machine()}', flush=True)
           failed = False
-          for seed, terrain, candidates in [(42, 'flat', 1), (42, 'hills', 1), (39, 'flat', 8)]:
+          for seed, terrain in [(5, 'flat'), (7, 'flat'), (39, 'flat'), (42, 'flat'),
+                                (2, 'hills'), (9, 'hills'), (42, 'hills'),
+                                (1, 'canyon'), (24, 'canyon'), (42, 'canyon')]:
               name = output / f'{terrain}-{seed}'
               with Path(f'{name}.log').open('w') as stdout, Path(f'{name}-progress.log').open('w') as stderr:
                   result = subprocess.run([str(executable), 'generate', '--seed', str(seed), '--terrain', terrain,
-                      '--preset', 'physics-proof', '--candidates', str(candidates), '--json', f'{name}.json',
+                      '--preset', 'physics-proof', '--candidates', '1', '--json', f'{name}.json',
                       '--plan', f'{name}-plan.json', '--trace', f'{name}-trace.json', '--out', f'{name}.coaster'],
                       stdout=stdout, stderr=stderr, timeout=600)
-              failed |= result.returncode != 0
               report = json.loads(Path(f'{name}.json').read_text())
+              failed |= result.returncode != 0 or not report['accepted'] or report['candidate'] != 0 or not report['convergence']['passed']
               print(f'{terrain}/{seed}: accepted={report["accepted"]} generationSeconds={report["generationSeconds"]}', flush=True)
           if failed:
               raise SystemExit('A ride failed its unchanged acceptance gates. See ride-checks.')
@@ -59,7 +61,7 @@ jobs:
           name: native-checks-${{ runner.os }}
           path: |
             ride-checks
-            "*-tests.xml"
+            *-tests.xml
             native/build-cmake/*-tests.xml
             native/build-cmake/Testing/Temporary
 

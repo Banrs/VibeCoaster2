@@ -328,7 +328,9 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         if(run.identity=="inversion-entry-brake")pace(run.begin,run.end,60,1);
         if(run.identity=="inversion-recovery"&&m+1<modules.size()&&modules[m+1].identity=="airtime-entry-boost")pace(run.begin,modules[m+1].end,52,1);
         if(run.identity=="organic-inward-recovery"&&run.corridor==1)pace(run.begin,run.end,65,1);
-        if(run.identity=="immelmann-inward-entry-brake")pace(run.begin,run.end,55,1);
+        // The complete Immelmann returns over this entry at its low exit datum.
+        // Keep it level while retaining the other crests' seeded variation.
+        if(run.identity=="immelmann-inward-entry-brake"){pacing.next();continue;}
         // A single broad crest flies over the low Immelmann entry footprint;
         // two crests put their shared valley directly at this crossing.
         if(run.identity=="interior-low-return")pace(run.begin,run.end,46,1);
@@ -377,9 +379,19 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         }
     }
     if(crossings.empty())throw std::runtime_error("Folded route has no separated diagonal crossing");
-    for(size_t i=branchBegin[3];i<=branchEnd[3];++i){double lift=0;
-        for(const auto& crossing:crossings){double halfWidth=std::min(850.,std::min(crossing.along-distance[branchBegin[3]],distance[branchEnd[3]]-crossing.along));double t=std::abs(distance[i]-crossing.along)/halfWidth;lift=std::max(lift,crossing.lift*(1-layoutSmooth(t)));}
-        raw[i].position.z+=lift;
+    // Move the complete airtime sequence onto one flyover datum. A sloping
+    // envelope through its crests can erase a descent or turn two hills into one.
+    size_t flyoverBegin=branchBegin[3],crestBegin=branchEnd[3],crestEnd=branchBegin[3];
+    for(const auto& run:modules){
+        if(run.corridor==2&&run.identity=="banked-camelback-turn")flyoverBegin=run.begin;
+        if(run.corridor==3&&run.identity=="fvd-airtime"){crestBegin=std::min(crestBegin,run.begin);crestEnd=std::max(crestEnd,run.end);}
+    }
+    double plateauBegin=distance[crestBegin],plateauEnd=distance[crestEnd],flyoverLift=0;
+    for(const auto& crossing:crossings){plateauBegin=std::min(plateauBegin,crossing.along);plateauEnd=std::max(plateauEnd,crossing.along);flyoverLift=std::max(flyoverLift,crossing.lift);}
+    for(size_t i=flyoverBegin;i<=branchEnd[3];++i){
+        const double s=distance[i],rise=layoutSmooth((s-distance[flyoverBegin])/(plateauBegin-distance[flyoverBegin]));
+        const double fall=layoutSmooth((distance[branchEnd[3]]-s)/(distance[branchEnd[3]]-plateauEnd));
+        raw[i].position.z+=flyoverLift*std::min(rise,fall);
     }
     for(size_t i=0;i<raw.size();++i)raw[i].bank*=stationBankFactor(distance.back()-distance[i],req.train);
     if(norm(raw.back().position-raw.front().position)>.001)throw std::runtime_error("Solved route failed canonical height closure");raw.back().position=raw.front().position;
@@ -430,17 +442,20 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     }
     plan.stationSelectionEligible=true;
     for(int k=0;k<controls;++k){target[k]=weight[k]?target[k]/weight[k]:stationDatum;base[k]=std::max(target[k],lower[k]);fixed[k]=fixedStationBoundary(k*spacing);if(fixed[k]){if(lower[k]>stationDatum+1e-8)throw std::runtime_error("Local station datum cannot clear its fixed launch/boarding boundary");base[k]=stationDatum;}}
-    // Preserve genuine inversion pitch/roll geometry by translating complete
+    // Preserve authored inversion and airtime shapes by translating complete
     // modules rigidly above their terrain envelope. Fixed constant control
     // plateaus extend two cells beyond their ports; the shared C3 baseline
     // joins those plateaus through the surrounding lead/recovery geometry.
     if(req.terrain.kind!=TerrainKind::Flat){
-        std::vector<std::pair<size_t,size_t>> rigidRegions;
-        for(const auto& run:modules){if(run.identity=="record-inversion")rigidRegions.push_back({run.begin,run.end});
-            if(run.identity=="high-immelmann")rigidRegions.push_back({run.begin,run.end});}
-        for(const auto& region:rigidRegions){int first=std::max(0,int(std::floor(distance[region.first]/spacing))-2),last=std::min(controls-1,int(std::ceil(distance[region.second]/spacing))+2);double datum=-INFINITY;
+        std::vector<std::pair<int,int>> rigidRegions;
+        for(const auto& run:modules)if(run.identity=="record-inversion"||run.identity=="high-immelmann"||run.identity=="fvd-airtime"){
+            const int first=std::max(0,int(std::floor(distance[run.begin]/spacing))-2),last=std::min(controls-1,int(std::ceil(distance[run.end]/spacing))+2);
+            if(!rigidRegions.empty()&&first<=rigidRegions.back().second)rigidRegions.back().second=std::max(last,rigidRegions.back().second);
+            else rigidRegions.push_back({first,last});
+        }
+        for(const auto& [first,last]:rigidRegions){double datum=-INFINITY;
             for(int k=first;k<=last;++k)datum=std::max(datum,std::max(base[k],lower[k]));
-            for(int k=first;k<=last;++k){if(fixed[k]&&std::abs(base[k]-datum)>1e-8)throw std::runtime_error("Rigid inversion terrain envelope conflicts with station datum");base[k]=datum;fixed[k]=true;}}
+            for(int k=first;k<=last;++k){if(fixed[k]&&std::abs(base[k]-datum)>1e-8)throw std::runtime_error("Authored element terrain envelope conflicts with station datum");base[k]=datum;fixed[k]=true;}}
     }
     auto wrap=[&](int k){return (k%controls+controls)%controls;};
     // Minimize squared second and third spatial differences together. The
