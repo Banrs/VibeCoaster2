@@ -10,7 +10,6 @@ namespace
 {
 constexpr int32 RingSides = 8;
 constexpr double ChunkMetres = 80, RailStep = 2;
-constexpr int32 MaxChunks = 4096, MaxVertices = 2000000, MaxInstances = 100000;
 void EngineTriangle(FChunk& Chunk, int32 A, int32 B, int32 C)
 {
     // UE's GenerateBoxMesh uses clockwise front faces: Cross(B-A, C-A) has

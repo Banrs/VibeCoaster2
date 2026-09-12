@@ -645,6 +645,31 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
 
 #endif // WITH_EDITOR: imported source slot names and resident LOD CPU data.
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterCanyonRenderBudgetTest, "VibeCoaster.CanyonRenderBudgetContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCoasterCanyonRenderBudgetTest::RunTest(const FString& Parameters)
+{
+    for (int Seed : {1, 24})
+    {
+        coaster::GenerationRequest Request;
+        Request.seed = Seed; Request.terrain.kind = coaster::TerrainKind::Canyon;
+        Request.targets.requireIntensity = false; Request.maxCandidates = 1;
+        auto Design = std::make_shared<coaster::Design>(coaster::generate(Request));
+        const FString Label = FString::Printf(TEXT("canyon%d"), Seed);
+        if (!TestTrue(Label + TEXT(": candidate zero passes complete physical acceptance"), Design->accepted() && Design->candidate == 0))
+            return false;
+        VibeMesh::FPreparedRide Prepared; Prepared.Design = Design;
+        if (!TestTrue(Label + TEXT(": accepted ride fits unchanged complete render budgets"),
+            VibeMesh::Prepare(Prepared, [] { return false; })))
+        { AddError(Prepared.Error); continue; }
+        int64 Vertices = 0;
+        for (const auto& Chunk : Prepared.Chunks) Vertices += Chunk.Vertices.Num();
+        TestTrue(Label + TEXT(": all rail, support, hardware and terrain payload is included"),
+            Vertices <= 2000000 && Prepared.Chunks.Num() <= 4096);
+        AddInfo(FString::Printf(TEXT("%s: complete vertices=%lld chunks=%d"), *Label, Vertices, Prepared.Chunks.Num()));
+    }
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterTerrainBackdropTest, "VibeCoaster.TerrainBackdropContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FCoasterTerrainBackdropTest::RunTest(const FString& Parameters)
 {
@@ -754,20 +779,27 @@ bool FCoasterTerrainBackdropTest::RunTest(const FString& Parameters)
         TestTrue(Label + TEXT(": all faces follow Epic clockwise convention"), Facing && Checked == TriangleCount && Checked > 0);
         TestTrue(Label + TEXT(": canonical heights, finite unit normals and world UV"), Canonical);
         TestTrue(Label + TEXT(": valid attributes and bounded chunk/aggregate payload"), Valid && VertexCount <= 2000000 && Prepared.Chunks.Num() <= 4096);
-        TestEqual(Label + TEXT(": exact coalesced component count preserves all planned triangles"), int64(Prepared.Chunks.Num()), (CaseTriangles * 3 + ChunkLimit - 1) / ChunkLimit);
+        TestTrue(Label + TEXT(": indexed strips reuse attributes and reduce components without dropping triangles"),
+            VertexCount < CaseTriangles * 2 && Prepared.Chunks.Num() < (CaseTriangles * 3 + ChunkLimit - 1) / ChunkLimit);
         TestTrue(Label + TEXT(": ride overview bounds remain unchanged"), BoundsUnchanged(Prepared));
     }
     coaster::Terrain Terrain;
+    VibeMesh::FPreparedRide PreCancelled; PreCancelled.Bounds = OriginalBounds;
+    TestFalse(TEXT("Backdrop cancellation before work appends nothing"),
+        VibeMesh::AppendTerrainBackdrop(PreCancelled, Terrain, X0, Y0, 2, 3, [] { return true; }));
+    TestTrue(TEXT("Pre-cancel preserves empty buffers and ride bounds"), PreCancelled.Chunks.IsEmpty() && BoundsUnchanged(PreCancelled));
     VibeMesh::FPreparedRide Cancelled; Cancelled.Bounds = OriginalBounds;
-    int32 CancelCalls = 0;
-    TestFalse(TEXT("Backdrop cancellation stops during staged triangle emission"), VibeMesh::AppendTerrainBackdrop(Cancelled, Terrain, X0, Y0, 2, 3, [&] { return ++CancelCalls > 6; }));
-    TestTrue(TEXT("Cancellation reached partial work without changing ride bounds"), CancelCalls > 6 && !Cancelled.Chunks.IsEmpty() && BoundsUnchanged(Cancelled));
+    TestFalse(TEXT("Backdrop cancellation stops after actual staged triangle emission"),
+        VibeMesh::AppendTerrainBackdrop(Cancelled, Terrain, X0, Y0, 2, 3, [&] { return !Cancelled.Chunks.IsEmpty(); }));
+    TestTrue(TEXT("Cancellation preserves exactly one bounded staging chunk and ride bounds"),
+        Cancelled.Chunks.Num() == 1 && Cancelled.Chunks[0].Vertices.Num() <= VibeMesh::TerrainBackdrop::DefaultChunkVertices && BoundsUnchanged(Cancelled));
     VibeMesh::FPreparedRide CliffCancelled; CliffCancelled.Bounds = OriginalBounds;
     const auto CliffTerrain = coaster::Terrain::seeded(coaster::TerrainKind::Canyon, 42);
     TestFalse(TEXT("Cliff cancellation remains responsive after a coalesced chunk is staged"),
         VibeMesh::AppendTerrainBackdrop(CliffCancelled, CliffTerrain, X0, Y0, 2, 3, [&] { return !CliffCancelled.Chunks.IsEmpty(); }));
     TestTrue(TEXT("Cliff cancellation preserves one bounded completed staging chunk and ride bounds"),
-        CliffCancelled.Chunks.Num() == 1 && CliffCancelled.Chunks[0].Vertices.Num() == VibeMesh::TerrainBackdrop::CliffChunkVertices && BoundsUnchanged(CliffCancelled));
+        CliffCancelled.Chunks.Num() == 1 && CliffCancelled.Chunks[0].Vertices.Num() >= VibeMesh::TerrainBackdrop::CliffChunkVertices - 2 &&
+        CliffCancelled.Chunks[0].Vertices.Num() <= VibeMesh::TerrainBackdrop::CliffChunkVertices && BoundsUnchanged(CliffCancelled));
     VibeMesh::FPreparedRide ChunkFull; ChunkFull.Bounds = OriginalBounds; ChunkFull.Chunks.SetNum(4096);
     TestFalse(TEXT("Full aggregate chunk budget rejects before appending"), VibeMesh::AppendTerrainBackdrop(ChunkFull, Terrain, X0, Y0, 2, 3, [] { return false; }));
     TestTrue(TEXT("Chunk-budget failure preserves prior buffers and bounds"), ChunkFull.Chunks.Num() == 4096 && BoundsUnchanged(ChunkFull));

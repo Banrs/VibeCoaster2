@@ -218,6 +218,11 @@ inline Operation rideMotor(const GenerationRequest& request,DriveKind kind,doubl
     Operation motor{0,1,kind,target,request.train.carMass*acceleration,request.train.carMass*acceleration*100,ramp};
     motor.exitFadeMeters=std::max(1.,target*ramp);return motor;
 }
+inline Operation sourceMotor(const GenerationRequest& request,const RideSource& source){
+    const double acceleration=source.role==RideRole::Climb?rideClimbAcceleration(request):
+        std::min(.8*gravity,request.limits.maxLongitudinalG*gravity-.1);
+    return rideMotor(request,DriveKind::Boost,source.entrySpeed+.5,acceleration);
+}
 inline CircuitElement ridePort(const RideSource& source,double speed,double normalG){
     const auto& end=source.geometry.points.back();const double bank=std::acos(1/normalG);
     const double ramp=speed*std::max(1.875*bank/(80*pi/180),std::sqrt((10*std::sqrt(3.)/3)*bank/(150*pi/180)));
@@ -251,7 +256,6 @@ inline RideRoute routeRide(const GenerationRequest& request,std::vector<RideSour
     for(auto& weight:weights){weight=random.range(.75,1.25);total+=weight;}
     for(size_t i=1;i<initial.size();++i)initial[i]=initial[i-1]+hand*2*pi*weights[i-1]/total;
     const double trainLength=(request.train.cars-1)*request.train.spacing;
-    const double boost=std::min(.8*gravity,request.limits.maxLongitudinalG*gravity-.1);
     auto propose=[&](const std::vector<size_t>& order,const RideRoute* prior=nullptr){
         RideRoute route;route.sources=prior?prior->sources:sources;route.order=order;
         const auto& headings=prior?prior->layout.headings:feedback.headings.empty()?initial:feedback.headings;
@@ -285,8 +289,7 @@ inline RideRoute routeRide(const GenerationRequest& request,std::vector<RideSour
             const double entry=feedback.order.empty()?rideCoast(request,source.exitSpeed,turnLength+recovery[i],rise[i]):feedback.motorEntry[next];
             if(next==0)return {std::pow(feedback.measured?feedback.motorEntry[0]:source.exitSpeed,2)/(2*6.)+2*trainLength+100,recovery[i],entry};
             if(destination.airtime()||destination.role==RideRole::Dive)return {0,std::max(trainLength,recovery[i])};
-            const double target=destination.entrySpeed+.5;
-            return {plannedBoostLength(0,rideMotor(request,DriveKind::Boost,target,destination.role==RideRole::Climb?rideClimbAcceleration(request):boost),request.train),recovery[i],entry};
+            return {plannedBoostLength(0,sourceMotor(request,destination),request.train),recovery[i],entry};
         };
         route.layout=!prior&&feedback.headings.empty()?solveCircuitLayout(ports,headings,minimum,cancel):closeCircuit(ports,headings,minimum,nullptr,cancel);
         if(!std::isfinite(route.layout.length))return route;
@@ -491,7 +494,7 @@ inline CircuitGeometry placeRide(const GenerationRequest& request,const RideRout
             }
         }
         try{
-            const auto solved=solveTerrainBaseline(distance,floor,target,height,anchors,{},motion,crossings,cancel,authoredJets,transports,request.train);
+            const auto solved=solveTerrainBaseline(distance,floor,target,height,anchors,motion,crossings,cancel,authoredJets,transports,request.train);
             for(const auto& source:solved.sources){const auto first=size_t(std::lower_bound(distance.begin(),distance.end(),source.begin)-distance.begin());
                 for(size_t i=first;i<count&&distance[i]<=source.end;++i)track.knots[i].position.z+=source.height;}
             for(const auto& gap:solved.gaps){const auto first=size_t(std::upper_bound(distance.begin(),distance.end(),gap.begin)-distance.begin());
@@ -512,7 +515,6 @@ inline RideBuild buildRide(const GenerationRequest& request,int candidate,Operat
     const auto distance=circuitDistances(design.track);const double half=(request.train.cars-1)*request.train.spacing*.5;
     result.motorInlet.resize(result.route.sources.size(),-1);
     departure.start=0;departure.end=distance[result.geometry.sources.front().last]-half;design.operations.push_back(departure);
-    const double boost=std::min(.8*gravity,request.limits.maxLongitudinalG*gravity-.1);
     for(size_t i=0;i<result.route.order.size();++i){const auto id=result.route.order[i],next=result.route.order[(i+1)%result.route.order.size()];
         const auto& source=result.route.sources[id];const auto& destination=result.route.sources[next];const auto& link=result.geometry.links[i];
         const double begin=distance[link.workFirst],end=distance[link.straight.last];
@@ -527,8 +529,7 @@ inline RideBuild buildRide(const GenerationRequest& request,int candidate,Operat
         }
         if(destination.airtime()||destination.role==RideRole::Dive)continue;
         const bool climb=destination.role==RideRole::Climb;
-        const double target=destination.entrySpeed+.5;
-        auto motor=rideMotor(request,DriveKind::Boost,target,climb?rideClimbAcceleration(request):boost);
+        auto motor=sourceMotor(request,destination);
         const double inlet=end-plannedBoostLength(feedback.motorEntry[next],motor,request.train);
         if(inlet<begin-1e-7)throw TerrainTransferInfeasible("Sized motor exceeds the route's declared work capacity");
         const auto coast=estimatePassiveTransfer(design.track,request.train,distance[result.geometry.sources[i].last],inlet,source.exitSpeed,cancel);

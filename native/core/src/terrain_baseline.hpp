@@ -31,10 +31,6 @@ struct ConstrainedBaseline {
 };
 
 struct BaselineAnchor {size_t first,last;double minimumHeight;bool fixed;double maximumHeight{INFINITY};bool stationDatum{};};
-struct BaselineDomain {
-    size_t first,last;std::vector<double> horizontal;
-    double minimumRise,maximumRise,activeStart{},activeLength{};
-};
 // These spatial derivative bounds are authoring constraints, not a replacement
 // for the actual finite-train force and force-rate assessment.
 struct BaselineMotionBounds {
@@ -45,8 +41,7 @@ struct BaselineTransport {size_t first,last;double entrySpeed,minimumExitSpeed,m
 struct TerrainBaseline {
     struct Source {double begin,end,height;};
     struct Gap {double begin,end;ConstrainedBaseline profile;};
-    struct Transfer {size_t first,last;TerrainTransfer profile;};
-    std::vector<Source> sources;std::vector<Gap> gaps;std::vector<Transfer> transfers;
+    std::vector<Source> sources;std::vector<Gap> gaps;
     double height(double distance) const {
         for(const auto& source:sources)if(distance>=source.begin&&distance<=source.end)return source.height;
         for(const auto& gap:gaps)if(distance>gap.begin&&distance<gap.end)return gap.profile.height(distance-gap.begin);
@@ -139,10 +134,10 @@ inline std::vector<double> projectBaselineConstraints(const std::vector<Baseline
     }
 }
 // Source translations and ordinary C3 gap profiles share one constrained solve.
-// Purposeful transfers own their interiors; only their zero-jet ports enter here.
+// Powered climbs and dives enter as rigid sources, with their shape already owned.
 inline TerrainBaseline solveTerrainBaseline(const std::vector<double>& distance,const std::vector<double>& floor,
     const std::vector<double>& target,const std::vector<double>& authoredHeight,std::vector<BaselineAnchor> anchors,
-    const std::vector<BaselineDomain>& transfers,const std::vector<BaselineMotionBounds>& motionBounds={},
+    const std::vector<BaselineMotionBounds>& motionBounds={},
     const std::vector<BaselineCrossing>& crossings={},Cancel cancel={},
     const std::vector<BaselineJet>& authoredJets={},const std::vector<BaselineTransport>& transports={},const TrainConfig& train={}){
     if(distance.size()<2||floor.size()!=distance.size()||target.size()!=distance.size()||authoredHeight.size()!=distance.size()||anchors.empty())throw std::invalid_argument("Invalid terrain baseline inputs");
@@ -152,16 +147,6 @@ inline TerrainBaseline solveTerrainBaseline(const std::vector<double>& distance,
     if(!authoredJets.empty()&&authoredJets.size()!=distance.size())throw std::invalid_argument("Authored terrain jets need one value per station");
     for(size_t i=0;i<distance.size();++i)if(!std::isfinite(distance[i])||(i&&distance[i]<=distance[i-1])||!std::isfinite(floor[i])||!std::isfinite(target[i])||!std::isfinite(authoredHeight[i]))throw std::invalid_argument("Invalid terrain baseline station");
     for(auto& source:anchors){if(source.first>source.last||source.last>=distance.size()||!std::isfinite(source.minimumHeight)||std::isnan(source.maximumHeight))throw std::invalid_argument("Invalid terrain baseline source");if(source.fixed)source.maximumHeight=std::min(source.maximumHeight,source.minimumHeight);if(source.stationDatum)source.fixed=false;}
-    // A transfer boundary outside a rigid source is a variable zero-jet port.
-    for(const auto& transfer:transfers){
-        if(transfer.first>=transfer.last||transfer.last>=distance.size()||transfer.horizontal.size()!=transfer.last-transfer.first+1||transfer.horizontal.front()!=0||!std::isfinite(transfer.minimumRise)||!std::isfinite(transfer.maximumRise)||transfer.minimumRise>transfer.maximumRise)throw std::invalid_argument("Invalid terrain baseline transfer");
-        for(size_t i=0;i<transfer.horizontal.size();++i)if(!std::isfinite(transfer.horizontal[i])||(i&&transfer.horizontal[i]<=transfer.horizontal[i-1]))throw std::invalid_argument("Invalid terrain transfer horizontal stations");
-        // Local route stations and placed world-space chord sums can differ
-        // by roundoff. Apply the same metre tolerance without changing the
-        // certified window's rise, start or length.
-        if(transfer.activeStart<0||transfer.activeLength<0||!std::isfinite(transfer.activeStart)||!std::isfinite(transfer.activeLength)||transfer.activeStart+transfer.activeLength>transfer.horizontal.back()+constraintTolerance||(transfer.activeLength==0&&transfer.activeStart!=0))throw std::invalid_argument("Invalid terrain transfer active window");
-        for(size_t port:{transfer.first,transfer.last})if(std::none_of(anchors.begin(),anchors.end(),[&](const BaselineAnchor& source){return port>=source.first&&port<=source.last;}))anchors.push_back({port,port,floor[port],false});
-    }
     std::sort(anchors.begin(),anchors.end(),[](const auto& a,const auto& b){return a.first<b.first;});
     for(size_t i=1;i<anchors.size();++i)if(anchors[i].first<=anchors[i-1].last)throw std::invalid_argument("Overlapping terrain baseline sources");
     for(auto& source:anchors){const double required=*std::max_element(floor.begin()+source.first,floor.begin()+source.last+1);
@@ -174,12 +159,9 @@ inline TerrainBaseline solveTerrainBaseline(const std::vector<double>& distance,
     std::vector<Gap> gaps;std::vector<int> sourceVariable(anchors.size(),-1);int count=0;
     if(!anchors.front().fixed&&!anchors.front().stationDatum)sourceVariable.front()=count++;
     for(size_t i=1;i<anchors.size();++i){const size_t first=anchors[i-1].last,last=anchors[i].first;
-        const bool transfer=std::any_of(transfers.begin(),transfers.end(),[&](const BaselineDomain& domain){return domain.first==first&&domain.last==last;});
-        for(const auto& domain:transfers)if(domain.first<last&&domain.last>first&&!transfer)throw std::invalid_argument("Transfer overlaps an ordinary baseline gap or source");
-        if(!transfer){const double length=distance[last]-distance[first];const int cells=std::max(3,int(std::ceil(length/ConstrainedBaseline::maximumSpacing)));
-            const size_t index=result.gaps.size();result.gaps.push_back({distance[first],distance[last],{length,length/cells,std::vector<BaselineJet>(cells+1)}});
-            gaps.push_back({i-1,i,index,count,cells,{}});count+=4*(cells-1);
-        }
+        const double length=distance[last]-distance[first];const int cells=std::max(3,int(std::ceil(length/ConstrainedBaseline::maximumSpacing)));
+        const size_t index=result.gaps.size();result.gaps.push_back({distance[first],distance[last],{length,length/cells,std::vector<BaselineJet>(cells+1)}});
+        gaps.push_back({i-1,i,index,count,cells,{}});count+=4*(cells-1);
         if(!anchors[i].fixed&&!anchors[i].stationDatum)sourceVariable[i]=count++;
     }
     const bool sharedStation=std::any_of(anchors.begin(),anchors.end(),[](const BaselineAnchor& source){return source.stationDatum;});
@@ -205,26 +187,6 @@ inline TerrainBaseline solveTerrainBaseline(const std::vector<double>& distance,
     }
     constexpr std::array<double,8> abscissa{-.9602898564975363,-.7966664774136267,-.5255324099163290,-.1834346424956498,.1834346424956498,.5255324099163290,.7966664774136267,.9602898564975363};
     constexpr std::array<double,8> weight{.1012285362903763,.2223810344533745,.3137066458778873,.3626837833783620,.3626837833783620,.3137066458778873,.2223810344533745,.1012285362903763};
-    struct Transfer {const BaselineDomain* domain;size_t left,right;TerrainTransfer phase;double fixedStart,fixedEnd;};std::vector<Transfer> transferBuild;
-    for(const auto& domain:transfers){
-        const size_t left=std::find_if(anchors.begin(),anchors.end(),[&](const auto& source){return source.last==domain.first;})-anchors.begin();
-        const size_t right=std::find_if(anchors.begin(),anchors.end(),[&](const auto& source){return source.first==domain.last;})-anchors.begin();
-        if(left>=anchors.size()||right!=left+1)throw std::invalid_argument("Terrain transfer must connect two declared source ports");
-        const double start=authoredHeight[domain.first]+(anchors[left].fixed?anchors[left].minimumHeight:0),end=authoredHeight[domain.last]+(anchors[right].fixed?anchors[right].minimumHeight:0);
-        TerrainTransfer phase{0,1,domain.horizontal.back(),domain.activeStart,domain.activeLength};
-        transferBuild.push_back({&domain,left,right,phase,start,end});
-        const int a=sourceVariable[left],b=sourceVariable[right];
-        // This is the actual fixed transfer, not an ordinary spline that will
-        // later be replaced. Its low-height objective is in absolute height.
-        for(size_t i=0;i+1<domain.horizontal.size();++i)for(size_t sample=0;sample<abscissa.size();++sample){
-            if((i&63)==0&&sample==0)checkCancelled();
-            const double u=(abscissa[sample]+1)*.5,span=domain.horizontal[i+1]-domain.horizontal[i],p=phase.height(domain.horizontal[i]+u*span),w=weight[sample]*.5*span/ConstrainedBaseline::maximumSpacing;
-            const double goal=target[domain.first+i]+u*(target[domain.first+i+1]-target[domain.first+i]),fixed=(1-p)*start+p*end;
-            if(a>=0){normal(a,a,w*(1-p)*(1-p));rhs[a]+=w*(1-p)*(goal-fixed);}
-            if(b>=0){normal(b,b,w*p*p);rhs[b]+=w*p*(goal-fixed);}
-            if(a>=0&&b>=0)normal(a,b,(a==b?2:1)*w*(1-p)*p);
-        }
-    }
     auto fixedCell=[&](const Gap& gap,int cell){return baselineCell(cell==0&&anchors[gap.left].fixed?BaselineJet{anchors[gap.left].minimumHeight,0,0,0}:BaselineJet{},cell+1==gap.cells&&anchors[gap.right].fixed?BaselineJet{anchors[gap.right].minimumHeight,0,0,0}:BaselineJet{});};
     for(auto& gap:gaps){const auto& profile=result.gaps[gap.resultIndex].profile;gap.variable.resize(gap.cells+1);
         for(auto& node:gap.variable)node.fill(-1);gap.variable.front()[0]=sourceVariable[gap.left];gap.variable.back()[0]=sourceVariable[gap.right];
@@ -280,22 +242,6 @@ inline TerrainBaseline solveTerrainBaseline(const std::vector<double>& distance,
             }
         }
     }
-    const BaselinePolynomial unitProgress{0,0,0,0,35,-84,70,-20};
-    for(const auto& transfer:transferBuild){const auto& domain=*transfer.domain;const int a=sourceVariable[transfer.left],b=sourceVariable[transfer.right];
-        std::vector<double> rise(count);if(a>=0)rise[a]=-1;if(b>=0)rise[b]+=1;const double fixedRise=transfer.fixedEnd-transfer.fixedStart;
-        constrain(rise,domain.minimumRise-fixedRise);for(auto& value:rise)value=-value;constrain(rise,fixedRise-domain.maximumRise);
-        const double active=domain.activeLength>0?domain.activeLength:domain.horizontal.back(),start=domain.activeStart,finish=start+active;
-        for(size_t sample=0;sample+1<domain.horizontal.size();++sample){
-            const double first=domain.horizontal[sample],last=domain.horizontal[sample+1];
-            std::vector<double> breaks{first};for(double boundary:{start,finish})if(boundary>first&&boundary<last)breaks.push_back(boundary);breaks.push_back(last);
-            for(size_t span=0;span+1<breaks.size();++span){const double begin=breaks[span],end=breaks[span+1];
-                for(int k=0;k<8;++k){const double p=end<=start?0:(begin>=finish?1:bernstein(unitProgress,0,(begin-start)/active,(end-begin)/active,k));
-                    const double u=(begin+(end-begin)*k/7-first)/(last-first),f0=floor[domain.first+sample]+authoredHeight[domain.first+sample],f1=floor[domain.first+sample+1]+authoredHeight[domain.first+sample+1];
-                    std::vector<double> row(count);if(a>=0)row[a]=1-p;if(b>=0)row[b]+=p;constrain(row,f0+u*(f1-f0)-(1-p)*transfer.fixedStart-p*transfer.fixedEnd);
-                }
-            }
-        }
-    }
     for(const auto& bounds:motionBounds)for(const auto& gap:gaps){const auto& profile=result.gaps[gap.resultIndex].profile;const double origin=distance[anchors[gap.left].last];
         const size_t first=std::max(bounds.first,anchors[gap.left].last),last=std::min(bounds.last,anchors[gap.right].first);if(first>=last)continue;
         for(size_t sample=first;sample<last;++sample){const double endpoint=sample+1==anchors[gap.right].first?double(gap.cells):(distance[sample+1]-origin)/profile.spacing;
@@ -315,13 +261,12 @@ inline TerrainBaseline solveTerrainBaseline(const std::vector<double>& distance,
         }
         }
     }
-    // Source, ordinary-gap and declared transfer evaluations are all affine
+    // Source and ordinary-gap evaluations are all affine
     // in this same unknown vector. A planned crossing therefore changes the
     // joint solve; it cannot translate an already-solved tail afterward.
     auto addHeight=[&](size_t sample,double weight,std::vector<double>& row,double& fixed){
         for(size_t source=0;source<anchors.size();++source)if(sample>=anchors[source].first&&sample<=anchors[source].last){fixed+=weight*authoredHeight[sample];if(sourceVariable[source]>=0)row[sourceVariable[source]]+=weight;else fixed+=weight*anchors[source].minimumHeight;return;}
         for(const auto& gap:gaps)if(sample>anchors[gap.left].last&&sample<anchors[gap.right].first){const auto& profile=result.gaps[gap.resultIndex].profile;const double at=(distance[sample]-distance[anchors[gap.left].last])/profile.spacing;const int cell=std::min(gap.cells-1,int(at));const double u=at-cell;fixed+=weight*(authoredHeight[sample]+baselineDerivative(fixedCell(gap,cell),u));for(int i=0;i<8;++i){const int variable=gap.variable[cell+i/4][i%4];if(variable>=0)row[variable]+=weight*baselineDerivative(basis[i],u);}return;}
-        for(const auto& transfer:transferBuild){const auto& domain=*transfer.domain;if(sample>domain.first&&sample<domain.last){const double p=transfer.phase.height(domain.horizontal[sample-domain.first]);fixed+=weight*((1-p)*transfer.fixedStart+p*transfer.fixedEnd);if(sourceVariable[transfer.left]>=0)row[sourceVariable[transfer.left]]+=weight*(1-p);if(sourceVariable[transfer.right]>=0)row[sourceVariable[transfer.right]]+=weight*p;return;}}
         throw std::runtime_error("Crossing height has no declared terrain owner");
     };
     const auto crossingHeight=[&](const BaselineCrossing& crossing){std::pair<std::vector<double>,double> value{std::vector<double>(count),0};
@@ -390,7 +335,6 @@ inline TerrainBaseline solveTerrainBaseline(const std::vector<double>& distance,
         for(int node=0;node<=gap.cells;++node)for(int jet=0;jet<4;++jet){const int variable=gap.variable[node][jet];if(variable>=0)profile.nodes[node][jet]=solution[variable];}
         profile.nodes.front()[0]=result.sources[gap.left].height;profile.nodes.back()[0]=result.sources[gap.right].height;
     }
-    for(const auto& transfer:transferBuild){const auto& domain=*transfer.domain;auto profile=transfer.phase;profile.start=result.sources[transfer.left].height+authoredHeight[domain.first];profile.finish=result.sources[transfer.right].height+authoredHeight[domain.last];result.transfers.push_back({domain.first,domain.last,profile});}
     return result;
 }
 } // namespace coaster::detail

@@ -8,6 +8,7 @@
 
 namespace VibeMesh
 {
+constexpr int32 MaxChunks = 4096, MaxVertices = 2000000, MaxInstances = 100000;
 enum class EDriveHardwareKind : uint8 { None, Stator, Brake, Station };
 struct FDriveHardwareRun
 {

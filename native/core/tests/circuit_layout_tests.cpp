@@ -80,6 +80,18 @@ int main(){try{
     std::cout<<" length "<<routed.layout.length<<" work "<<routed.work<<'\n';
     auto placed=detail::placeRide(request,routed,feedback);
     check(!placed.track.spans.empty(),"The itinerary admits a shared terrain solution");
+    for(size_t occurrence=0;occurrence<routed.order.size();++occurrence){const auto& source=routed.sources[routed.order[occurrence]];
+        if(source.role!=detail::RideRole::Climb&&source.role!=detail::RideRole::Dive)continue;
+        const auto interval=placed.sources[occurrence];const auto& first=placed.track.knots[interval.first];
+        const double heading=std::atan2(first.tangent.y,first.tangent.x);bool rigid=interval.last-interval.first+1==source.geometry.points.size();
+        for(size_t j=0;j<source.geometry.points.size();++j){const auto& original=source.geometry.points[j].frame;const auto& actual=placed.track.knots[interval.first+j];
+            rigid&=norm(actual.position-first.position-detail::sourceYaw(original.position,heading))<1e-8&&
+                norm(actual.tangent-detail::sourceYaw(original.tangent,heading))<1e-10&&norm(actual.curvature-detail::sourceYaw(original.curvature,heading))<1e-10;
+        }
+        check(rigid,"Actual itinerary placement preserves the complete certified climb/dive shape and active pulse, including derivatives");
+        check(std::abs(placed.track.knots[interval.last].position.z-first.position.z-(source.role==detail::RideRole::Climb?request.targets.height:-request.targets.height))<1e-8,
+            "The shared terrain solve cannot alter the actual climb or dive's selected rise");
+    }
     const auto work=[](size_t i,double){return 60.+15*i;};
     for(size_t count:{size_t(3),size_t(5),size_t(8)})for(int hand:{-1,1}){
         std::vector<detail::CircuitElement> elements;std::vector<double> headings;

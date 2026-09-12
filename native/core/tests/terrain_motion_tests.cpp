@@ -58,11 +58,14 @@ int main(){try{
     check(!detail::assessTerrainMotion({0,200,800},noPower).positiveEnergyBound,"Insufficient source energy is not replaced by phantom propulsion");
     bool cancelled=false;try{detail::minimumTerrainMotionLength(-200,2,intent,[]{return true;});}catch(const std::runtime_error& e){cancelled=std::string(e.what())=="CANCELLED";}check(cancelled,"Terrain energy screening propagates cancellation");
     intent.entrySpeed=59.714756;intent.driveTargetSpeed=intent.driveAcceleration=0;intent.minimumNormalG=-2.8;intent.maximumNormalG=6;
-    std::vector<double> distance(1001),floor(1001);for(int i=0;i<=1000;++i){distance[i]=2*i;floor[i]=i<300?180:0;}
-    auto window=detail::fitTerrainMotionWindow(distance,floor,200,0,2,intent);
-    check(window.activeStart>0&&window.activeStart+window.activeLength<2000,"Terrain placement retains a bounded physical descent window");
-    for(int i=0;i<=1000;++i)check(window.height(distance[i])+1e-7>=floor[i],"Motion-sized window clears the same fixed terrain floor");
-    check(detail::terrainMotionFits(detail::assessTerrainMotion(window,intent),intent),"The actual placed window passes the same local-energy force screen");
+    const double active=detail::minimumTerrainMotionLength(-200,2,intent);
+    const detail::TerrainTransfer window{200,0,active+350,150,active};
+    const auto windowBound=detail::assessTerrainMotion(window,intent),windowActual=reference(window,intent);
+    check(detail::terrainMotionFits(windowBound,intent)&&windowActual.positiveEnergyBound,"A certified source window and its level extensions retain physical traversal");
+    check(std::abs(windowBound.exitSpeedBound-windowActual.exitSpeedBound)<.0001,"Active-window energy includes the real passive approach and exit losses");
+    int polls=0;cancelled=false;
+    try{detail::assessTerrainMotion(window,intent,[&]{return ++polls==3;});}catch(const std::runtime_error& e){cancelled=std::string(e.what())=="CANCELLED";}
+    check(cancelled,"Source motion assessment remains cancellable while traversing its active interval");
     std::cout<<std::setprecision(12)<<"PASS "<<checks<<" terrain motion checks; powered200m ascent at75m/s into41.6667 target needs "<<poweredLength<<"m, bounded G "<<powered.minimumNormalG<<".."<<powered.maximumNormalG<<", actual G "<<actual.minimumNormalG<<".."<<actual.maximumNormalG<<"; ordinary200m descent at59.714756m/s needs "<<returnLength<<"m, G "<<returnIntent.minimumNormalG<<".."<<returnIntent.maximumNormalG<<"\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

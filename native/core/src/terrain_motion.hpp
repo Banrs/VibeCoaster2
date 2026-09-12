@@ -88,10 +88,4 @@ inline double minimumTerrainMotionLength(double rise,double maxGrade,TerrainMoti
     }
     return hi;
 }
-inline TerrainTransfer fitTerrainMotionWindow(const std::vector<double>& distance,const std::vector<double>& floor,
-    double start,double finish,double maxGrade,const TerrainMotion& motion,Cancel cancel={}){
-    auto result=placeTerrainWindow(distance,floor,start,finish,minimumTerrainMotionLength(finish-start,maxGrade,motion,cancel),cancel);
-    if(!terrainMotionFits(assessTerrainMotion(result,motion,cancel),motion))throw TerrainTransferInfeasible("Terrain window exceeds its signed load intent");
-    return result;
-}
 } // namespace coaster::detail

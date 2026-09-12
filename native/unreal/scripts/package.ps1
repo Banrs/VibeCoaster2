@@ -77,7 +77,7 @@ if (-not $SkipAutomation) {
     if ($AutomationLog -match 'Result=\{Fail') {
         throw "Automation success was not confirmed. Inspect $RunLogs/Automation and $RunLogs/Automation.stdout.log."
     }
-    foreach ($Contract in @('CoordinateContract', 'MeshContract', 'TerrainBackdropContract', 'StationArtContract', 'ImportedArtContract', 'SeedInputContract', 'OperationHardware')) {
+    foreach ($Contract in @('CoordinateContract', 'MeshContract', 'TerrainBackdropContract', 'CanyonRenderBudgetContract', 'StationArtContract', 'ImportedArtContract', 'SeedInputContract', 'OperationHardware')) {
         if ($AutomationLog -notmatch ('Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.' + $Contract + '\}')) {
             throw "Automation success missing for VibeCoaster.$Contract. Inspect $RunLogs/Automation.stdout.log."
         }

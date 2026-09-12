@@ -69,32 +69,39 @@ inline TArray<FRing> BuildRingPlan(double X0, double Y0, int32 NX, int32 NY, boo
 inline bool AppendTerrainBackdrop(FPreparedRide& Out, const coaster::Terrain& Terrain,
     double X0, double Y0, int32 NX, int32 NY, const coaster::Cancel& Cancel)
 {
-    constexpr int32 MaxChunks = 4096;
-    constexpr int64 MaxVertices = 2000000;
     const auto Cancelled = [&] { return Cancel && Cancel(); };
     if (Cancelled()) return false;
     if (!FMath::IsFinite(X0) || !FMath::IsFinite(Y0) || NX < 1 || NY < 1 || NX > MaxChunks || NY > MaxChunks)
     { Out.Error = TEXT("Invalid near-terrain boundary for distant backdrop."); return false; }
 
-    // Exact zipper triangle count: inner+outer segments on each of four sides.
-    // Three independent vertices per triangle avoid chunk-boundary index issues;
-    // identical edge positions/normals still join continuously without T-junctions.
+    // A strip starts with its inner/outer frontier, then adds one vertex per
+    // triangle. Only a new strip or chunk repeats those two frontier vertices.
     const bool DetailedCliffs = Terrain.kind == coaster::TerrainKind::Canyon && Terrain.cliffHeight > 0;
     const int32 ChunkVertices = DetailedCliffs ? TerrainBackdrop::CliffChunkVertices : TerrainBackdrop::DefaultChunkVertices;
     const auto RingPlan = TerrainBackdrop::BuildRingPlan(X0, Y0, NX, NY, DetailedCliffs);
-    int64 TriangleCount = 0, ExistingVertices = 0;
+    int64 TriangleCount = 0, ExistingVertices = 0, AddedVertices = 0, AddedChunks = 0;
+    int32 PlannedChunkVertices = 0;
     for (int32 Ring = 1; Ring < RingPlan.Num(); ++Ring)
     {
         const auto& Inner = RingPlan[Ring - 1]; const auto& Outer = RingPlan[Ring];
-        TriangleCount += 2 * int64(Inner.SegmentsX + Inner.SegmentsY + Outer.SegmentsX + Outer.SegmentsY);
+        for (int32 Side = 0; Side < 4; ++Side)
+        {
+            int32 Remaining = Inner.Segments(Side) + Outer.Segments(Side);
+            TriangleCount += Remaining;
+            while (Remaining > 0)
+            {
+                if (PlannedChunkVertices + 3 > ChunkVertices) { ++AddedChunks; PlannedChunkVertices = 0; }
+                const int32 Count = FMath::Min(Remaining, ChunkVertices - PlannedChunkVertices - 2);
+                AddedVertices += Count + 2; PlannedChunkVertices += Count + 2; Remaining -= Count;
+            }
+        }
     }
+    if (PlannedChunkVertices) ++AddedChunks;
     for (const auto& Existing : Out.Chunks)
     {
         if (Cancelled()) return false;
         ExistingVertices += Existing.Vertices.Num();
     }
-    const int64 AddedVertices = TriangleCount * 3;
-    const int64 AddedChunks = (AddedVertices + ChunkVertices - 1) / ChunkVertices;
     if (ExistingVertices + AddedVertices > MaxVertices || int64(Out.Chunks.Num()) + AddedChunks > MaxChunks)
     { Out.Error = TEXT("Distant terrain exceeds aggregate render budget; active ride retained."); return false; }
 
@@ -106,6 +113,7 @@ inline bool AppendTerrainBackdrop(FPreparedRide& Out, const coaster::Terrain& Te
     };
     const auto Vertex = [&](const FVector2D& XY)
     {
+        const int32 Index = Chunk.Vertices.Num();
         const double X = XY.X, Y = XY.Y;
         const double Height = Terrain.height(X, Y);
         const double DX = (Terrain.height(X + 1, Y) - Terrain.height(X - 1, Y)) * .5;
@@ -119,20 +127,9 @@ inline bool AppendTerrainBackdrop(FPreparedRide& Out, const coaster::Terrain& Te
         Chunk.Vertices.Add(Position({X, Y, Height}));
         Chunk.Normals.Add(Direction(coaster::unit({-DX * NormalDetail, -DY * NormalDetail, 1})));
         Chunk.UV.Add(FVector2D(X / 80, Y / 80));
+        return Index;
     };
     int64 EmittedTriangles = 0;
-    const auto Triangle = [&](const FVector2D& A, const FVector2D& B, const FVector2D& C)
-    {
-        if ((EmittedTriangles & 63) == 0 && Cancelled()) return false;
-        if (Chunk.Vertices.Num() + 3 > ChunkVertices) Flush();
-        const int32 Base = Chunk.Vertices.Num();
-        Vertex(A); Vertex(B); Vertex(C);
-        // Core XY triangles are upward CCW. Position reflects Y; UE's clockwise
-        // front-face convention therefore needs these original indices unchanged.
-        Chunk.Indices.Append({Base, Base + 1, Base + 2});
-        ++EmittedTriangles;
-        return true;
-    };
 
     for (int32 Ring = 1; Ring < RingPlan.Num(); ++Ring)
     {
@@ -142,21 +139,33 @@ inline bool AppendTerrainBackdrop(FPreparedRide& Out, const coaster::Terrain& Te
         {
             const int32 NI = Inner.Segments(Side), NO = Outer.Segments(Side);
             int32 I = 0, O = 0;
+            int32 InnerVertex = INDEX_NONE, OuterVertex = INDEX_NONE;
             while (I < NI || O < NO)
             {
+                if ((EmittedTriangles & 63) == 0 && Cancelled()) return false;
+                if (Chunk.Vertices.Num() == ChunkVertices) { Flush(); InnerVertex = INDEX_NONE; }
+                if (InnerVertex == INDEX_NONE)
+                {
+                    if (Chunk.Vertices.Num() + 3 > ChunkVertices) Flush();
+                    InnerVertex = Vertex(Inner.Point(Side, I));
+                    OuterVertex = Vertex(Outer.Point(Side, O));
+                }
                 // Integer cross-products merge normalized side parameters exactly.
                 // Ties advance inner first; the following outer triangle closes
                 // that quad. Every fine and coarse boundary edge is used once.
                 if (I < NI && (O == NO || int64(I + 1) * NO <= int64(O + 1) * NI))
                 {
-                    if (!Triangle(Inner.Point(Side, I), Outer.Point(Side, O), Inner.Point(Side, I + 1))) return false;
-                    ++I;
+                    const int32 Next = Vertex(Inner.Point(Side, ++I));
+                    Chunk.Indices.Append({InnerVertex, OuterVertex, Next}); InnerVertex = Next;
                 }
                 else
                 {
-                    if (!Triangle(Inner.Point(Side, I), Outer.Point(Side, O), Outer.Point(Side, O + 1))) return false;
-                    ++O;
+                    const int32 Next = Vertex(Outer.Point(Side, ++O));
+                    Chunk.Indices.Append({InnerVertex, OuterVertex, Next}); OuterVertex = Next;
                 }
+                // Position reflects Y, so original CCW core ordering is already
+                // the clockwise UE front face. Sharing attributes changes no face.
+                ++EmittedTriangles;
             }
         }
     }
