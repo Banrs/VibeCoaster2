@@ -35,8 +35,11 @@ int main(){try{
     auto constrained=d;constrained.request.limits.maxLongitudinalRateGps=.00001;constrained.report={};evaluateTargets(constrained);check(code(constrained.report,"LONGITUDINAL_FORCE_RATE"),"Explicit provisional longitudinal gate rejects");check(!code(d.report,"LONGITUDINAL_FORCE_RATE"),"Unset axis gate unassessed, no fabricated threshold");
     req.limits.maxLateralRateGps=INFINITY;check(code(validateRequest(req),"AXIS_RATE_CONFIG"),"Infinite axis gate invalid");req.limits.maxLateralRateGps=0;check(code(validateRequest(req),"AXIS_RATE_CONFIG"),"Zero axis gate invalid");
     auto rateAssessed=d;rateAssessed.request.limits.maxLateralRateGps=1000;verifyConvergence(rateAssessed);check(rateAssessed.accepted(),"Improved canonical frame has an actually converged assessed lateral profile");
-    auto underresolved=rateAssessed;underresolved.request.simulationStep=1./30;underresolved.simulation=simulate(underresolved.track,underresolved.operations,underresolved.request.train,underresolved.request.simulationStep);underresolved.report={};verifyConvergence(underresolved);
-    check(!underresolved.accepted()&&underresolved.convergence.performed&&!underresolved.convergence.passed&&code(underresolved.report,"CONVERGENCE_METRIC"),"An underresolved actual simulation cannot commit acceptance");
+    // A smooth ride can legitimately converge even at 30 Hz. Perturb one
+    // coarse rate to exercise rejection against the unchanged real fine replay.
+    auto underresolved=rateAssessed;auto& coarseRate=underresolved.simulation.metrics.seats[2].axes[1].maxRateGps;
+    coarseRate+=.1*std::max(1.,std::abs(coarseRate));underresolved.report={};verifyConvergence(underresolved);
+    check(!underresolved.accepted()&&underresolved.convergence.performed&&!underresolved.convergence.passed&&code(underresolved.report,"CONVERGENCE_METRIC"),"A discrepant coarse lateral rate cannot commit acceptance");
     check(std::any_of(underresolved.convergence.metrics.begin(),underresolved.convergence.metrics.end(),[](const auto& metric){return metric.name.find(".lateral.maxRateGps")!=std::string::npos&&metric.absoluteDifference>=metric.tolerance;}),"Explicit lateral assessment remains checked when its measured rate is unresolved");
     d.request.targets=t;d.request.targets.requireIntensity=false; // Synthetic metadata only; uncalibrated horizontal rates remain unassessed.
     verifyConvergence(d);check(d.accepted(),"Typed metadata fixture retains actual half-step verification");

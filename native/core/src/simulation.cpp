@@ -30,10 +30,14 @@ static SimulationResult simulateImpl(const Track& track,const std::vector<Operat
     SimulationResult out;
     if(track.spans.empty()||dt<1./4000||dt>1./30||!std::isfinite(dt)||train.cars<1||train.cars>16||!std::isfinite(train.carMass)||train.carMass<=0||!std::isfinite(train.spacing)||train.spacing<=0||train.spacing>20||!std::isfinite(train.seatHeight)||train.seatHeight<0||!std::isfinite(train.dragCdA)||train.dragCdA<0||!std::isfinite(train.rollingResistance)||train.rollingResistance<0||!std::isfinite(train.airDensity)||train.airDensity<0){out.report.fail("SIM_CONFIG","Invalid simulation configuration");return out;}
     for(const auto& op:ops)if(!validDriveParameters(op)||op.start>track.length||op.end>track.length){out.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return out;}
+    if(!std::isfinite(track.length)||track.length<=0){out.report.fail("SIM_CONFIG","Invalid track length");return out;}
     double half=(train.cars-1)*train.spacing*.5,start=half+30,finish=track.length+start,s=start,v=0,t=0;
     if(!track.closed){start=half+1;s=start;finish=track.length-half-1;}
     if(finish<=start||2*half+2>=track.length){out.report.fail("TRAIN_LENGTH","Track is shorter than the train");return out;}
     std::vector<double> entered(train.cars*ops.size(),-1);
+    const DriveIndex driveIndex(ops,track.length);
+    std::array<std::vector<size_t>,16> previousDrives;
+    for(int car=0;car<train.cars;++car)previousDrives[car].reserve(ops.size());
     std::array<size_t,16> carSpans{};std::array<size_t,3> seatSpans{};
     constexpr double traceDt=1./60;double nextTrace=0;
     std::array<double,3> verticalRatePeaks{};std::array<std::vector<double>,3> exposures;std::array<std::array<std::vector<double>,2>,3> horizontalForces;
@@ -57,7 +61,7 @@ static SimulationResult simulateImpl(const Track& track,const std::vector<Operat
             double cs=at+half-car*train.spacing;const auto tangent=track.tangent(cs,carSpans[car]);
             const double wrapped=wrappedDistance(cs);
             double force=-train.carMass*gravity*tangent.z;
-            for(size_t j=0;j<ops.size();++j){const auto& op=ops[j];
+            for(size_t j:driveIndex.at(wrapped)){const auto& op=ops[j];
                 if(!active(op,wrapped,at))continue;
                 double entry=entered[car*ops.size()+j];
                 double remaining=op.end-wrapped;if(remaining<0)remaining+=track.length;
@@ -87,7 +91,12 @@ static SimulationResult simulateImpl(const Track& track,const std::vector<Operat
         if((step&31)==0&&cancel&&cancel()){out.cancelled=true;out.report.fail("CANCELLED","Simulation cancelled",s);return out;}
         for(int car=0;car<train.cars;++car){
             const double wrapped=wrappedDistance(s+half-car*train.spacing);
-            for(size_t j=0;j<ops.size();++j){auto& entry=entered[car*ops.size()+j];if(!active(ops[j],wrapped,s))entry=-1;else if(entry<0)entry=t;}
+            auto& previous=previousDrives[car];
+            for(size_t j:previous)if(!active(ops[j],wrapped,s))entered[car*ops.size()+j]=-1;
+            previous.clear();
+            for(size_t j:driveIndex.at(wrapped))if(active(ops[j],wrapped,s)){
+                auto& entry=entered[car*ops.size()+j];if(entry<0)entry=t;previous.push_back(j);
+            }
         }
         double a=acceleration(s,v,t);
         // Explicit midpoint integration; operation entry state is committed once.

@@ -176,7 +176,9 @@ static void planningAndTargets(){
     // topology and the physically separated crossovers independently.
     for(Element element:{Element::Hill,Element::Inversion,Element::Airtime})
         check(std::any_of(varied.track.knots.begin(),varied.track.knots.end(),[&](const Knot& k){return k.element==element;}),"Seeded folded profile retains hill, inversion and airtime geometry");
-    check(std::abs(varied.track.length-hills.track.length)>1,"Different seeds on the same terrain change canonical circuit geometry");
+    auto intrinsicPoint=[](const Track& track,double fraction){const auto origin=track.sample(0);const auto delta=track.sample(track.length*fraction).position-origin.position;return Vec3{dot(delta,origin.tangent),dot(delta,origin.right),delta.z};};
+    double shapeDifference=0;for(int i=1;i<64;++i)shapeDifference=std::max(shapeDifference,norm(intrinsicPoint(varied.track,i/64.)-intrinsicPoint(hills.track,i/64.)));
+    check(shapeDifference>1,"Different seeds change circuit shape after removing station translation and heading");
     check(varied.simulation.metrics.launchTo180<=1.4,"Second seeded hills actual departure meets launch target");
     req.seed=3;req.terrain.kind=TerrainKind::Canyon;auto stadium=generate(req);check(stadium.accepted(),"Terrain-ranked stadium accepted");
     check(std::any_of(stadium.track.knots.begin(),stadium.track.knots.end(),[](const Knot& k){return k.element==Element::Airtime;}),"Stadium retains canonical airtime");
