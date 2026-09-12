@@ -1,7 +1,0 @@
-{
-  "run": "v072_20260908_trackweb1",
-  "destinationRoot": "/Game/Art/V072/TrackWeb1",
-  "tieManifest": "D:/Coding/Codex/Vibecoasterjs/native/art/review/20260908-tie-v002/manifest.json",
-  "coreSpec": "D:/Coding/Codex/Vibecoasterjs/native/unreal/Saved/TrackWeb/20260908-1/track-web-spec.json",
-  "coordinateWitnessReceipt": "D:/Coding/Codex/Vibecoasterjs/native/unreal/Saved/ArtImport/v071_20260908_yaw90/receipt.json"
-}

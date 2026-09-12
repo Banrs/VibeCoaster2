@@ -1,2 +1,0 @@
-# Diagnostic plots and their synthetic tests; version verified in this delivery.
-matplotlib==3.11.1

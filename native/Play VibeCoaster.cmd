@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set "game=%~dp0releases\VibeCoaster-0.8.2-terrain.1-6f23a9e-Windows\Play VibeCoaster.cmd"
+set "game=%~dp0game\Play VibeCoaster.cmd"
 if exist "%game%" (
     call "%game%" %*
     exit /b
