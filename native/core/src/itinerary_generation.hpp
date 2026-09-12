@@ -9,6 +9,7 @@
 #include "terrain_envelope.hpp"
 #include "force_envelope_parameters.hpp"
 #include "simulation_internal.hpp"
+#include <map>
 #include <optional>
 
 namespace coaster::detail {
@@ -240,17 +241,29 @@ inline double rideInletHeight(const GenerationRequest& request,const RideSource&
     return source.role==RideRole::Dive?request.targets.height:0;
 }
 inline double rideLinkRise(const GenerationRequest& request,const RideSource& source,const RideSource& next){
-    return rideInletHeight(request,next)-rideInletHeight(request,source)-source.geometry.points.back().frame.position.z;
+    double rise=rideInletHeight(request,next)-rideInletHeight(request,source)-source.geometry.points.back().frame.position.z;
+    if(source.role!=RideRole::Climb&&next.role!=RideRole::Departure&&!next.airtime()&&next.role!=RideRole::Dive)
+        rise=std::max(rise,(source.exitSpeed*source.exitSpeed-next.entrySpeed*next.entrySpeed)/(2*gravity));
+    return rise;
 }
 struct RideRoute {
     std::vector<RideSource> sources;
     std::vector<size_t> order;
     CircuitLayout layout;
-    double work{INFINITY};
 };
 // Only source energy is estimated here. Full-train feedback uses the complete
 // circuit, including terrain and each motor's own inlet, within one budget.
-inline RideRoute routeRide(const GenerationRequest& request,std::vector<RideSource> sources,RideFeedback& feedback,Cancel cancel={}){
+inline RideRoute routeRide(const GenerationRequest& request,std::vector<RideSource> sources,RideFeedback& feedback,Cancel cancel={},bool requireCrossing=false){
+    // Legal orders often request the same physical source. Author each exact
+    // chain/speed once for this request; every order still owns its own copy.
+    std::array<std::map<double,RideSource>,2> airtimeSources;
+    const auto airtimeSource=[&](bool closing,double speed)->const RideSource&{
+        auto& variants=airtimeSources[closing];
+        const auto found=variants.find(speed);
+        if(found!=variants.end())return found->second;
+        auto source=buildRideAirtime(request,closing,speed,cancel);
+        return variants.emplace(speed,std::move(source)).first->second;
+    };
     RideRandom random{request.seed};const double normalG=random.range(3.8,4.2),hand=(random.next()&1)?1.:-1.;
     std::vector<double> initial(sources.size()),weights(sources.size());double total=0;
     for(auto& weight:weights){weight=random.range(.75,1.25);total+=weight;}
@@ -266,7 +279,7 @@ inline RideRoute routeRide(const GenerationRequest& request,std::vector<RideSour
                 const double angle=std::remainder(headings[i]-headings[i-1]-port.exitHeading,2*pi);
                 const auto turn=circuitTurn(port,angle);
                 const double speed=rideCoast(request,previous.exitSpeed,turn.length+trainLength,rideLinkRise(request,previous,route.sources[id]));
-                route.sources[id]=buildRideAirtime(request,id==7,speed,cancel);
+                route.sources[id]=airtimeSource(id==7,speed);
             }
             const double allowed=std::min(request.limits.maxVerticalG,historicalForceLimit(ForceAxis::Vertical,true,feedback.linkDuration[id]));
             auto port=ridePort(route.sources[id],feedback.order.empty()?route.sources[id].exitSpeed:feedback.turnSpeed[id],std::min(normalG,allowed));
@@ -278,34 +291,24 @@ inline RideRoute routeRide(const GenerationRequest& request,std::vector<RideSour
         for(size_t i=0;i<order.size();++i){const auto id=order[i],next=order[(i+1)%order.size()];
             if(route.sources[id].role==RideRole::Climb)continue;
             rise[i]=feedback.measured?feedback.linkRise[id]:rideLinkRise(request,route.sources[id],route.sources[next]);
-            if(!feedback.measured&&next&&!route.sources[next].airtime())
-                rise[i]=std::max(rise[i],(std::pow(route.sources[id].exitSpeed,2)-std::pow(route.sources[next].entrySpeed,2))/(2*gravity));
             const double speed=route.sources[id].exitSpeed;
             const TerrainMotion motion{speed,gravity*request.train.rollingResistance,.5*request.train.airDensity*request.train.dragCdA/(request.train.cars*request.train.carMass),-1,3.5,0,0};
             recovery[i]=minimumTerrainMotionLength(rise[i],2,motion,cancel);
         }
         const auto minimum=[&](size_t i,double turnLength)->CircuitLinkLengths{const auto id=order[i],next=order[(i+1)%order.size()];
             const auto& source=route.sources[id];const auto& destination=route.sources[next];
-            const double entry=feedback.order.empty()?rideCoast(request,source.exitSpeed,turnLength+recovery[i],rise[i]):feedback.motorEntry[next];
+            const double entry=feedback.order.empty()?(prior?prior->layout.workEntrySpeeds[i]:
+                rideCoast(request,source.exitSpeed,turnLength+recovery[i],rise[i])):feedback.motorEntry[next];
             if(next==0)return {std::pow(feedback.measured?feedback.motorEntry[0]:source.exitSpeed,2)/(2*6.)+2*trainLength+100,recovery[i],entry};
             if(destination.airtime()||destination.role==RideRole::Dive)return {0,std::max(trainLength,recovery[i])};
-            return {plannedBoostLength(0,sourceMotor(request,destination),request.train),recovery[i],entry};
+            return {plannedBoostLength(entry,sourceMotor(request,destination),request.train),recovery[i],entry};
         };
-        route.layout=!prior&&feedback.headings.empty()?solveCircuitLayout(ports,headings,minimum,cancel):closeCircuit(ports,headings,minimum,nullptr,cancel);
-        if(!std::isfinite(route.layout.length))return route;
-        route.work=0;
-        for(size_t i=0;i<order.size();++i){const auto next=order[(i+1)%order.size()];
-            const auto& source=route.sources[order[i]];const auto& destination=route.sources[next];
-            if(destination.airtime()||destination.role==RideRole::Dive)continue;
-            const double available=rideCoast(request,source.exitSpeed,route.layout.turns[i].length,rideLinkRise(request,source,destination));
-            const double drag=.5*request.train.airDensity*request.train.dragCdA/(request.train.cars*request.train.carMass);
-            const double target=destination.role==RideRole::Climb?destination.exitSpeed:destination.entrySpeed;
-            const double losses=route.layout.straights[i]*(gravity*request.train.rollingResistance+drag*(available*available+target*target)*.5);
-            if(destination.role==RideRole::Climb){
-                const double climbLoss=destination.geometry.points.back().distance*(gravity*request.train.rollingResistance+drag*(available*available+target*target)*.5);
-                route.work+=std::max(0.,(target*target-available*available)*.5+gravity*request.targets.height+losses+climbLoss);
-            }else route.work+=std::abs((target*target-available*available)*.5+losses);
-        }
+        std::vector<CircuitOccurrence> occurrences;
+        if(requireCrossing)for(auto id:order)occurrences.push_back({route.sources[id].geometry,rideInletHeight(request,route.sources[id])});
+        const auto admissible=[&](const CircuitLayout& layout){return !requireCrossing||circuitHasCrossing(occurrences,layout);};
+        route.layout=!prior?solveCircuitLayout(ports,headings,minimum,cancel,requireCrossing?std::function<bool(const CircuitLayout&)>(admissible):nullptr):
+            closeCircuit(ports,headings,minimum,nullptr,cancel);
+        if(std::isfinite(route.layout.length)&&!admissible(route.layout))route.layout.length=INFINITY;
         return route;
     };
     RideRoute best;
@@ -316,27 +319,34 @@ inline RideRoute routeRide(const GenerationRequest& request,std::vector<RideSour
             std::vector<size_t> order{0};order.insert(order.end(),movable.begin(),movable.begin()+split);
             order.insert(order.end(),{3,4,5});order.insert(order.end(),movable.begin()+split,movable.end());
             try{auto trial=propose(order);
-                if(trial.work<best.work||(trial.work==best.work&&trial.layout.length<best.layout.length))best=std::move(trial);
+                if(!std::isfinite(trial.layout.length))continue;
+                // Order selection consumes a complete source/connection plan.
+                // Closure can change both airtime supply and motor inlet work;
+                // an order outside a source's domain is never selected first
+                // and repaired afterwards. This does not build complete rides.
+                for(int iteration=0;;++iteration){
+                    auto updated=trial;bool consistent=true;
+                    for(size_t i=0;i<trial.order.size();++i){const auto id=trial.order[i],next=trial.order[(i+1)%trial.order.size()];
+                        const auto& destination=trial.sources[next];
+                        if(next==0||destination.role==RideRole::Dive)continue;
+                        const double passive=trial.layout.turns[i].length+trial.layout.straights[i]-(destination.airtime()?0:trial.layout.workLengths[i]);
+                        const double supplied=rideCoast(request,trial.sources[id].exitSpeed,passive,rideLinkRise(request,trial.sources[id],destination));
+                        const double intended=destination.airtime()?destination.entrySpeed:trial.layout.workEntrySpeeds[i];
+                        if(std::abs(supplied-intended)<=.5)continue;
+                        consistent=false;
+                        if(destination.airtime())updated.sources[next]=airtimeSource(destination.role==RideRole::ClosingAirtime,supplied);
+                        else updated.layout.workEntrySpeeds[i]=supplied;
+                    }
+                    if(consistent)break;
+                    if(iteration==7)throw TerrainTransferInfeasible("Initial source and closed-route energy intent did not agree");
+                    trial=propose(updated.order,&updated);
+                    if(!std::isfinite(trial.layout.length))throw TerrainTransferInfeasible("Energy-consistent source ports cannot close");
+                }
+                if(trial.layout.length<best.layout.length)best=std::move(trial);
             }catch(const TerrainTransferInfeasible&){/* An incompatible ordering is infeasible; the candidate still uses the same bounded set. */}
         }}while(std::next_permutation(movable.begin(),movable.end()));
     }
-    if(!std::isfinite(best.work))throw TerrainTransferInfeasible("No physical itinerary closes its source ports");
-    // Closure changes passive lengths. Finish selecting the two airtime
-    // sources from those actual lengths before freezing their intent. This
-    // initial port/energy solve does not simulate or retry complete rides.
-    if(feedback.order.empty())for(int iteration=0;;++iteration){
-        auto updated=best;bool consistent=true;
-        for(size_t i=0;i<best.order.size();++i){const auto id=best.order[i],next=best.order[(i+1)%best.order.size()];
-            if(!best.sources[next].airtime())continue;
-            const double supplied=rideCoast(request,best.sources[id].exitSpeed,best.layout.turns[i].length+best.layout.straights[i],rideLinkRise(request,best.sources[id],best.sources[next]));
-            if(std::abs(supplied-best.sources[next].entrySpeed)<=.5)continue;
-            consistent=false;updated.sources[next]=buildRideAirtime(request,best.sources[next].role==RideRole::ClosingAirtime,supplied,cancel);
-        }
-        if(consistent)break;
-        if(iteration==7)throw TerrainTransferInfeasible("Initial source and closed-route energy intent did not agree");
-        best=propose(updated.order,&updated);
-        if(!std::isfinite(best.work))throw TerrainTransferInfeasible("Energy-consistent source ports cannot close");
-    }
+    if(!std::isfinite(best.layout.length))throw TerrainTransferInfeasible("No physical itinerary closes its source ports");
     if(feedback.order.empty())for(size_t i=0;i<best.order.size();++i){const auto id=best.order[i],next=best.order[(i+1)%best.order.size()];
         feedback.turnSpeed[id]=feedback.linkSpeed[id]=best.sources[id].exitSpeed;
         feedback.motorEntry[next]=best.layout.workEntrySpeeds[i];
@@ -510,6 +520,16 @@ struct RideBuild {
 };
 inline RideBuild buildRide(const GenerationRequest& request,int candidate,Operation departure,const RideRoute& route,RideFeedback& feedback,Cancel cancel={}){
     RideBuild result;result.route=route;
+    // Hold source positions after footprint sizing, but make the actual work
+    // boundary follow its own inlet. Composition, terrain transport and hardware
+    // use this same boundary; no discarded capacity estimate becomes level rail.
+    for(size_t i=0;i<result.route.order.size();++i){const auto next=result.route.order[(i+1)%result.route.order.size()];
+        const auto& destination=result.route.sources[next];
+        if(next==0||destination.airtime()||destination.role==RideRole::Dive)continue;
+        const double length=plannedBoostLength(feedback.motorEntry[next],sourceMotor(request,destination),request.train);
+        if(length>result.route.layout.straights[i]+1e-7)throw TerrainTransferInfeasible("Actual motor work cannot fit the connecting route");
+        result.route.layout.workLengths[i]=length;result.route.layout.workEntrySpeeds[i]=feedback.motorEntry[next];
+    }
     result.geometry=placeRide(request,result.route,feedback,cancel);
     auto& design=result.design;design.request=request;design.candidate=candidate;design.track=result.geometry.track;design.topology="source-itinerary";
     const auto distance=circuitDistances(design.track);const double half=(request.train.cars-1)*request.train.spacing*.5;
@@ -530,8 +550,7 @@ inline RideBuild buildRide(const GenerationRequest& request,int candidate,Operat
         if(destination.airtime()||destination.role==RideRole::Dive)continue;
         const bool climb=destination.role==RideRole::Climb;
         auto motor=sourceMotor(request,destination);
-        const double inlet=end-plannedBoostLength(feedback.motorEntry[next],motor,request.train);
-        if(inlet<begin-1e-7)throw TerrainTransferInfeasible("Sized motor exceeds the route's declared work capacity");
+        const double inlet=begin;
         const auto coast=estimatePassiveTransfer(design.track,request.train,distance[result.geometry.sources[i].last],inlet,source.exitSpeed,cancel);
         if(!coast.reached)throw TerrainTransferInfeasible("Source cannot reach its following motor");
         motor.start=inlet+half;motor.end=(climb?distance[result.geometry.sources[i+1].last]:end)-half;

@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "generation_internal.hpp"
 #include "itinerary_generation.hpp"
 #include "bank_target.hpp"
 #include <sstream>
@@ -84,7 +85,7 @@ ValidationReport validateRequest(const GenerationRequest& req){
     if(train.cars<1||train.cars>16||train.spacing<=0||train.spacing>20||train.carMass<=0||train.seatHeight<0||train.seatHeight>3||train.dragCdA<0||train.rollingResistance<0||train.airDensity<0)r.fail("TRAIN_CONFIG","Train is outside the supported model domain");
     return r;
 }
-Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(int,const std::string&)> progress){
+Design detail::generateRide(const GenerationRequest& input,bool requireCrossing,Cancel cancel,std::function<void(int,const std::string&)> progress){
     GenerationRequest req=input;if(req.terrain.isDefaultProfile())req.terrain=Terrain::seeded(req.terrain.kind,req.seed);
     Design last;last.request=req;
     last.report=validateRequest(req);if(!last.report.valid())return last;
@@ -100,6 +101,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
     auto withHistory=[&](Design d,const char* selection){
         if(d.planningDiagnostics.empty())d.planningDiagnostics="{\"generationOnly\":true}";
         d.planningDiagnostics.pop_back();
+        d.planningDiagnostics+=std::string(",\"requestedCrossover\":")+(requireCrossing?"true":"false");
         if(d.simulation.completed){std::ostringstream pacing;pacing<<std::setprecision(12)<<",\"movingDurationSeconds\":"<<movingRideSeconds(d)<<",\"movingDurationGoalMaximumSeconds\":180,\"movingDurationDefinition\":\"Powered departure to train center reaching terminal Station operation start; excludes terminal stopping\"";d.planningDiagnostics+=pacing.str();}
         d.planningDiagnostics+=",\"searchSelection\":\""+std::string(selection)+"\",\"candidateHistory\":[";
         for(size_t i=0;i<history.size();++i){if(i)d.planningDiagnostics+=',';d.planningDiagnostics+=history[i];}d.planningDiagnostics+="]}";return d;
@@ -114,7 +116,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
             detail::RideFeedback feedback;
             const double acceleration=sizedLaunchAcceleration(req,38.9);
             const auto departure=detail::rideMotor(req,DriveKind::Launch,departureTarget(acceleration),acceleration,departureRampSeconds);
-            auto route=detail::routeRide(req,detail::buildRideSources(req,feedback,departure,cancel),feedback,cancel);
+            auto route=detail::routeRide(req,detail::buildRideSources(req,feedback,departure,cancel),feedback,cancel,requireCrossing);
             detail::RideBuild build;double energyResidual=INFINITY;bool feedbackConverged=false;int energyIterations=0;
             std::ostringstream energyHistory;energyHistory<<std::setprecision(12);
             // One budget covers source geometry, actual turn speed and every
@@ -178,10 +180,10 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
                 energyHistory<<"]}";
                 // The terrain assessment sizes the final footprint from its
                 // actual connecting rises and train exposure. Subsequent
-                // feedback resolves heights and installed motor length within
-                // that footprint, rather than moving crossings on every pass.
+                // feedback resolves heights and the shared actual work boundary
+                // within that footprint, rather than moving crossings on every pass.
                 if(iteration==0){
-                    next.measured=true;route=detail::routeRide(req,route.sources,next,cancel);
+                    next.measured=true;route=detail::routeRide(req,route.sources,next,cancel,requireCrossing);
                     feedback=std::move(next);continue;
                 }
                 if(d.simulation.completed&&d.simulation.report.valid()&&energyResidual<=.5){feedbackConverged=true;break;}
@@ -278,5 +280,8 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
             if(progress)progress(i,std::string("Candidate rejected: ")+e.what());
         }
     }return withHistory(std::move(last),"last-constructed-rejection");
+}
+Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(int,const std::string&)> progress){
+    return detail::generateRide(input,false,cancel,std::move(progress));
 }
 }

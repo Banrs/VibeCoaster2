@@ -89,17 +89,17 @@ if ($Configuration -eq "Debug") {
   $OptFlags = @("-O2")
 }
 
-# Pinned warning + FP flags shared by both binaries.
+# Pinned warning + FP flags shared by the core and every executable.
 $CommonFlags = @("-std=c++20", "-ffp-contract=off", "-Wall", "-Wextra") + $OptFlags
 
 $CliOut = Join-Path $BuildDir "coaster_cli.exe"
 $TestsOut = Join-Path $BuildDir "coaster_tests.exe"
 
-function Invoke-ZigCxx {
+function Invoke-Zig {
   param([string[]]$ZigArgs, [string]$Label)
   & $Compiler @ZigArgs
   if ($LASTEXITCODE -ne 0) {
-    Write-Error "$Label failed (zig c++ exit=$LASTEXITCODE). See output above."
+    Write-Error "$Label failed (zig exit=$LASTEXITCODE). See output above."
     exit 1
   }
 }
@@ -108,12 +108,23 @@ Write-Host "Compiler : $Compiler"
 Write-Host "Config   : $Configuration"
 Write-Host "BuildDir : $BuildDir"
 
-Invoke-ZigCxx -Label "coaster_cli build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir) + $CoreSources + @($MainSource, "-o", $CliOut))
+# Compile the shared core once, just as the CMake build does. Rebuild every
+# object on invocation so changed headers and flags cannot leave stale code.
+$CoreObjects = @()
+foreach ($Source in $CoreSources) {
+  $Object = Join-Path $BuildDir ([System.IO.Path]::GetFileNameWithoutExtension($Source) + ".obj")
+  Invoke-Zig -Label "$Source compile" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, "-c", $Source, "-o", $Object))
+  $CoreObjects += $Object
+}
+$CoreLibrary = Join-Path $BuildDir "coaster_core.lib"
+if (Test-Path -LiteralPath $CoreLibrary) { Remove-Item -LiteralPath $CoreLibrary }
+Invoke-Zig -Label "coaster_core archive" -ZigArgs (@("ar", "rcs", $CoreLibrary) + $CoreObjects)
+
+Invoke-Zig -Label "coaster_cli build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, $MainSource, $CoreLibrary, "-o", $CliOut))
 Write-Host "Built $CliOut"
 
-$NeedTests = $Test -or (Test-Path -LiteralPath $TestSource)
 if (Test-Path -LiteralPath $TestSource) {
-  Invoke-ZigCxx -Label "coaster_tests build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir) + $CoreSources + @($TestSource, "-o", $TestsOut))
+  Invoke-Zig -Label "coaster_tests build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, $TestSource, $CoreLibrary, "-o", $TestsOut))
   Write-Host "Built $TestsOut"
 } elseif ($Test) {
   Write-Error "Requested -Test but '$TestSource' is missing (test executable still in progress by core agent)."
@@ -141,8 +152,7 @@ $Historical = Join-Path $TestsDir "fixtures/historical"
 foreach ($Name in @("terrain_transfer", "terrain_motion", "passive_transfer", "terrain_envelope", "persistence_cancel", "terrain_baseline", "circuit_layout", "reference", "support", "support_family", "layout_modules", "organic_generation", "terrain_profile", "fvd", "dimensions", "clearance", "track_web", "station", "structures", "geometry", "frame_force", "terrain", "convergence", "drive_profile", "force_envelope")) {
   $Source = Join-Path $TestsDir ($Name + "_tests.cpp")
   $Binary = Join-Path $BuildDir ($Name + "_tests.exe")
-  $SuiteSources = $CoreSources
-  Invoke-ZigCxx -Label ($Name + " tests build") -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, "-I", $AdapterInclude) + $SuiteSources + @($Source, "-o", $Binary))
+  Invoke-Zig -Label ($Name + " tests build") -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, "-I", $AdapterInclude, $Source, $CoreLibrary, "-o", $Binary))
   if ($Test) {
     $TestArgs = @()
     if ($Name -eq "support") { $TestArgs = @($Historical) }
@@ -154,4 +164,4 @@ foreach ($Name in @("terrain_transfer", "terrain_motion", "passive_transfer", "t
 # Explicit acceptance evidence tool; deliberately not run by -Test.
 $ConvergenceSource = Join-Path $ToolsDir "convergence/audit.cpp"
 $ConvergenceOut = Join-Path $BuildDir "coaster_convergence.exe"
-Invoke-ZigCxx -Label "coaster_convergence build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir) + $CoreSources + @($ConvergenceSource, "-o", $ConvergenceOut))
+Invoke-Zig -Label "coaster_convergence build" -ZigArgs (@("c++") + $CommonFlags + @("-I", $IncludeDir, $ConvergenceSource, $CoreLibrary, "-o", $ConvergenceOut))

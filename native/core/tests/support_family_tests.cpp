@@ -104,6 +104,15 @@ int main(int argc,char** argv){try{
             check(member.base.z<=ground-.5&&member.top.z>=ground+.2,"Independent footing circumference clears both anchoring faces");
         }
     }
+    for(double elevation:{500.,600.}){
+        Design tall;std::vector<AuthoredPoint> points;
+        for(int x=0;x<=20;++x)points.push_back({{double(x),0,elevation},0,Element::Return});
+        tall.track=compile(points,false);buildSupportLayout(tall);validate(tall);
+        check(tall.supports.size()==1&&feet(tall.supports.front())==4,"The complete declared tall family fits its canonical resource budget");
+        const auto& tower=tall.supports.front();
+        check(norm(tower.top-tower.attachment)<2.00000001,"A clear tall tower retains its natural spine joint instead of lengthening it to evade a member count");
+        check(tower.members.size()>512&&tower.members.size()<=maxSupportMembers,"Upper tower tiers remain represented and accepted within the derived count bound");
+    }
     Design stacked;std::vector<AuthoredPoint> stackedPoints;
     for(int i=0;i<=720;++i){const double t=2*pi*i/720;
         stackedPoints.push_back({{200*std::sin(t),100*std::sin(2*t),200+100*std::cos(t)},0,Element::Return});
@@ -127,6 +136,28 @@ int main(int argc,char** argv){try{
         {wallBase,wallTop,wallRadius,wallRadius,SupportMemberKind::Footing,false},
         {wallTop,wallJoint,supportRadius,supportRadius,SupportMemberKind::Steel,true}}};
     check(validateSupportMembers(wallSupport,cliffProfile).valid(),"Full-depth wall footing positive control is geometrically valid");
+    auto wallColumn=wallSupport;wallColumn.attachment.z+=4;wallColumn.members.back().top.z+=4;
+    for(int i=0;i<128;++i){const double angle=2*pi*i/128;
+        const double ground=cliffProfile.height(wallTop.x+supportRadius*std::cos(angle),wallTop.y+supportRadius*std::sin(angle));
+        check(wallTop.z-supportRadius>ground,"Independent lower cylinder enclosing the entire vertical steel clears the wall");
+    }
+    check(validateSupportMembers(wallColumn,cliffProfile).valid(),"Vertical steel travel does not consume horizontal terrain clearance or extra footing depth");
+    {
+        Terrain hills;hills.kind=TerrainKind::Hills;hills.horizontalScale=.5;
+        const Vec3 a{pi*180-450,0,4},b{pi*180+450,0,4},end=b+Vec3{0,0,1};
+        const Vec3 ground{a.x,0,hills.height(a.x,0)},footTop=ground+Vec3{0,0,1};
+        Support crossing{ground,b,end,true,0,{
+            {ground-Vec3{0,0,1},footTop,.5,.5,SupportMemberKind::Footing,false},
+            {footTop,a,supportRadius,supportRadius,SupportMemberKind::Steel,false},
+            {a,b,supportRadius,supportRadius,SupportMemberKind::Steel,false},
+            {b,end,supportRadius,supportRadius,SupportMemberKind::Steel,true}}};
+        check(hills.valid()&&norm(b-a)<1000,"Interior crossing control stays within supported terrain and member domains");
+        check(a.z-hills.height(a.x,a.y)>supportRadius&&b.z-hills.height(b.x,b.y)>supportRadius,"Both steel endpoints clear terrain");
+        const auto middle=(a+b)*.5;
+        check(middle.z<hills.height(middle.x,middle.y),"Independent beam midpoint penetrates the intervening hill");
+        const auto rejected=validateSupportMembers(crossing,hills);
+        check(!rejected.valid()&&rejected.errors.front().code=="SUPPORT_TERRAIN","Continuous steel enclosure rejects an interior terrain crossing despite clear endpoints");
+    }
     auto undersized=wallSupport;
     undersized.members.front().base.z=wall.z-.30*wallRadius-.5;
     bool actualAnchorGap=false;

@@ -6,10 +6,16 @@ namespace coaster {
 namespace {
 struct FootingGeometry {Vec3 base,top;double radius;};
 constexpr double maximumFootingDepth=12;
-FootingGeometry footing(Vec3 p,const Terrain& terrain,double broadRadius,double legRadius,bool shortBent){
+FootingGeometry footing(Vec3 p,Vec3 legTop,const Terrain& terrain,double broadRadius,double legRadius,bool shortBent){
     const double ground=terrain.height(p.x,p.y);
     const double slope=terrain.localSlopeBound(p.x,p.y,broadRadius+2),embed=shortBent?1.2:1.5;
-    const double steelClearance=legRadius*(1+slope)+slope+.35;
+    // A footing top is no higher than ground + maximumFootingDepth. This
+    // bounds the leg's horizontal travel over its first two-metre interval
+    // before the foundation height is known. Vertical travel adds no terrain
+    // interpolation margin; the complete steel still faces interval validation.
+    const double horizontal=std::hypot(legTop.x-p.x,legTop.y-p.y);
+    const double horizontalStep=horizontal==0?0:2*horizontal/std::hypot(horizontal,std::max(0.,legTop.z-ground-maximumFootingDepth));
+    const double steelClearance=legRadius*(1+slope)+slope*horizontalStep+.35;
     // One width satisfies the complete terrain anchoring disk, the steel
     // capsule above it and the supported depth. The broad disk's slope bound
     // also encloses every narrower solution. These are geometric conditions,
@@ -47,7 +53,7 @@ Support compactBent(const TrackSample& q,Vec3 right,double distance,const Terrai
     };
     for(int side=0;side<(paired?2:1);++side){
         const Vec3 p=centre+right*(side?halfWidth:-halfWidth);
-        const auto foundation=footing(p,terrain,footingRadius,radiusBase,true);
+        const auto foundation=footing(p,cap,terrain,footingRadius,radiusBase,true);
         // The actual foundation top sets usable post height, including slope.
         // A low, clear track does not require a three-metre cap above terrain.
         if(cap.z-foundation.top.z<1)return Support{centre,cap,attachment,true,distance,{}};
@@ -64,14 +70,14 @@ Support tower(Vec3 attachment,Vec3 right,Vec3 up,Vec3 outreach,double offset,dou
     Vec3 centre{cap.x,cap.y,terrain.height(cap.x,cap.y)};
     Support s{centre,cap,attachment,true,distance,{}};
     const double height=cap.z-centre.z;
-    if(height<4||height>600)return s;
+    if(height<4||height>detail::supportTowerMaximumHeight)return s;
     const Vec3 along=unit(cross(right,Vec3{0,0,1}));
     const double baseWidth=std::clamp(1.8+height*.035,2.1,12.);
     const double topWidth=std::clamp(.7+height*.003,.8,1.8);
     const double legBase=.32+height*.0022,legTop=.19+height*.00045;
     const double braceRadius=.10+height*.00045,ringRadius=.13+height*.0005;
     const double footingRadius=1.2+2.3*legBase;
-    const int tiers=std::max(1,int(std::ceil(height/16)));
+    const int tiers=std::max(1,int(std::ceil(height/detail::supportTowerTierHeight)));
     std::array<Vec3,4> bottom,top;
     const int sx[4]={-1,1,1,-1},sy[4]={-1,-1,1,1};
     auto add=[&](Vec3 a,Vec3 b,double ra,double rb,SupportMemberKind kind=SupportMemberKind::Steel,bool contact=false){
@@ -79,10 +85,10 @@ Support tower(Vec3 attachment,Vec3 right,Vec3 up,Vec3 outreach,double offset,dou
     };
     for(int corner=0;corner<4;++corner){
         Vec3 p=centre+right*(sx[corner]*baseWidth)+along*(sy[corner]*baseWidth);
-        const auto foundation=footing(p,terrain,footingRadius,legBase,false);
+        top[corner]=cap+right*(sx[corner]*topWidth)+along*(sy[corner]*topWidth);
+        const auto foundation=footing(p,top[corner],terrain,footingRadius,legBase,false);
         add(foundation.base,foundation.top,foundation.radius,foundation.radius,SupportMemberKind::Footing);
         bottom[corner]=foundation.top;
-        top[corner]=cap+right*(sx[corner]*topWidth)+along*(sy[corner]*topWidth);
     }
     for(int tier=0;tier<tiers;++tier){
         double u=double(tier)/tiers,v=double(tier+1)/tiers;
@@ -144,14 +150,18 @@ ValidationReport validateSupportMembers(const Support& support,const Terrain& te
         }else{
             if(radius>2){r.fail("SUPPORT_MEMBER_CONFIG","Steel member radius exceeds the prototype bound");return r;}
             int count=std::max(1,int(std::ceil(length/2)));
-            // A max-radius capsule conservatively encloses the tapered solid. The
-            // slope bound covers terrain between probes and across the full radius.
-            for(int k=0;k<=count;++k){
+            // Each complete capsule interval lies inside this cylinder about
+            // its midpoint: horizontal radius r + half its XY travel, and
+            // vertical half-extent r + half its Z travel. Terrain is bounded
+            // over that full horizontal disk, including between the endpoints.
+            const Vec3 step=(m.top-m.base)/count;
+            const double footprint=radius+std::hypot(step.x,step.y)*.5;
+            const double vertical=radius+std::abs(step.z)*.5;
+            for(int k=0;k<count;++k){
                 if((k&31)==0&&cancel&&cancel()){r.fail("CANCELLED","Steel terrain validation cancelled");return r;}
-                Vec3 p=m.base+(m.top-m.base)*(double(k)/count);
-                const double slope=terrain.localSlopeBound(p.x,p.y,radius+length/count*.5);
-                double interpolationMargin=slope*length/count*.5;
-                if(p.z-terrain.height(p.x,p.y)<radius*(1+slope)+interpolationMargin-1e-6){r.fail("SUPPORT_TERRAIN","Steel solid intersects the conservative terrain envelope");return r;}
+                const Vec3 p=m.base+step*(k+.5);
+                const double slope=terrain.localSlopeBound(p.x,p.y,footprint);
+                if(p.z-terrain.height(p.x,p.y)<vertical+slope*footprint-1e-6){r.fail("SUPPORT_TERRAIN","Steel solid intersects the conservative terrain envelope");return r;}
             }
         }
     }

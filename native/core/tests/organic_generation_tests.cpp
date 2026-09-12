@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "../src/generation_internal.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <tuple>
@@ -217,10 +218,10 @@ void checkTurnSpeed(const Design& design){
         check(turnMaximum>0&&std::abs(turnMaximum-turnSpeed)<=.500001,"Planar turn geometry is authored for its own occupied speed, independently of later recovery rail");turn=finish+1;
     }
 }
-Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
+Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat,bool requireCrossing=false){
     GenerationRequest request;request.seed=seed;request.terrain.kind=terrain;request.targets.requireIntensity=false;
-    if(terrain==TerrainKind::Hills)request.maxCandidates=2;
-    auto design=generate(request);
+    request.maxCandidates=1;
+    auto design=requireCrossing?detail::generateRide(request,true):generate(request);
     if(!design.accepted())for(const auto* report:{&design.report,&design.simulation.report})for(const auto& error:report->errors)std::cerr<<"seed "<<seed<<' '<<error.code<<": "<<error.message<<'\n';
     check(design.accepted(),"Entire generated circuit passes unmodified geometry, train forces, target and convergence gates");
     check(design.convergence.coarseStep==1./960&&design.convergence.fineStep==1./1920,"Full ride uses required 960/1920 Hz simulation and verification");
@@ -230,19 +231,29 @@ Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
 }
 bool same(Vec3 a,Vec3 b){return a.x==b.x&&a.y==b.y&&a.z==b.z;}
 }
-int main(){try{
+int main(int argc,char** argv){try{
+    const std::string group=argc>1?argv[1]:"all";
+    if(argc>2||(group!="all"&&group!="hills"&&group!="crossing"&&group!="canyon"&&group!="variety"))
+        throw std::invalid_argument("Expected all, hills, crossing, canyon or variety");
+    if(group=="all"||group=="hills"){
     // This terrain/S-crest combination previously demanded a rapid bank
     // reversal whose rider-offset force reached -3.88 g despite positive
     // centerline normal load. Exercise the actual generation/acceptance path.
     auto hills=generateChecked(9,TerrainKind::Hills);
     check(hills.candidate==0,"The first hills9 candidate converges without an outer terrain/energy retry");checkOperationIntent(hills);checkTurnSpeed(hills);
+    }
+    if(group=="all"||group=="crossing"){
     // Source closure changes individual seed layouts. Keep one explicit real
     // crossover fixture, with the same transverse/nonlocal geometry definition.
-    auto crossing=generateChecked(2,TerrainKind::Hills);checkFoldedGeometry(crossing,true);
+    auto crossing=generateChecked(2,TerrainKind::Hills,true);checkFoldedGeometry(crossing,true);
+    }
+    if(group=="all"||group=="canyon"){
     // The current terrain/source itinerary must complete on its first
     // candidate; its initial loop energy is not required to be deficient.
     auto canyon=generateChecked(1,TerrainKind::Canyon);classifyGeometry(canyon);checkFoldedGeometry(canyon);checkOperationIntent(canyon);checkTurnSpeed(canyon);
     check(canyon.candidate==0,"Adaptive crossing and support placement retain candidate zero under all acceptance gates");checkSupportSpacing(canyon);
+    }
+    if(group=="all"||group=="variety"){
     auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkOperationIntent(first);checkTurnSpeed(first);
     auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkOperationIntent(second);
     check(std::abs(first.track.length-second.track.length)>1,"Different seeds change the actual complete circuit geometry");
@@ -253,6 +264,7 @@ int main(){try{
     for(size_t i=0;i<first.track.knots.size();++i){const auto& a=first.track.knots[i];const auto& b=repeated.track.knots[i];identical&=same(a.position,b.position)&&same(a.tangent,b.tangent)&&same(a.curvature,b.curvature)&&same(a.up,b.up)&&a.bank==b.bank&&a.element==b.element;}
     check(identical,"Repeated seed reproduces every persisted canonical knot exactly");
     check(reportJson(first)==reportJson(repeated),"Repeated seed reproduces complete measured telemetry, acceptance and numerical convergence");
-    std::cout<<"PASS "<<checks<<" organic full-circuit checks: genuine inversion geometry/order, retained hill/full loop, selected targets, seeded proportions, exact repeatability and mandatory convergence\n";
+    }
+    std::cout<<"PASS "<<checks<<" organic full-circuit checks ("<<group<<")\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

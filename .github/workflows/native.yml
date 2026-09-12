@@ -24,8 +24,10 @@ jobs:
         run: cmake -S native -B native/build-cmake -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build native/build-cmake --config Release --parallel 2
-      - name: Test core contracts
-        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --timeout 600
+      - name: Test component contracts
+        run: ctest --test-dir native/build-cmake -C Release -L component --output-on-failure --stop-on-failure --parallel 2 --timeout 600
+      - name: Test complete generation and replay
+        run: ctest --test-dir native/build-cmake -C Release -L integration --output-on-failure --stop-on-failure --parallel 2 --timeout 600
       - name: Test Python tooling
         run: |
           python -m pip install -r native/tools/requirements.txt

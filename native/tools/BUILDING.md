@@ -1,7 +1,8 @@
 # Build the native game and numerical tools
 
-Current source: application and geometry/save identity 0.8.2-terrain.1 / COASTER5.
-Windows UE5.8.2 builds and packages successfully. Mac/Metal still needs a Mac.
+Current source: application and geometry/save identity 0.8.3-flow.1 / COASTER5.
+The published Windows package is an earlier release; this checkpoint has not
+been packaged. Mac/Metal runtime verification still needs a suitable Mac.
 
 ## Current source build
 
@@ -13,14 +14,41 @@ cmake --build native/build-cmake --config Release --parallel 2
 ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2
 ```
 
-CMake registers 25 C++ suites, plus real CLI argument tests when Python is available. Historical rejection fixtures under
+During development, build the changed target and select the relevant regression
+instead of regenerating every fixture. For example:
+
+```sh
+cmake --build native/build-cmake --config Release --target support_family_tests --parallel 2
+ctest --test-dir native/build-cmake -C Release -R '^support_terrain_footprints$' --output-on-failure
+```
+
+`circuit_components` and `station_terrain_footprints` also avoid complete ride
+generation. Organic integration is split into `organic_hills`, `organic_crossing`,
+`organic_canyon` and `organic_variety`; the last keeps repeatability and variation
+together without generating duplicate fixtures in separate tests.
+
+Run `ctest ... -L component` for the fast physical contracts, then
+`ctest ... -L integration` for complete generation and saved replay. CI requires
+both groups on all three platforms. An unfiltered CTest run still runs everything;
+`ctest ... --rerun-failed --output-on-failure` repeats only failures from the last
+run in that build directory. Add `--stop-on-failure` to stop scheduling work after
+the first failure; CI uses this in both groups. A successful qualification still
+runs every check. Never use a focused pass as full qualification.
+
+The portable `native/tools/build.ps1` likewise compiles the core once into a
+static library before linking the CLI and tests. Every invocation rebuilds the
+objects with the current headers and flags; `-Test` still runs every full suite.
+
+CMake also registers real CLI argument tests when Python is available. Historical rejection fixtures under
 `core/tests/fixtures/historical/artifacts` are required committed test inputs.
 The separate convergence CLI is built but does not run a matrix automatically.
 
-For UE build/cook/package, follow [Unreal setup](../unreal/README.md). Imported
+Packaging is outside the current checkpoint. For a later UE build/cook/package,
+follow [Unreal setup](../unreal/README.md). Imported
 runtime art is committed; Blender is not required. The editor bootstrap creates
 the map and seven base materials. Compilation is limited to two parallel actions
-to bound memory use. Build into a fresh timestamped package:
+to bound memory use. The following is the earlier 0.8.2 distribution example;
+do not label a new checkpoint build with that old version:
 
 ```powershell
 & .\native\unreal\scripts\package.ps1 -UnrealRoot 'D:\Games\Epic Games\UE_5.8'

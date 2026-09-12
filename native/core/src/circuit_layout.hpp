@@ -81,23 +81,28 @@ inline CircuitLayout closeCircuit(const std::vector<CircuitElement>& elements,st
     result.length=length+added;return result;
 }
 inline CircuitLayout solveCircuitLayout(const std::vector<CircuitElement>& elements,std::vector<double> headings,
-    const std::function<CircuitLinkLengths(size_t,double)>& minimumStraight,Cancel cancel={}){
+    const std::function<CircuitLinkLengths(size_t,double)>& minimumStraight,Cancel cancel={},
+    const std::function<bool(const CircuitLayout&)>& admissible={}){
     auto best=closeCircuit(elements,std::move(headings),minimumStraight,nullptr,cancel);
+    bool feasible=std::isfinite(best.length)&&(!admissible||admissible(best));
     // One bounded solve moves every intermediate inlet heading while reclosing
     // the entire circuit. Cost includes turns and physical work domains, so a
     // shorter closure straight cannot conceal an unnecessarily long turn.
     for(double step:{pi,pi/2,.4,.2,.1,.05})for(int sweep=0;sweep<2;++sweep){
         bool changed=false;
-        for(size_t i=1;i<elements.size();++i){auto winner=best;
+        for(size_t i=1;i<elements.size();++i){auto winner=best;bool winnerFeasible=feasible;
             for(double sign:{-1.,1.}){auto proposed=best.headings;proposed[i]+=sign*step;
                 if(step==pi&&sign>0)continue;
                 auto trial=closeCircuit(elements,std::move(proposed),minimumStraight,&best,cancel);
-                if(trial.length<winner.length-1e-6)winner=std::move(trial);
+                if(std::isfinite(trial.length)&&(!winnerFeasible||trial.length<winner.length-1e-6)&&(!admissible||admissible(trial))){
+                    winner=std::move(trial);winnerFeasible=true;
+                }
             }
-            if(winner.length<best.length-1e-6){best=std::move(winner);changed=true;}
+            if(winnerFeasible&&(!feasible||winner.length<best.length-1e-6)){best=std::move(winner);feasible=true;changed=true;}
         }
         if(!changed)break;
     }
+    if(!feasible)best.length=INFINITY;
     return best;
 }
 }

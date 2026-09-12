@@ -2,6 +2,8 @@
 
 The itinerary rewrite is implemented and under validation. It has not been promoted or merged. [V083_PROGRESS.md](V083_PROGRESS.md) records the current gates; [VALIDATION.md](VALIDATION.md) distinguishes snapshots. The earlier proposal is preserved in `artifacts/flow-intent-v083-20260910/integration-20260911/generator-architecture-before-41.md`.
 
+Current implementation is source59, stopped at the user's requested [handoff](NEXT_CHAT.md). The source48 control remains preserved as `3b63f16`, with green three-platform CI. The user's Falcon's Flight comparison demonstrated long unpowered approaches and unused level motor reservations. The replacement gives route sizing, terrain transport and hardware one inlet-based actual work interval, ranks energy-consistent orders by actual length, and optimises the terrain-measured footprint. Physically necessary straight length remains allowed; the attempted heading-only closure was rejected and preserved. [Current qualification](V083_INTEGRATION.md) distinguishes tested controls from the remaining final-source gates.
+
 ## Governing instruction, verbatim
 
 The user reaffirmed this section of [AGENTS.md](../AGENTS.md) for implementation and the completed [whole-codebase audit](SIMPLICITY_AUDIT.md):
@@ -25,6 +27,8 @@ Future customisation motivates clear ownership today; it does not justify a new 
 [Intamin's Falcon's Flight description](https://www.intamin.com/project/falcons-flight/) places the powered cliff ascent and summit before the dive, fastest launch and giant camelback. This connected relative progression is fixed. The required loop, Immelmann and supporting airtime occupy the opening and return portions according to physical compatibility. Coordinates and corridor numbers are not fixed.
 
 The selected departure launch remains the measured 0–180 km/h contract. The user delegated flat-terrain treatment: the selected-height climb, summit and dive use natural terrain or supports through the same constraints. No copied canyon centreline or separate flat recipe determines them.
+
+The dedicated hills2 fixture requests a crossover through an internal generation entry. This is a layout brief, independent of seed: the same bounded source/heading solve retains a transverse intersection between widely separated branches. Ordinary generation can choose an uncrossed route. [Intamin's Taron](https://www.intamin.com/2016/12/20/new-ride-concept-taron/) demonstrates extensively crossed real layouts; [Mack](https://www.mack-rides.com/de/produkte/mega-coaster) describes layouts shaped around the requested experience and footprint. Neither reference proves a generated ride feasible. The shared height solve and final canonical clearance/force checks establish that separately. The independent organic audit retains its original crossing definition.
 
 ## Owners and data flow
 
@@ -50,7 +54,9 @@ The private source simulation entry point shares the complete ride's integrator 
 
 ### Route and terrain
 
-The existing finite source list has explicit legal orders around the signature block. Ranking uses source energy, turn and operation requirements. Each port sequence closes heading and solves two-dimensional nonnegative connecting lengths; bounded heading adjustments minimise actual route length. There is no four-side assembly or per-seed turn rule.
+The existing finite source list has explicit legal orders around the signature block. Each order settles passive source energy and powered inlet work over its actual closed lengths before it can be selected. Ranking minimises actual length; it does not reward losing excess kinetic energy along long approaches. Each port sequence closes heading and solves two-dimensional nonnegative connecting lengths, with bounded heading adjustments. There is no four-side assembly or per-seed turn rule.
+
+Within that one route solve, identical airtime chain and exact inlet-speed requests share one successful source construction. The request is immutable and every trial owns a copy. No rounded-speed cache, persisted state or omitted ordering changes the physical search; this removes measured duplicate authoring work.
 
 Closing the route changes its passive lengths. Before source intent is frozen, the selected order resolves airtime geometry and those actual closed lengths together, with fixed headings and bounded port/energy iterations. Independent RK4 transport verifies their agreement. This prevents a preliminary turn length from demanding phantom energy or compensating descent later. Complete-train feedback still has its separate, unchanged eight-build budget.
 
@@ -64,7 +70,7 @@ A site selection is a preference under the current physical constraints. The joi
 
 Rigid sources and adjacent level work rail share one height variable per physical domain. Departure and arrival share one bounded station datum. Climb, summit and dive retain their certified rise/window. Ordinary gaps have C3 profiles with continuous polynomial floor and derivative constraints.
 
-Finite-train passive energy and selected inlet requirements enter the same solve. Surplus energy can become height before a motor. Later code does not lift a crossing or switch a motor into a trim repair. Motor capacity is reserved once; installed length follows the measured inlet.
+Finite-train passive energy and selected inlet requirements enter the same solve. Surplus energy can become height before a motor. Later code does not lift a crossing or switch a motor into a trim repair. Motor work is sized from its inlet during planning and measured feedback. The canonical work boundary is shared by composition, passive transport, the rigid source domain and installed hardware; unused zero-speed capacity is not left as a separate level approach.
 
 Actual transverse intersections produce separation constraints. A free crossing order branches only when the relaxed solution violates it; objective bounds discard inferior choices. Separation is solved jointly with all heights, energy and station constraints rather than guessed from terrain-floor order.
 
@@ -79,6 +85,8 @@ The later booster nominal rating is 0.8g within selected limits. Sizing uses the
 After the first measured footprint sizing, coupled feedback uses one midpoint update. Source phases, occupied turn speeds, link speeds and motor inlets must agree within 0.5 m/s, with at most eight geometry builds. A partial trace can correct a measured motor inlet in that budget; an unchanged stalled ride does not retry.
 
 Final bank smoothing is retained. Foundation width follows terrain slope, anchoring/steel clearance and the existing depth limit. If another branch blocks a tower, an additional outreach direction follows that actual obstruction within existing offsets. It does not exempt the collision or increase placement limits.
+
+The per-support member budget is derived from the existing 600 m tower family and 16 m tiers: at most 620 members. This removes the conflicting independent 512 cap while retaining all constructed steel, geometric dimensions and the 60,000-member total bound. A saved twelve-car canyon regression verifies that the correction leaves its complete track unchanged.
 
 ## Validation and promotion
 

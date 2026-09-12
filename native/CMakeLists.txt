@@ -28,6 +28,10 @@ foreach(suite terrain_transfer terrain_motion passive_transfer terrain_envelope 
   target_link_libraries(${suite}_tests PRIVATE coaster_core)
   if(suite STREQUAL "support")
     add_test(NAME ${suite} COMMAND ${suite}_tests "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/fixtures/historical")
+  elseif(suite STREQUAL "organic_generation")
+    foreach(group hills crossing canyon variety)
+      add_test(NAME organic_${group} COMMAND organic_generation_tests ${group})
+    endforeach()
   else()
     add_test(NAME ${suite} COMMAND ${suite}_tests)
   endif()
@@ -48,6 +52,17 @@ target_link_libraries(coaster_fvd INTERFACE coaster_core)
 add_executable(fvd_tests core/tests/fvd_tests.cpp)
 target_link_libraries(fvd_tests PRIVATE coaster_fvd Threads::Threads)
 add_test(NAME fvd COMMAND fvd_tests)
+
+# Fast physical regressions run before complete generation and saved replay.
+# The full suites remain mandatory; focused development can select one by name.
+add_test(NAME support_terrain_footprints COMMAND support_family_tests --terrain-footprints-only)
+add_test(NAME station_terrain_footprints COMMAND station_tests --terrain-footprints-only)
+add_test(NAME circuit_components COMMAND circuit_layout_tests --components-only)
+get_property(core_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${core_tests} PROPERTIES LABELS integration)
+set_tests_properties(terrain_transfer terrain_motion passive_transfer terrain_envelope terrain_baseline
+  layout_modules terrain_profile dimensions clearance track_web geometry frame_force terrain convergence
+  drive_profile force_envelope fvd support_terrain_footprints station_terrain_footprints circuit_components PROPERTIES LABELS component)
 
 # Explicit matrix convergence tool, excluded from automatic CTest runs.
 add_executable(coaster_convergence tools/convergence/audit.cpp)

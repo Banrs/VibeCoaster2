@@ -203,7 +203,13 @@ struct SupportMember {
     SupportMemberKind kind{SupportMemberKind::Steel}; bool spineContact{false};
 };
 struct Support {Vec3 base,top,attachment; bool hasAttachment{false}; double trackDistance{}; std::vector<SupportMember> members;};
-constexpr size_t maxSupportMembers=512,maxTotalSupportMembers=60000;
+namespace detail {
+constexpr int supportTowerMaximumHeight=600,supportTowerTierHeight=16;
+}
+// Four feet, four top connectors and four outrigger members, plus sixteen
+// members per tier. The resource bound must admit the declared tower family.
+constexpr size_t maxSupportMembers=12+16*((detail::supportTowerMaximumHeight+detail::supportTowerTierHeight-1)/detail::supportTowerTierHeight);
+constexpr size_t maxTotalSupportMembers=60000;
 ValidationReport validateSupportMembers(const Support&,const Terrain&,Cancel cancel={});
 
 enum class StationRole { Platform, Canopy, Post, Pier, Footing };

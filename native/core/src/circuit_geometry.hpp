@@ -14,6 +14,43 @@ struct CircuitGeometry {
     std::vector<Interval> sources;
     std::vector<Link> links;
 };
+// Layout intent is evaluated on the actual source and turn paths. This coarse
+// planning witness does not certify clearance: composition's shared height
+// solve and final canonical vehicle/hardware checks still own acceptance.
+inline bool circuitHasCrossing(const std::vector<CircuitOccurrence>& occurrences,const CircuitLayout& layout){
+    struct Point {Vec3 position;double distance;};std::vector<Point> points;
+    Vec3 cursor{};double distance=0;
+    const auto append=[&](Vec3 p,double s,bool endpoint){
+        if(points.empty()||endpoint||s-points.back().distance>=10)points.push_back({p,s});
+    };
+    for(size_t i=0;i<occurrences.size();++i){const auto& source=occurrences[i].source;const double heading=layout.headings[i];
+        cursor.z=occurrences[i].inletHeight;const auto base=cursor;
+        for(size_t j=0;j<source.points.size();++j){const auto& p=source.points[j];
+            append(base+sourceYaw(p.frame.position,heading),distance+p.distance,j+1==source.points.size());}
+        cursor=points.back().position;distance+=source.points.back().distance;
+        const auto& exit=source.points.back().frame.tangent;const double exitHeading=heading+std::atan2(exit.y,exit.x);
+        const auto& turn=layout.turns[i];const auto turnBegin=cursor;
+        for(size_t j=1;j<turn.points.size();++j)
+            append(turnBegin+sourceYaw(turn.points[j],exitHeading),distance+turn.length*j/(turn.points.size()-1),j+1==turn.points.size());
+        cursor=turnBegin+sourceYaw(turn.points.back(),exitHeading);distance+=turn.length;
+        cursor=cursor+sourceYaw({layout.straights[i],0,0},exitHeading+turn.angle);distance+=layout.straights[i];
+        append(cursor,distance,true);
+    }
+    for(size_t i=0;i+1<points.size();++i){const auto a=points[i].position,b=points[i+1].position-a;
+        for(size_t j=i+2;j+1<points.size();++j){const auto c=points[j].position,e=points[j+1].position-c;
+            if(std::max(a.x,a.x+b.x)<std::min(c.x,c.x+e.x)||std::max(c.x,c.x+e.x)<std::min(a.x,a.x+b.x)||
+               std::max(a.y,a.y+b.y)<std::min(c.y,c.y+e.y)||std::max(c.y,c.y+e.y)<std::min(a.y,a.y+b.y))continue;
+            const double determinant=cross(b,e).z;
+            if(determinant==0||std::abs(determinant)<.3*norm(b)*norm(e))continue;
+            const double u=cross(c-a,e).z/determinant,v=cross(c-a,b).z/determinant;
+            if(u<0||u>=1||v<0||v>=1)continue;
+            const double arc=points[j].distance+v*(points[j+1].distance-points[j].distance)-
+                points[i].distance-u*(points[i+1].distance-points[i].distance);
+            if(std::min(arc,distance-arc)>=1000)return true;
+        }
+    }
+    return false;
+}
 // Compose the exact same occurrences used for layout. Heights here are the
 // authored port heights; the terrain owner later adds source translations and
 // its connecting baseline. A source's position/frame data is never refitted.
@@ -42,8 +79,8 @@ inline CircuitGeometry composeCircuit(const std::vector<CircuitOccurrence>& occu
         const auto& turn=layout.turns[i];const double straight=layout.straights[i],linkLength=turn.length+straight;
         const Vec3 linkBegin=cursor;
         const double nextHeight=origin.z+occurrences[(i+1)%occurrences.size()].inletHeight;
-        // Closure can add passive connecting rail; it cannot enlarge the
-        // physically sized motor. Resolve port height before that work rail.
+        // The connection owns actual work and passive intervals. Resolve port
+        // height before the physical work rail used by the motor and train.
         const double passiveStraight=straight-layout.workLengths[i];
         const double passiveLength=turn.length+passiveStraight;
         const TerrainTransfer height{cursor.z,nextHeight,passiveLength>0?passiveLength:linkLength};
