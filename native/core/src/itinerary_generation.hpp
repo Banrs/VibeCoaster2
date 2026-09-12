@@ -524,7 +524,9 @@ inline CircuitGeometry placeRide(const GenerationRequest& request,const RideRout
     throw TerrainTransferInfeasible("No site admits the shared source, station and crossing heights: "+failure);
 }
 struct RideBuild {
-    Design design;RideRoute route;CircuitGeometry geometry;
+    Design design;RideRoute route;
+    // The track is consumed by design; only source/link metadata remains usable.
+    CircuitGeometry geometry;
     std::vector<double> motorInlet;
 };
 inline RideBuild buildRide(const GenerationRequest& request,int candidate,Operation departure,const RideRoute& route,RideFeedback& feedback,Cancel cancel={}){
@@ -540,7 +542,7 @@ inline RideBuild buildRide(const GenerationRequest& request,int candidate,Operat
         result.route.layout.workLengths[i]=length;result.route.layout.workEntrySpeeds[i]=feedback.motorEntry[next];
     }
     result.geometry=placeRide(request,result.route,feedback,cancel);
-    auto& design=result.design;design.request=request;design.candidate=candidate;design.track=result.geometry.track;design.topology="source-itinerary";
+    auto& design=result.design;design.request=request;design.candidate=candidate;design.track=std::move(result.geometry.track);design.topology="source-itinerary";
     const auto distance=circuitDistances(design.track);const double half=(request.train.cars-1)*request.train.spacing*.5;
     result.motorInlet.resize(result.route.sources.size(),-1);
     departure.start=0;departure.end=distance[result.geometry.sources.front().last]-half;design.operations.push_back(departure);

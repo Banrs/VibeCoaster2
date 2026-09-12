@@ -16,8 +16,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.13'
       - name: Configure independent C++ core
@@ -32,6 +32,95 @@ jobs:
         run: |
           python -m pip install -r native/tools/requirements.txt
           python -B -m unittest discover -s native/tools -p "test_*.py" -v
+
+  qualification-build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install pinned qualification compiler
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'zig-0.14.1.zip'
+          Invoke-WebRequest 'https://ziglang.org/download/0.14.1/zig-x86_64-windows-0.14.1.zip' -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '554f5378228923ffd558eac35e21af020c73789d87afeabf4bfd16f2e6feed2c') { throw 'Zig archive hash mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
+      - name: Build once and verify portable contracts
+        run: ./native/tools/qualification/build.ps1 -Compiler "$env:RUNNER_TEMP/zig-x86_64-windows-0.14.1/zig.exe" -Output "$env:RUNNER_TEMP/qualification-bin"
+      - name: Verify portable Unreal wrappers
+        run: |
+          ./native/unreal/scripts/validate_source.ps1 -ZigPath "$env:RUNNER_TEMP/zig-x86_64-windows-0.14.1/zig.exe"
+          & "$env:RUNNER_TEMP/zig-x86_64-windows-0.14.1/zig.exe" c++ -std=c++20 -O2 -ffp-contract=off -Inative/core/include -Inative/core/src -c native/unreal/Source/VibeCoaster/Private/CoreGeneration.cpp -o native/unreal/Saved/Validation/CoreGeneration.obj
+          if ($LASTEXITCODE -ne 0) { throw 'Canonical generation wrapper compilation failed' }
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: qualification-bin
+          path: ${{ runner.temp }}/qualification-bin
+          if-no-files-found: error
+      - name: Preserve portable test evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: qualification-portable-tests
+          path: native/build-qualification-tests/Testing
+          if-no-files-found: warn
+
+  qualification:
+    needs: qualification-build
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: qualification-bin
+          path: qualification-bin
+      - name: Qualify fixed requests and saved rides with two workers
+        run: python -B native/tools/qualification/run.py run --bin-dir qualification-bin --output qualification-evidence --shard ${{ matrix.shard }}
+      - name: Preserve raw qualification evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: qualification-shard-${{ matrix.shard }}
+          path: qualification-evidence
+          include-hidden-files: true
+          if-no-files-found: error
+
+  qualification-verify:
+    needs: qualification
+    if: always()
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: qualification-shard-*
+          path: qualification-evidence
+      - name: Verify all 52 cases and their source, binaries and raw evidence
+        run: python -B native/tools/qualification/run.py verify --input qualification-evidence
+      - name: Preserve qualification verdict
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: qualification-summary
+          path: qualification-evidence/qualification-summary.json
+          if-no-files-found: error
 
 # UE cooking and Mac/Metal runtime verification require suitable engine hosts.
 # Performance benchmarks are deliberately absent from this workflow.

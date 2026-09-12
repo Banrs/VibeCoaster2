@@ -1,5 +1,35 @@
 # v083 integration qualification
 
+## Placed-track ownership and CI qualification (pending)
+
+The follow-up to `e0dd5c2c60b8d58c7c594be43e52f7955a477f27` moves the final
+placed track into its owning `Design` and migrates test readers to that owner.
+Source/link interval metadata remains available. The before-change circuit
+suite passed 5,432 checks; post-change native qualification is pending CI.
+The preserved copy/move probe measured 2,395,248 bytes of duplicate vector
+payload for its fixture, excluding allocator/capacity overhead. It establishes
+the removed copy's storage cost, not a measured runtime speedup.
+
+The [fixed CI qualification](tools/qualification/README.md) retains all 36 tests,
+44 unchanged matrix requests and eight required rides. A single portable build
+feeds four jobs with two workers each. Exact saves, replay, independent audits,
+organic checks, raw outputs and source/binary hashes remain required.
+[Current evidence](artifacts/native-recovery-20260912/) preserves the original
+compilation-receipt failure, implementation review and tooling verification.
+The stable tooling passed a fresh 196-test Python discovery run (188 passed,
+eight real CLI tests skipped locally for CI execution). Twelve of those tests
+exercise missing/mixed source identities, corrupted raw evidence, failed
+commands, coverage and immutable output handling. The new raw reader also
+validated all 52 preserved source64 bundles without launching native code;
+that establishes reader compatibility, not new physical acceptance.
+
+The user requested no local simulations and then paused local Unreal/high-load
+work while gaming. Engine repair was authorized and delegated to the existing
+recovery task, but is now paused. The current UE payload lacks the editor and
+build tools; historical UE results below do not qualify this native change.
+Finish code/CI checks and let the user verify before merging. This continuation
+does not claim full milestone completion.
+
 **Source64 has passed every required local gate on rebuilt, consistently hashed binaries.** [Promotion records](artifacts/flow-intent-v083-20260910/integration-20260911/promotion-64/) and [GitHub checks](https://github.com/Banrs/VibeCoaster2/actions/workflows/native.yml) record the integration and main commit status. [NEXT_CHAT.md](NEXT_CHAT.md) is the continuation entry point.
 
 Identity remains **0.8.3-flow.1 / COASTER5**. Public APIs are retained against the approved source59 checkpoint, not every historical experimental FVD interface on main. This continuation retains CLI arguments, save representation, selected targets, force/power limits, eight whole-ride builds, 0.5 m/s feedback and 960/1920 Hz acceptance.

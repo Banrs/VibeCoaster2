@@ -76,6 +76,13 @@ python -m pip install -r native/tools/requirements.txt
 python -B -m unittest discover -s native/tools -p "test_*.py" -v
 ```
 
+Current execution preference: run native simulations on CI. The
+[fixed qualification workflow](qualification/README.md) builds once and runs the
+unchanged 44 requests and eight required rides across four jobs, with two workers
+per job. Local compilation, static checks and Python tooling tests remain usable.
+Local Unreal work is paused at the user's request. Historical commands below do
+not override this preference.
+
 ## Historical 0.5.0 build and acceptance procedure
 
 The following preserved instructions target their original exact version, not
