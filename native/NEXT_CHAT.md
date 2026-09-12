@@ -33,7 +33,7 @@ Paths below are under `native/artifacts/flow-intent-v083-20260910/integration-20
 
 ## Continuing safely
 
-1. Inspect the working tree, promotion receipts and GitHub checks. Preserve unrelated art and frozen evidence. If promotion is unfinished, finish final-commit three-platform CI before merging, then verify main CI.
+1. Inspect the working tree, promotion receipts and GitHub checks. Preserve unrelated art and frozen evidence. If promotion is unfinished, finish final-commit Windows/macOS CI before merging, then verify main CI. Linux remains a possible future target; the user's latest scope removes its required tests and platform-specific work.
 2. Any subsequent source correction needs a rebuilt, consistently hashed qualification. Retain all 36 suites, all 44 unchanged requests, the required eight rides, ten UE contracts and independent audits. Never substitute historical passes or seeds.
 3. Preserve selected targets, physical limits, eight whole-ride builds, 0.5 m/s feedback and exact-version saves. The existing panel/matrix drivers accept frozen source/build paths and require fresh output names.
 4. Follow the user's next scope. Packaging, benchmark qualification, POV review, FPS/load measurement and Mac/Metal runtime verification are outside this milestone.

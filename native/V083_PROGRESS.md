@@ -10,7 +10,7 @@
 | 4. Saved rides and generality | Complete | All eight required rides and all 44 unchanged requests pass candidate zero, exact replay and independent 960/1920 Hz audits. All eight pass organic/crossover requirements and match source63 saves byte-for-byte. |
 | 5. Python, portable wrappers and UE | Complete | Python 176 pass; all eight CLI tests pass through CTest. Portable build/wrappers, real UE build and all ten UE contracts pass. |
 | 6. Review, controls and provenance | Complete | 168 inputs/65 binaries and external UE dependencies bound; graph limitations recorded; independent reviews complete. All 40 matched positive motors retain source57 force/power ratings. Consolidated verifier passes. |
-| 7. Integration CI, merge and main CI | Remote record | `promotion-64/` records the final integration SHA and green three-platform CI, followed by the merge/main SHA and main CI. GitHub checks remain authoritative. |
+| 7. Integration CI, merge and main CI | Remote record | `promotion-64/` records the final integration SHA and green Windows/macOS CI, followed by the merge/main SHA and main CI. The user's latest scope leaves Linux as a future possibility. GitHub checks remain authoritative. |
 
 Source63 completed the same local gates before the final dead-branch cleanup. Source64 repeated every gate on its rebuilt source; no earlier pass substituted for final qualification.
 

@@ -62,6 +62,8 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 Continue the existing native game and preserve unrelated work and frozen evidence.
 
+Windows and macOS are the current targets. Require their tests in CI. Keep Linux possible through portable code, but do not require Linux tests or add Linux-specific work unless the user changes that scope.
+
 These requirements apply to the entire codebase and every future edit and commit:
 
 - State the intended behavior and verify it with relevant tests and actual evidence before committing. Distinguish changed fixture geometry from weakened acceptance. Report remaining failures honestly.

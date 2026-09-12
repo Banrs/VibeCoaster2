@@ -87,6 +87,6 @@ Detailed older qualification tables, control comparisons and dated handoff parag
 
 ## Promotion evidence
 
-The complete integration diff and final provenance have been reviewed, including independent code and evidence reviews. Append-only records under `promotion-64/` bind the final integration commit to green Windows/Linux/macOS CI, then the merge and green main CI. GitHub checks are authoritative for remote status. Any later source correction requires rebuilt final-source qualification.
+The complete integration diff and final provenance have been reviewed, including independent code and evidence reviews. Append-only records under `promotion-64/` bind the final integration commit to green Windows/macOS CI, then the merge and green main CI. The user's latest scope removes required Linux tests while retaining portability for possible future support. The resulting CI/documentation change leaves qualified native code unchanged. GitHub checks are authoritative for remote status. Any later source correction requires rebuilt final-source qualification.
 
 Do not weaken acceptance or substitute seeds. The supplied Falcon angle scale is inaccurate and supplies no hard grade/quiet percentage. Packaging, benchmark qualification, POV review, measured FPS/load benchmarks and Mac/Metal runtime verification are outside this milestone.

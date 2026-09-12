@@ -104,6 +104,6 @@ Flat5, flat7, flat42, hills2, hills9, canyon1, canyon24 and canyon42 must accept
 
 The [predeclared 44-request matrix](artifacts/flow-intent-v083-20260910/integration-20260911/architecture-matrix.md) varies seeds, terrain transformations, 6/12-car trains and selected targets. Every request is reported without substitution. Rejected snapshots, binaries and diagnostic witnesses remain separate from promoted evidence.
 
-Promotion also requires the complete native/Python suites, portable checks, source/executable/save hashes, preserved-control comparisons, final diff review and green Windows/Linux/macOS CI for the final integration commit. Only then may it merge; main CI must also pass. Partial receipts are not a release claim.
+Promotion also requires the complete native/Python suites, portable checks, source/executable/save hashes, preserved-control comparisons, final diff review and green Windows/macOS CI for the final integration commit. Linux remains a possible future target and is not a required CI gate under the user's latest scope. Only then may it merge; main CI must also pass. Partial receipts are not a release claim.
 
 Identity stays `0.8.3-flow.1 / COASTER5`. Benchmark qualification, Unreal packaging, POV review, performance benchmarking and Mac/Metal runtime verification remain later milestones.

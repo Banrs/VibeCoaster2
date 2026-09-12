@@ -29,7 +29,9 @@ together without generating duplicate fixtures in separate tests.
 
 Run `ctest ... -L component` for the fast physical contracts, then
 `ctest ... -L integration` for complete generation and saved replay. CI requires
-both groups on all three platforms. An unfiltered CTest run still runs everything;
+both groups on Windows and macOS. Linux remains a possible future target; its
+tests and platform-specific work are not currently required. An unfiltered CTest
+run still runs everything;
 `ctest ... --rerun-failed --output-on-failure` repeats only failures from the last
 run in that build directory. Add `--stop-on-failure` to stop scheduling work after
 the first failure; CI uses this in both groups. A successful qualification still
