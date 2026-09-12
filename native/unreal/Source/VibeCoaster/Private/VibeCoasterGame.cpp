@@ -84,7 +84,7 @@ void AVibeCoasterController::RequestGeneration()
     if (!ReadSeed(SeedText, Value))
     { InputError = TEXT("Seed is outside unsigned 64-bit range."); return; }
     Settings.seed = Value;
-    if (Settings.targets.requireIntensity && !coaster::validateReference(Settings.targets).valid())
+    if (Settings.targets.requireIntensity && (!std::isfinite(Settings.targets.referenceExposure) || Settings.targets.referenceId.empty()))
     {
         InputError = TEXT("ALL RECORDS unavailable: the measured I305/Pantherian force benchmark is missing.\nThis is not a failed seed search. PHYSICS-PROOF can test the other selected targets.");
         return;
@@ -145,7 +145,7 @@ FString AVibeCoasterController::RowText(int32 Row) const
     case 1: return TEXT("Terrain: ") + FString(UTF8_TO_TCHAR(Settings.terrain.name().c_str()));
     case 2:
         if (!Settings.targets.requireIntensity) return TEXT("Mode: PHYSICS-PROOF (intensity comparison OFF)");
-        return coaster::validateReference(Settings.targets).valid()
+        return std::isfinite(Settings.targets.referenceExposure) && !Settings.targets.referenceId.empty()
             ? TEXT("Mode: ALL RECORDS (configured reference)") : TEXT("Mode: ALL RECORDS — UNAVAILABLE: I305 benchmark missing");
     case 3: return FString::Printf(TEXT("Maximum track height above ground >= %.0f m"), Settings.targets.height);
     case 4: return FString::Printf(TEXT("Maximum speed >= %.1f km/h"), Settings.targets.speed * 3.6);
@@ -162,14 +162,10 @@ void AVibeCoasterHUD::DrawHUD()
     const float Scale = FMath::Clamp(Canvas->SizeY / 900.f, .65f, 1.35f);
     const float X = 24 * Scale, Width = FMath::Min(850 * Scale, Canvas->SizeX - X * 2);
     float Y = 20 * Scale;
-    auto DrawLines = [&](const TArray<FString>& Lines, FLinearColor Colour = FLinearColor(.9f, .94f, 1.f))
-    {
-        for (const FString& Value : Lines) { DrawText(Value, Colour, X + 16 * Scale, Y, GEngine->GetSmallFont(), Scale * 1.15f); Y += 23 * Scale; }
-    };
     auto Line = [&](const FString& Text, FLinearColor Colour = FLinearColor(.9f, .94f, 1.f))
     {
         TArray<FString> Lines; Text.ParseIntoArrayLines(Lines, false);
-        DrawLines(Lines, Colour);
+        for (const FString& Value : Lines) { DrawText(Value, Colour, X + 16 * Scale, Y, GEngine->GetSmallFont(), Scale * 1.15f); Y += 23 * Scale; }
     };
     const FLinearColor Accent(.25f, .85f, .92f), Amber(1.f, .72f, .3f);
     // At kilometre-scale overview distances, correctly sized steel is subpixel.
@@ -273,13 +269,13 @@ void AVibeCoasterHUD::DrawHUD()
         TelemetryText.ParseIntoArrayLines(TelemetryLines, false);
         const int32 PanelLines = StatusLines.Num() + TelemetryLines.Num() + (PC->Ride->HasRide() ? 1 : 0);
         DrawRect(FLinearColor(.012f, .025f, .044f, .82f), X, Y - 8 * Scale, Width, (PanelLines * 23 + 16) * Scale);
-        DrawLines(StatusLines, Amber);
+        Line(StatusText, Amber);
         if (const auto* D = PC->Ride->ActiveDesign())
         {
             Line(FString::Printf(TEXT("Active accepted seed %llu | %s | %s"), static_cast<unsigned long long>(D->request.seed), UTF8_TO_TCHAR(D->request.terrain.name().c_str()),
                 D->request.targets.requireIntensity ? TEXT("configured all-record comparison") : TEXT("PHYSICS-PROOF; intensity untested")));
         }
-        if (PC->ShowTelemetry) DrawLines(TelemetryLines);
+        if (PC->ShowTelemetry) Line(TelemetryText);
     }
 }
 AVibeCoasterGameMode::AVibeCoasterGameMode()

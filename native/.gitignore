@@ -1,24 +1,14 @@
-.tools/
-build/
-artifacts/
-unreal/Binaries/
-unreal/Intermediate/
-unreal/Saved/
-unreal/DerivedDataCache/
-unreal/.vs/
-
-__pycache__/
-*.pyc
-
-# Local distribution archives and test output are not source.
-/releases/
+/game/
+/checkpoints/
+/build-cmake/
+/unreal/Binaries/
+/unreal/Intermediate/
+/unreal/Saved/
+/unreal/DerivedDataCache/
+/unreal/Packaged/
+/unreal/.vs/
 /test-output/
 /test-artifacts/
 /structure-test-output/
-/support-test-results.json
-/build-cmake/
-/references/leads/
-
-# These historical fixtures are test inputs, despite their original directory name.
-!core/tests/fixtures/historical/artifacts/
-!core/tests/fixtures/historical/artifacts/**
+__pycache__/
+*.pyc

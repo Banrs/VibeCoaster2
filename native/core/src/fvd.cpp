@@ -48,32 +48,18 @@ template<size_t N,class Residual> bool shootParameters(std::array<double,N>& par
     }catch(const Failure& e){if(e.code=="CANCELLED")throw;}
     return false;
 }
-// Continuous load through the positive knee and crest boundary. Harmonic
-// secants preserve monotonicity, without stopping the load slope at either knee.
-void appendHillTransition(FvdRequest& request,double kneeG,double duration,double rise,double finalG,double fall){
-    const size_t first=request.controls.size()-1;const double begin=request.controls.back().time;
-    const bool unloading=request.controls.back().normalG>finalG;
-    const double crestBoundary=std::max(0.,std::min(request.controls.back().normalG,finalG));
-    request.controls.push_back({begin+rise,unloading?kneeG:crestBoundary,0,0});
-    request.controls.push_back({begin+rise+duration,unloading?crestBoundary:kneeG,0,0});
-    request.controls.push_back({begin+rise+duration+fall,finalG,0,0});
-    for(size_t k=first+1;k<first+3;++k){
-        const auto& a=request.controls[k-1];auto& b=request.controls[k];const auto& c=request.controls[k+1];
-        const double before=(b.normalG-a.normalG)/(b.time-a.time),after=(c.normalG-b.normalG)/(c.time-b.time);
-        b.normalRateGps=before*after>0?2*before*after/(before+after):0;
-    }
-}
 FvdControl control(const FvdRequest& request,double time){
     auto hi=std::upper_bound(request.controls.begin(),request.controls.end(),time,
         [](double t,const FvdControl& c){return t<c.time;});
     FvdControl out;
     if(hi==request.controls.end())out=request.controls.back();
     else if(hi==request.controls.begin())out=*hi;
-    else{const auto& a=*(hi-1);const auto& b=*hi;const double dt=b.time-a.time,u=(time-a.time)/dt,q=smooth(u);
-        const double u2=u*u,u3=u2*u,u4=u3*u,u5=u4*u;
-        const double normal=a.normalG+(b.normalG-a.normalG)*q+
-            dt*(a.normalRateGps*(u-6*u3+8*u4-3*u5)+b.normalRateGps*(-4*u3+7*u4-3*u5));
-        out={time,normal,a.lateralG+(b.lateralG-a.lateralG)*q,a.rollRate+(b.rollRate-a.rollRate)*q};}
+    else{
+        const auto& a=*(hi-1);const auto& b=*hi;
+        const double u=smooth((time-a.time)/(b.time-a.time));
+        out={time,a.normalG+(b.normalG-a.normalG)*u,a.lateralG+(b.lateralG-a.lateralG)*u,
+            a.rollRate+(b.rollRate-a.rollRate)*u};
+    }
     if(!request.twists.empty()){
         out.rollRate=0;
         auto phase=std::upper_bound(request.twists.begin(),request.twists.end(),time,[](double t,const FvdTwistPhase& p){return t<p.begin;});
@@ -100,17 +86,9 @@ void validate(const FvdRequest& r){
     double previous=-1;
     for(const auto& c:r.controls){
         require(bounded(c.time,0,60)&&c.time>previous&&(previous<0||c.time-previous>=.001)&&
-            bounded(c.normalG,-20,20)&&bounded(c.lateralG,-20,20)&&bounded(c.rollRate,-4*pi,4*pi)&&std::isfinite(c.normalRateGps),
+            bounded(c.normalG,-20,20)&&bounded(c.lateralG,-20,20)&&bounded(c.rollRate,-4*pi,4*pi),
         "FVD_INPUT","Invalid FVD control time, force or roll rate");previous=c.time;
         require(r.twists.empty()||c.rollRate==0,"FVD_INPUT","Twist phases and roll-rate controls cannot both own physical twist");
-    }
-    for(size_t i=1;i<r.controls.size();++i){
-        const auto& a=r.controls[i-1];const auto& b=r.controls[i];const double delta=b.normalG-a.normalG;
-        // With zero second derivatives, endpoint slopes in [0,2] times the
-        // secant guarantee a monotone quintic and no unrequested force peaks.
-        require(delta==0?(a.normalRateGps==0&&b.normalRateGps==0):
-            bounded(a.normalRateGps*(b.time-a.time)/delta,0,2)&&bounded(b.normalRateGps*(b.time-a.time)/delta,0,2),
-            "FVD_INPUT","Normal-force slopes must preserve monotone control intervals");
     }
     require(r.twists.size()<=64,"FVD_INPUT","Too many physical twist phases");previous=0;
     for(const auto& phase:r.twists){
@@ -175,18 +153,6 @@ State advance(const State& start,const FvdRequest& r,double time,double dt){
     out.u=unit(out.u-out.t*dot(out.t,out.u));
     require(finite(out.p)&&norm(out.p)<=100000,"FVD_POSITION","FVD section left the bounded position domain");
     derivative(out,control(r,time+dt),r);return out;
-}
-State advanceHill(State state,const FvdRequest& request,double begin,double end,double minimumForward,const Cancel& cancel){
-    for(size_t i=1;i<request.controls.size();++i){
-        const double start=std::max(begin,request.controls[i-1].time),stop=std::min(end,request.controls[i].time);
-        if(stop<=start)continue;
-        const size_t count=size_t(std::ceil((stop-start)/request.step));const double dt=(stop-start)/count;
-        for(size_t j=0;j<count;++j){
-            poll(cancel);state=advance(state,request,start+j*dt,dt);
-            require(state.t.x>minimumForward,"FVD_HILL_SHAPE","Force-authored hill left its forward geometry domain");
-        }
-    }
-    return state;
 }
 FvdSample sample(const State& state,const FvdRequest& r,double time){
     return {time,state.s,state.v,state.p,state.t,state.u,derivative(state,control(r,time),r).k,state.work};
@@ -271,261 +237,52 @@ FvdAirtimeResult designFvdAirtime(const FvdAirtimeRequest& input,Cancel cancel){
     FvdAirtimeResult out;
     try{
         poll(cancel);
-        // Positive-lobe durations describe a gravity-scaled family at 65 m/s.
-        // Equal load intent uses time proportional to speed, not fixed seconds.
-        const double timeScale=input.speed/65;
-        const auto scaledDuration=[&](double seconds,double lo,double hi){
-            // Equivalent multiplication/division orders may straddle a bound by an ulp.
-            return bounded(seconds/timeScale,lo-1e-12,hi+1e-12);
-        };
-        require(bounded(input.speed,45,90)&&bounded(input.guardSeconds,.05,.3)&&
-            scaledDuration(input.portRampSeconds,.6,1.2)&&bounded(input.unloadG,.5,1.5)&&
-            !input.hills.empty()&&input.hills.size()<=3,"FVD_AIRTIME_INPUT","Airtime needs one to three hills in the bounded speed/guard domain");
-        for(const auto& h:input.hills)require(bounded(h.pushG,1.8,6)&&bounded(h.crestG,-2.8,.2)&&
-            h.crestG<input.unloadG&&scaledDuration(h.pushHoldSeconds,.2,.6)&&scaledDuration(h.crestRampSeconds,.8,1.6)&&
-            bounded(h.crestPulseSeconds,.4,6)&&bounded(h.bankRadians,-35*pi/180,35*pi/180),
-            "FVD_AIRTIME_INPUT","Airtime force or duration intent left the bounded design domain");
-        auto& r=out.authoring;r.position={0,0,0};r.speed=input.speed;r.step=.0025;
-        r.rollingAcceleration=input.rollingAcceleration;r.dragAccelerationCoefficient=input.dragAccelerationCoefficient;
-        r.controls={{0,1,0,0},{input.guardSeconds,1,0,0}};
-        validate(r);
-        State state=advanceHill({r.position,r.forward,r.up,r.speed,0},r,0,input.guardSeconds,.25,cancel);
-        const auto bank=[](const State& s){const Vec3 up=unit(Vec3{0,0,1}-s.t*s.t.z);
-            return std::atan2(dot(s.u,cross(s.t,up)),dot(s.u,up));};
-        std::vector<std::array<double,3>> times;
-        for(size_t hill=0;hill<input.hills.size();++hill){
-            const auto& h=input.hills[hill];const bool last=hill+1==input.hills.size();
-            const double begin=r.controls.back().time;double time=begin;const State entry=state;
-            if(hill==0){time+=input.portRampSeconds;r.controls.push_back({time,h.pushG,0,0});}
-            time+=h.pushHoldSeconds;r.controls.push_back({time,h.pushG,0,0});
-            const double pulseHalf=h.crestPulseSeconds*.5;
-            const auto ascent=[&](double unloadDuration){
-                FvdRequest q=r;appendHillTransition(q,input.unloadG,unloadDuration,h.crestRampSeconds,h.crestG,pulseHalf);
-                const double end=q.controls.back().time;
-                q.twists.push_back({begin,end,h.bankRadians-bank(entry)});
-                return std::pair{advanceHill(entry,q,begin,end,.25,cancel),std::move(q)};
-            };
-            // Solve continuous unloading duration against pitch at the crest.
-            // The crest phase and its actual zero crossings retain their intent.
-            double low=.001,high=.25;
-            require(ascent(low).first.t.z>0,"FVD_AIRTIME_SHOOT","Positive ascent cannot support the requested apex pulse");
-            while(high<=8&&ascent(high).first.t.z>0){low=high;high*=2;}
-            require(high<=8,"FVD_AIRTIME_SHOOT","Airtime unloading did not bracket a forward horizontal apex");
-            for(int i=0;i<30;++i){
-                const double middle=(low+high)*.5;
-                if(ascent(middle).first.t.z>0)low=middle;else high=middle;
-            }
-            const double ascentHold=(low+high)*.5;auto top=ascent(ascentHold);
-            const State atApex=top.first;r=std::move(top.second);const double apex=r.controls.back().time;
-            const double valleyG=last?h.pushG:input.hills[hill+1].pushG;
-            const double valleyBank=last?0:-input.hills[hill+1].bankRadians;
-            using Parameters=std::array<double,3>; // Unloading duration, pullout duration, physical twist.
-            const auto descent=[&](const Parameters& p){
-                FvdRequest q=r;appendHillTransition(q,input.unloadG,p[0],pulseHalf,valleyG,h.crestRampSeconds);
-                double end=q.controls.back().time+p[1];q.controls.push_back({end,valleyG,0,0});
-                if(last){end+=input.portRampSeconds;q.controls.push_back({end,1,0,0});}
-                q.twists.push_back({apex,end,p[2]});
-                return std::pair{advanceHill(atApex,q,apex,end,.25,cancel),std::move(q)};
-            };
-            const auto residual=[&](const Parameters& p){const auto q=descent(p).first;return Parameters{std::atan2(q.t.z,std::hypot(q.t.x,q.t.y)),
-                q.p.z/std::max(20.,atApex.p.z),bank(q)-valleyBank};};
-            Parameters parameters{ascentHold,(h.pushHoldSeconds+(hill==0?input.portRampSeconds*.5:0))*(last?2:1),valleyBank-bank(atApex)};
-            require(shootParameters(parameters,{{{.001,8},{.001,8},{-2.5,2.5}}},residual),
-                "FVD_AIRTIME_SHOOT","Force intent cannot close a level valley within bounded descent durations");
-            auto finish=descent(parameters);state=finish.first;r=std::move(finish.second);
-            times.push_back({begin,apex,r.controls.back().time});
+        require(bounded(input.speed,45,90)&&bounded(input.pushG,1.8,2.8)&&
+            bounded(input.crestG,-.3,.2)&&bounded(input.guardSeconds,.05,.3)&&
+            bounded(input.pushRampSeconds,.6,1.2)&&bounded(input.pushHoldSeconds,.2,.6)&&
+            bounded(input.crestRampSeconds,.8,1.6),"FVD_AIRTIME_INPUT","Airtime controls left the bounded design domain");
+        auto& r=out.authoring;r.position={0,0,0};r.speed=input.speed;
+        double t=input.guardSeconds;
+        r.controls={{0,1,0,0},{t,1,0,0}};
+        t+=input.pushRampSeconds;r.controls.push_back({t,input.pushG,0,0});
+        t+=input.pushHoldSeconds;r.controls.push_back({t,input.pushG,0,0});
+        t+=input.crestRampSeconds;r.controls.push_back({t,input.crestG,0,0});
+        // Integrate only the prefix while shooting. Canonical fitting and its
+        // independent sampled replay happen once after the apex is solved.
+        State prefix{r.position,r.forward,r.up,r.speed,0};
+        for(size_t i=1;i<r.controls.size();++i){
+            double begin=r.controls[i-1].time,duration=r.controls[i].time-begin;
+            size_t count=size_t(std::ceil(duration/.0025));double dt=duration/count;
+            for(size_t j=0;j<count;++j){poll(cancel);prefix=advance(prefix,r,begin+j*dt,dt);}
         }
-        r.controls.push_back({r.controls.back().time+input.guardSeconds,1,0,0});
+        require(prefix.t.z>0,"FVD_AIRTIME_SHOOT","Force prefix must still ascend before the crest hold");
+        auto atHold=[&](double duration){
+            State state=prefix;size_t count=std::max<size_t>(1,size_t(std::ceil(duration/.0025)));double dt=duration/count;
+            for(size_t j=0;j<count;++j){poll(cancel);state=advance(state,r,t+j*dt,dt);}return state;
+        };
+        double low=0,high=6;
+        require(atHold(high).t.z<0,"FVD_AIRTIME_SHOOT","Crest hold did not bracket a horizontal apex");
+        for(int i=0;i<34;++i){double mid=(low+high)*.5;if(atHold(mid).t.z>0)low=mid;else high=mid;}
+        const double apex=t+(low+high)*.5;
+        require(apex-t>=.001,"FVD_AIRTIME_SHOOT","Airtime apex hold is too short");
+        const auto firstHalf=r.controls;
+        r.controls.push_back({apex,input.crestG,0,0});
+        for(auto it=firstHalf.rbegin();it!=firstHalf.rend();++it)r.controls.push_back({2*apex-it->time,it->normalG,0,0});
         out.section=designFvdSection(r,cancel);
         if(!out.section.report.valid()||out.section.samples.empty())return out;
         const auto& end=out.section.samples.back();
-        require(std::abs(end.position.z)<1e-4&&std::abs(end.forward.z)<1e-5&&norm(end.up-Vec3{0,0,1})<1e-5&&
-            std::abs(.5*end.speed*end.speed+gravity*end.position.z+end.dissipatedWorkPerMass-.5*input.speed*input.speed)<1e-5,
-            "FVD_AIRTIME_PORT","Force-authored hill did not close its level geometry and loss-aware energy balance");
-        for(size_t i=1;i<out.section.samples.size();++i){const auto delta=out.section.samples[i].position-out.section.samples[i-1].position;
-            out.span+=std::hypot(delta.x,delta.y);}
+        require(std::abs(end.position.z)<1e-4&&norm(end.forward-Vec3{1,0,0})<1e-5&&
+            std::abs(end.speed-input.speed)<1e-4,"FVD_AIRTIME_PORT","Force-authored hill did not close its level ports");
+        out.span=end.position.x;
         for(const auto& q:out.section.samples){
-            poll(cancel);
-            require(q.forward.x>.25&&q.position.z>=-1e-4,"FVD_AIRTIME_SHAPE","Airtime chain left its forward nonnegative-height domain");
+            require(q.forward.x>.65&&q.position.z>=-1e-4,"FVD_AIRTIME_SHAPE","Airtime hill left its forward single-hill domain");
             out.height=std::max(out.height,q.position.z);
         }
-        const auto at=[&](double time)->FvdSample{
-            const auto q=std::lower_bound(out.section.samples.begin(),out.section.samples.end(),time,
-                [](const FvdSample& sample,double value){return sample.time<value;});
-            require(q!=out.section.samples.end()&&std::abs(q->time-time)<1e-9,"FVD_AIRTIME_PORT","Airtime boundary is missing from the canonical source");return *q;
-        };
-        for(const auto& t:times)out.hills.push_back({at(t[0]),at(t[1]),at(t[2])});
     }catch(const Failure& e){out.section.cancelled=e.code=="CANCELLED";out.section.report.fail(e.code,e.what());}
     catch(const std::exception& e){out.section.report.fail("FVD_AIRTIME",e.what());}
     return out;
 }
 
-// Gravity-coupled pitch follows Nordmark/Essen Eq. (8), arXiv:1007.1394.
-// Smooth force ramps add zero-derivative ports; this is point-mass authoring,
-// not a rider standard or a finite-train force prescription.
-FvdPitchResult designFvdPitch(const FvdPitchRequest& input,Cancel cancel){
-    FvdPitchResult out;
-    try{
-        poll(cancel);
-        require(bounded(input.height,20,250)&&bounded(input.apexSpeed,12,40)&&
-            bounded(input.normalG,2.5,4.2)&&bounded(input.pushRampSeconds,.6,2)&&bounded(input.apexNormalG,-1,1.5),
-            "FVD_PITCH_INPUT","Pitch intent left the bounded height, speed, force or ramp domain");
-        auto& r=out.authoring;r.position={0,0,0};
-        r.speed=std::sqrt(input.apexSpeed*input.apexSpeed+2*gravity*input.height);r.step=.0025;
-        auto controls=[&](double hold,double fall){const double rise=input.pushRampSeconds;
-            r.controls={{0,1,0,0},{rise,input.normalG,0,0},{rise+hold,input.normalG,0,0},{rise+hold+fall,input.apexNormalG,0,0}};};
-        struct Shot {State state;double angle;};
-        auto shoot=[&](double hold,double fall){
-            controls(hold,fall);State state{r.position,r.forward,r.up,r.speed,0};double angle=0;
-            for(size_t i=1;i<r.controls.size();++i){double begin=r.controls[i-1].time,duration=r.controls[i].time-begin;
-                size_t count=size_t(std::ceil(duration/.005));double dt=duration/count;
-                for(size_t j=0;j<count;++j){poll(cancel);auto next=advance(state,r,begin+j*dt,dt);
-                    angle+=std::atan2(-cross(state.t,next.t).y,dot(state.t,next.t));state=next;}
-            }
-            return Shot{state,angle};
-        };
-        auto residual=[&](const Shot& q){return Vec3{q.angle-pi,(q.state.p.z-input.height)/input.height,0};};
-        double hold=input.apexNormalG<0?3:1,fall=input.apexNormalG<0?2:1;bool solved=false;
-        for(int iteration=0;iteration<30;++iteration){
-            auto q=shoot(hold,fall);Vec3 error=residual(q);
-            if(norm(error)<1e-9){solved=true;break;}
-            constexpr double epsilon=.001;auto qh=shoot(hold+epsilon,fall),qf=shoot(hold,fall+epsilon);
-            Vec3 h=(residual(qh)-error)/epsilon,f=(residual(qf)-error)/epsilon;
-            double determinant=h.x*f.y-f.x*h.y;
-            if(std::abs(determinant)<1e-12)break;
-            const double dh=(-error.x*f.y+f.x*error.y)/determinant,df=(-h.x*error.y+error.x*h.y)/determinant;
-            bool improved=false;
-            for(int backtrack=0;backtrack<16;++backtrack){
-                double scale=std::ldexp(1.,-backtrack),nextHold=hold+scale*dh,nextFall=fall+scale*df;
-                if(!bounded(nextHold,.05,20)||!bounded(nextFall,.05,20))continue;
-                try{auto candidate=shoot(nextHold,nextFall);
-                    if(norm(residual(candidate))<norm(error)){hold=nextHold;fall=nextFall;improved=true;break;}}
-                catch(const Failure& e){if(e.code=="CANCELLED")throw;}
-            }
-            if(!improved)break;
-        }
-        require(solved,"FVD_PITCH_SHOOT","Requested pitch height, apex speed and normal-force history have no converged bounded duration solution");
-        controls(hold,fall);out.holdSeconds=hold;out.exitRampSeconds=fall;
-        out.section=designFvdSection(r,cancel);
-        if(!out.section.report.valid()||out.section.samples.empty())return out;
-        const auto& end=out.section.samples.back();
-        require(std::abs(end.position.z-input.height)<1e-5&&norm(end.forward-Vec3{-1,0,0})<1e-7&&
-            std::abs(end.speed-input.apexSpeed)<1e-5,"FVD_PITCH_PORT","Canonical pitch source did not close its requested height, direction and energy");
-        double lastAngle=0;
-        for(const auto& q:out.section.samples){
-            double angle=std::atan2(q.forward.z,q.forward.x);if(angle<-.1)angle+=2*pi;
-            require(angle>=lastAngle-1e-7&&angle<=pi+1e-7&&q.position.z>=-1e-7&&q.position.z<=input.height+1e-5,
-                "FVD_PITCH_SHAPE","Pitch source left its monotone ascending half-loop domain");lastAngle=angle;
-        }
-        out.forwardDisplacement=end.position.x;out.height=end.position.z;
-    }catch(const Failure& e){out.section.cancelled=e.code=="CANCELLED";out.section.report.fail(e.code,e.what());}
-    catch(const std::exception& e){out.section.report.fail("FVD_PITCH",e.what());}
-    return out;
-}
-
-FvdLoopResult designFvdLoop(const FvdLoopRequest& input,Cancel cancel){
-    FvdLoopResult out;
-    try{
-        poll(cancel);
-        require(bounded(input.height,20,250)&&bounded(input.apexSpeed,12,40)&&
-            bounded(input.normalG,2.5,6)&&bounded(input.apexNormalG,0,1.5)&&bounded(input.pushRampSeconds,.6,2)&&
-            bounded(input.crossingOffset,-100,100)&&bounded(input.portLength,1,100),
-            "FVD_LOOP_INPUT","Full-loop height, speed, force, offset or guard left the bounded source domain");
-        FvdRequest base;base.position={0,0,0};base.step=input.step;base.maxSamples=input.maxSamples;
-        base.rollingAcceleration=input.rollingAcceleration;base.dragAccelerationCoefficient=input.dragAccelerationCoefficient;
-        validate(base);
-        // Exact level-straight coast time over the requested guard distance.
-        // This only sets duration; advance() still integrates every guard state.
-        const auto guardTime=[&](double speed){
-            const double a=base.rollingAcceleration,b=base.dragAccelerationCoefficient,L=input.portLength;
-            if(a==0)return b==0?L/speed:std::expm1(b*L)/(b*speed);
-            const double square=b==0?speed*speed-2*a*L:
-                speed*speed*std::exp(-2*b*L)+(a/b)*std::expm1(-2*b*L);
-            require(square>=.25,"FVD_SPEED","The actual guard would exhaust the source's supported speed");
-            const double endSpeed=std::sqrt(square);
-            if(b==0)return 2*L/(speed+endSpeed);
-            const double scale=std::sqrt(a*b);
-            return std::atan2((speed-endSpeed)*scale,a+b*speed*endSpeed)/scale;
-        };
-        // Seven physical degrees of freedom close the real loop constraints:
-        // inlet speed; ascent/descent hold and unload/reload durations; two
-        // tangent twists. Targets are apex height/pitch/speed and exit
-        // height/pitch/upright bank. Two crossing times add two unknowns; the
-        // arms then share actual X/Z and have the requested signed Y gap.
-        // Exit position/yaw stay free, so endpoint drift cannot fake clearance.
-        using Parameters=std::array<double,9>;
-        struct Shot {FvdRequest request;State apex,exit,crossingEntry,crossingExit;double crossingEntryTime{},crossingExitTime{};};
-        const auto shot=[&](const Parameters& p){
-            poll(cancel);Shot out;auto& r=out.request;r=base;r.speed=p[0];
-            const double begin=guardTime(p[0]),rise=input.pushRampSeconds;
-            const double top=begin+rise+p[1]+p[2],end=top+p[3]+p[4]+rise;
-            r.controls={{0,1,0,0},{begin,1,0,0},{begin+rise,input.normalG,0,0},
-                {begin+rise+p[1],input.normalG,0,0},{top,input.apexNormalG,0,0},
-                {top+p[3],input.normalG,0,0},{top+p[3]+p[4],input.normalG,0,0},{end,1,0,0}};
-            // Concentrate twist where the loop turns through its upper half.
-            // Spreading it over both whole half-loops leaves the low arms
-            // together while merely moving the exit, which is not separation.
-            r.twists={{begin+rise,top,p[5]},{top,top+p[3],p[6]}};validate(r);
-            out.crossingEntryTime=begin+(top-begin)*p[7];out.crossingExitTime=top+(end-top)*p[8];
-            std::vector<double> times;for(const auto& c:r.controls)times.push_back(c.time);
-            times.push_back(out.crossingEntryTime);times.push_back(out.crossingExitTime);std::sort(times.begin(),times.end());
-            State state{r.position,r.forward,r.up,r.speed,0};
-            for(size_t i=1;i<times.size();++i){
-                const double start=times[i-1],stop=times[i],duration=stop-start;
-                if(duration==0)continue;
-                const size_t count=std::max<size_t>(3,size_t(std::ceil(duration/std::min(.005,r.step))));const double dt=duration/count;
-                for(size_t j=0;j<count;++j){poll(cancel);state=advance(state,r,start+j*dt,dt);}
-                if(stop==top)out.apex=state;
-                if(stop==out.crossingEntryTime)out.crossingEntry=state;
-                if(stop==out.crossingExitTime)out.crossingExit=state;
-                if(stop==end){r.controls.push_back({end+guardTime(state.v),1,0,0});times.push_back(r.controls.back().time);validate(r);}
-            }
-            out.exit=state;return out;
-        };
-        const double scale=std::sqrt(input.height/73.),handScale=input.crossingOffset/18;
-        Parameters parameters{std::sqrt(input.apexSpeed*input.apexSpeed+2*gravity*input.height)+1,
-            1.4*scale,1.5*scale,1.7*scale,1.25*scale,-.4*handScale,.1*handScale,.3,.7};
-        require(shootParameters(parameters,{{{input.apexSpeed,100},{.01,8},{.1,12},{.1,12},{.01,8},{-1.3,1.3},{-1.3,1.3},{.05,.6},{.4,.95}}},
-            [&](const Parameters& p){const auto q=shot(p);const Vec3 upright=unit(Vec3{0,0,1}-q.exit.t*q.exit.t.z);
-                require(norm(upright)>.5,"FVD_LOOP_SHOOT","The candidate exit has no level heading");
-                return Parameters{(q.apex.p.z-input.height)/input.height,q.apex.t.z,(q.apex.v-input.apexSpeed)/input.apexSpeed,
-                    q.exit.p.z/input.height,q.exit.t.z,std::atan2(dot(q.exit.u,cross(q.exit.t,upright)),dot(q.exit.u,upright)),
-                    (q.crossingEntry.p.x-q.crossingExit.p.x)/input.height,(q.crossingEntry.p.z-q.crossingExit.p.z)/input.height,
-                    (q.crossingExit.p.y-q.crossingEntry.p.y-input.crossingOffset)/input.height};}),
-            "FVD_LOOP_SHOOT","Full-loop force intent cannot close the actual loss-aware apex and exit within bounded durations and twist");
-        auto solved=shot(parameters);out.authoring=std::move(solved.request);out.section=designFvdSection(out.authoring,cancel);
-        if(!out.section.report.valid()||out.section.samples.empty())return out;
-        const auto at=[&](double time){const auto q=std::lower_bound(out.section.samples.begin(),out.section.samples.end(),time,
-            [](const FvdSample& sample,double value){return sample.time<value;});
-            require(q!=out.section.samples.end()&&std::abs(q->time-time)<1e-9,"FVD_LOOP_PORT","Full-loop phase boundary is absent from the canonical source");return *q;};
-        out.loopEntry=at(out.authoring.controls[1].time);out.apex=at(out.authoring.controls[4].time);out.loopExit=at(out.authoring.controls[7].time);
-        out.crossingEntry=sample(solved.crossingEntry,out.authoring,solved.crossingEntryTime);
-        out.crossingExit=sample(solved.crossingExit,out.authoring,solved.crossingExitTime);
-        const auto& end=out.section.samples.back();
-        require(std::abs(out.apex.position.z-input.height)<1e-5&&std::abs(out.apex.speed-input.apexSpeed)<1e-5&&
-            std::abs(out.apex.forward.z)<1e-7&&out.apex.forward.x<-.5&&out.apex.up.z<-.5&&
-            std::abs(end.position.z)<1e-5&&
-            std::abs(end.forward.z)<1e-7&&end.forward.x>.25&&norm(end.up-Vec3{0,0,1})<1e-7&&
-            std::abs(out.loopEntry.distance-input.portLength)<1e-5&&std::abs(end.distance-out.loopExit.distance-input.portLength)<1e-5,
-            "FVD_LOOP_PORT","Integrated loop did not close its real apex, guards and level upright exit");
-        require(norm(out.crossingExit.position-out.crossingEntry.position-Vec3{0,input.crossingOffset,0})<1e-5&&
-            out.crossingEntry.time<out.apex.time&&out.crossingExit.time>out.apex.time&&
-            out.crossingEntry.position.z>0&&out.crossingEntry.position.z<input.height*.5,
-            "FVD_LOOP_CROSSING","Integrated low crossing arms did not retain the requested physical separation");
-        double lastAngle=0;
-        for(const auto& q:out.section.samples){
-            poll(cancel);double angle=std::atan2(q.forward.z,q.forward.x);
-            while(angle<lastAngle-pi)angle+=2*pi;while(angle>lastAngle+pi)angle-=2*pi;
-            require(angle>=lastAngle-1e-7&&angle<=2*pi+1e-7&&q.position.z>=-1e-5&&q.position.z<=input.height+1e-5&&
-                (q.time<=out.apex.time?q.forward.z>=-1e-7:q.forward.z<=1e-7),
-                "FVD_LOOP_SHAPE","Full-loop source left its single ascending/descending winding domain");lastAngle=angle;
-        }
-        require(std::abs(lastAngle-2*pi)<1e-7&&out.section.assessment.maxEnergyDrift<1e-5,
-            "FVD_LOOP_ENERGY","Full-loop winding or actual mechanical-energy/work balance did not close");
-    }catch(const Failure& e){out.section.cancelled=e.code=="CANCELLED";out.section.report.fail(e.code,e.what());}
-    catch(const std::exception& e){out.section.report.fail("FVD_LOOP",e.what());}
-    return out;
-}
 
 FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest& input,Cancel cancel){
     FvdImmelmannResult out;
@@ -595,66 +352,4 @@ FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest& input,Cancel ca
     return out;
 }
 
-FvdTallHillResult designFvdTallHill(const FvdTallHillRequest& input,Cancel cancel){
-    FvdTallHillResult out;
-    try{
-        poll(cancel);
-        require(bounded(input.height,220,280)&&bounded(input.speed,75,90)&&
-            bounded(input.normalG,2.5,6)&&bounded(input.crestG,-2.8,.2)&&input.crestG<input.unloadG&&
-            bounded(input.rampSeconds,.8,2)&&bounded(input.unloadG,.5,1.5)&&bounded(input.crestPulseSeconds,.4,6),
-            "FVD_TALL_INPUT","Tall-hill request left its bounded authoring family");
-        auto& r=out.authoring;r.position={0,0,0};r.speed=input.speed;r.step=.0025;r.maxSamples=30000;
-        r.rollingAcceleration=input.rollingAcceleration;r.dragAccelerationCoefficient=input.dragAccelerationCoefficient;
-        validate(r);
-        const double minimumEntrySquared=input.dragAccelerationCoefficient>0?
-            (gravity+input.rollingAcceleration)*std::expm1(2*input.dragAccelerationCoefficient*input.height)/input.dragAccelerationCoefficient:
-            2*(gravity+input.rollingAcceleration)*input.height;
-        require(input.speed*input.speed>minimumEntrySquared,"FVD_TALL_ENERGY",
-            "Requested height exceeds available energy even on an ideal vertical ascent with configured losses");
-        using Parameters=std::array<double,2>; // Push and unloading durations on ascent; recovery and unloading on descent.
-        const double pulseHalf=input.crestPulseSeconds*.5;
-        const auto ascent=[&](const Parameters& p){
-            FvdRequest q=r;
-            double time=.1;q.controls={{0,1,0,0},{time,1,0,0}};
-            time+=input.rampSeconds;q.controls.push_back({time,input.normalG,0,0});
-            time+=p[0];q.controls.push_back({time,input.normalG,0,0});
-            appendHillTransition(q,input.unloadG,p[1],input.rampSeconds,input.crestG,pulseHalf);
-            const State state=advanceHill({q.position,q.forward,q.up,q.speed,0},q,0,q.controls.back().time,.02,cancel);
-            return std::pair{state,std::move(q)};
-        };
-        // Initialize impulse and unloading time from their force/height scales.
-        // Both durations remain solved outputs, not altered force controls.
-        Parameters up{1/(input.normalG-1),std::sqrt(input.height/(2*gravity))};
-        require(shootParameters(up,{{{.001,8},{.001,15}}},[&](const Parameters& p){const auto q=ascent(p).first;
-                return Parameters{(q.p.z-input.height)/input.height,std::atan2(q.t.z,q.t.x)};}),
-            "FVD_TALL_ASCENT","Requested height has no forward apex within bounded force, energy and pulse controls");
-        auto top=ascent(up);const State apex=top.first;r=std::move(top.second);const double apexTime=r.controls.back().time;
-        const auto descent=[&](const Parameters& p){
-            FvdRequest q=r;appendHillTransition(q,input.unloadG,p[0],pulseHalf,input.normalG,input.rampSeconds);
-            const double end=q.controls.back().time+p[1];q.controls.push_back({end,1,0,0});q.controls.push_back({end+.1,1,0,0});
-            return std::pair{advanceHill(apex,q,apexTime,end+.1,.02,cancel),std::move(q)};
-        };
-        // Losses make the descending solution asymmetric. Its recovery and
-        // unloading times close the real state; no mirrored pose/speed is used.
-        Parameters down{up[1],2*up[0]+input.rampSeconds};
-        require(shootParameters(down,{{{.001,15},{.001,8}}},[&](const Parameters& p){const auto q=descent(p).first;
-                return Parameters{q.p.z/input.height,std::atan2(q.t.z,q.t.x)};}),
-            "FVD_TALL_DESCENT","No independently solved pulse descent closes level ports within bounded controls");
-        r=std::move(descent(down).second);out.section=designFvdSection(r,cancel);
-        if(!out.section.report.valid()||out.section.samples.empty())return out;
-        out.exit=out.section.samples.back();out.span=out.exit.position.x;
-        bool descending=false;
-        for(const auto& q:out.section.samples){
-            poll(cancel);out.height=std::max(out.height,q.position.z);
-            if(q.forward.z< -1e-6)descending=true;
-            require(q.forward.x>.02&&q.position.z>=-1e-5&&(!descending||q.forward.z<1e-6),
-                "FVD_TALL_SHAPE","Tall hill left its forward single-apex geometry domain");
-        }
-        require(std::abs(out.height-input.height)<1e-4&&std::abs(out.exit.position.z)<1e-5&&
-            norm(out.exit.forward-Vec3{1,0,0})<1e-6&&norm(out.exit.curvature)<1e-8,
-            "FVD_TALL_PORT","Loss-aware tall hill did not close its requested height and level curvature ports");
-    }catch(const Failure& e){out.section.cancelled=e.code=="CANCELLED";out.section.report.fail(e.code,e.what());}
-    catch(const std::exception& e){out.section.report.fail("FVD_TALL",e.what());}
-    return out;
-}
 }

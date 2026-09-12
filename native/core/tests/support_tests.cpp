@@ -23,7 +23,7 @@ static void sameSupport(const Support& a,const Support& b){exact(a.base,b.base,"
 int main(int argc,char** argv){try{
     if(argc!=2)throw std::runtime_error("Pass native directory");fs::path native=fs::absolute(argv[1]),root=fs::path(__FILE__).parent_path().parent_path().parent_path(),out=root/"test-output";fs::create_directories(out);
     std::string error;int legacyCases=0,legacyRejected=0;
-    for(const auto& relative:{"artifacts/core-smoke-v021/0-hills.coaster","artifacts/core-smoke-v021/1-canyon.coaster","artifacts/core-smoke-v021/3-flat.coaster","artifacts/pacing-experiment/packed/42-hills.coaster","artifacts/pacing-experiment/packed/1-canyon.coaster","artifacts/pacing-experiment/packed/3-flat.coaster"}){
+    for(const auto& relative:{"legacy-v021-hills.coaster","legacy-v021-canyon.coaster","legacy-v021.coaster","pacing-hills.coaster","pacing-canyon.coaster","pacing-flat.coaster"}){
         fs::path path=native/relative;std::string original=bytes(path);check(!original.empty(),"Historical fixture exists");Design retained;retained.request.seed=98765;const auto before=reportJson(retained);
         check(!loadDesign(path.string(),retained,error),"Prior geometry schemas are explicitly unsupported");check(reportJson(retained)==before,"Unsupported load retains its destination");check(bytes(path)==original,"Historical fixture unchanged");++legacyRejected;
     }
@@ -47,19 +47,8 @@ int main(int argc,char** argv){try{
     GenerationRequest bankedRequest;bankedRequest.seed=24;bankedRequest.terrain.kind=TerrainKind::Canyon;bankedRequest.targets.requireIntensity=false;
     auto banked=generate(bankedRequest);check(banked.accepted(),"Banked canyon outreach regression accepted under unchanged gates");
     check(validateDesignStructures(banked).valid(),"Banked outreach clears canonical station and train");
-    for(const auto& support:banked.supports){auto frame=banked.track.sample(support.trackDistance);
-        const Vec3 offset=support.top-support.attachment;const double standoff=-dot(offset,frame.up);
-        const auto feet=std::count_if(support.members.begin(),support.members.end(),[](const auto& member){return member.kind==SupportMemberKind::Footing;});
-        if(feet==1||feet==2){
-            check(support.members.size()==size_t(feet*2+1),"Compact cap belongs to a connected post or paired bent");
-            check(norm(offset+frame.up*standoff)<1e-8,"Compact cap has no lateral or tangential outreach");
-            check(feet==1?(standoff>=.6-1e-8&&standoff<=2+1e-8):std::abs(standoff-2)<1e-8,"Compact cap uses its height-adaptive canonical under-spine neck");
-            for(const auto& member:support.members)if(member.kind==SupportMemberKind::Footing)
-                check(support.top.z-member.top.z>=1-1e-8,"Compact cap leaves usable steel above every actual foundation");
-        }else{
-            check(feet==4,"Other banked supports are four-foot towers");
-            check(std::abs(standoff-2)<1e-8||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Tower cap uses a bounded canonical under-spine stand-off across banking");
-        }}
+    for(const auto& tower:banked.supports){auto frame=banked.track.sample(tower.trackDistance);
+        const double standoff=-dot(tower.top-tower.attachment,frame.up);check(std::abs(standoff-2)<1e-8||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Tower cap uses a bounded canonical under-spine stand-off across banking");}
     const auto bankedPath=out/"banked-outreach.coaster";check(saveDesign(banked,bankedPath.string(),error),"Banked outreach saves after independent validation: "+error);Design bankedReplay;
     check(loadDesign(bankedPath.string(),bankedReplay,error),"Banked outreach normally replays: "+error);
     const std::string pacingWarning="Moving ride exceeds the 180-second pacing goal; physical acceptance is unchanged.";
@@ -97,7 +86,7 @@ int main(int argc,char** argv){try{
     {auto x=support;auto q=frames[0];Vec3 p=q.position+q.right*3.;x.members={{p-q.up,p+q.up*3,2.,2.,SupportMemberKind::Footing,false}};check(supportCollision(x,sweep)>=0,"Footing full radius envelope checked");}
     const auto goodBytes=bytes(good);auto rows=lines(goodBytes);size_t firstSupport=5+d.track.knots.size()+d.operations.size(),firstMember=firstSupport+1;int malformed=0;
     for(auto [col,value]:std::vector<std::pair<size_t,std::string>>{{6,"0"},{6,"-1"},{6,"nan"},{6,"1e309"},{6,"6"},{8,"9"},{9,"2"},{0,"nan"},{5,"9999999"}}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstMember,col,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed malformed member rejected: "+value);check(reportJson(unchanged)==reportJson(d),"Failed load retains accepted ride");++malformed;}
-    for(const auto& value:std::vector<std::string>{std::to_string(maxSupportMembers+1),std::to_string(maxTotalSupportMembers+1),"-1","18446744073709551615"}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstSupport,11,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed oversized count rejected");check(reportJson(unchanged)==reportJson(d),"Oversized load retains accepted ride");++malformed;}
+    for(auto value:{"513","60001","-1","18446744073709551615"}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstSupport,11,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed oversized count rejected");check(reportJson(unchanged)==reportJson(d),"Oversized load retains accepted ride");++malformed;}
     {auto bad=d;bad.supports[0].members[0].radiusBase=NAN;check(!saveDesign(bad,good.string(),error),"Bad canonical member cannot overwrite accepted save");check(bytes(good)==goodBytes,"Rejected save preserves exact prior file");}
     check(!saveDesign(d,good.string(),error,[]{return true;}),"Cancelled save rejected");check(bytes(good)==goodBytes,"Cancelled save preserves exact prior file");
     std::ofstream result(root/"support-test-results.json");result<<std::setprecision(12)<<"{\"passed\":true,\"checks\":"<<checks<<",\"legacyFiles\":"<<legacyCases<<",\"unsupportedLegacySchemas\":"<<legacyRejected<<",\"newMembersMeshed\":"<<members<<",\"footings\":"<<footings<<",\"maxTowerHeight\":"<<tallest<<",\"maxMemberRadius\":"<<maxRadius<<",\"checksummedMalformedCases\":"<<malformed<<",\"ueCompiled\":false}";

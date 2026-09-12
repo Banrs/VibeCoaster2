@@ -1,7 +1,4 @@
 #include "coaster/coaster.hpp"
-#include "coaster/force_envelope.hpp"
-#include "drive_force.hpp"
-#include "simulation_internal.hpp"
 #include <deque>
 
 namespace coaster {
@@ -28,16 +25,16 @@ ForceMeasurement measure(const Track& track,double distance,double speed,double 
 SeatForces measureSeatForces(const Track& track,double distance,double speed,double acceleration,double seatHeight){
     return measure(track,distance,speed,acceleration,seatHeight).force;
 }
-static SimulationResult simulateInterval(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel,
-    double start,double finish,double initialSpeed){
+SimulationResult simulate(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel){
     SimulationResult out;
     if(track.spans.empty()||dt<1./4000||dt>1./30||!std::isfinite(dt)||train.cars<1||train.cars>16||!std::isfinite(train.carMass)||train.carMass<=0||!std::isfinite(train.spacing)||train.spacing<=0||train.spacing>20||!std::isfinite(train.seatHeight)||train.seatHeight<0||!std::isfinite(train.dragCdA)||train.dragCdA<0||!std::isfinite(train.rollingResistance)||train.rollingResistance<0||!std::isfinite(train.airDensity)||train.airDensity<0){out.report.fail("SIM_CONFIG","Invalid simulation configuration");return out;}
     for(const auto& op:ops)if(int(op.kind)<0||int(op.kind)>3||!std::isfinite(op.start)||!std::isfinite(op.end)||!std::isfinite(op.targetSpeed)||!std::isfinite(op.maxForce)||!std::isfinite(op.maxPower)||!std::isfinite(op.rampSeconds)||!std::isfinite(op.stopDeceleration)||!std::isfinite(op.stopOffset)||!std::isfinite(op.exitFadeMeters)||op.exitFadeMeters<.01||op.exitFadeMeters>1000||op.stopDeceleration<=0||op.stopDeceleration>20||op.stopOffset<0||op.stopOffset>5||op.start<0||op.end<0||op.start>track.length||op.end>track.length||op.targetSpeed<0||op.maxForce<0||op.maxPower<0||op.rampSeconds<0){out.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return out;}
-    double half=(train.cars-1)*train.spacing*.5,s=start,v=initialSpeed,t=0;
+    double half=(train.cars-1)*train.spacing*.5,start=half+30,finish=track.length+start,s=start,v=0,t=0;
+    if(!track.closed){start=half+1;s=start;finish=track.length-half-1;}
     if(finish<=start||2*half+2>=track.length){out.report.fail("TRAIN_LENGTH","Track is shorter than the train");return out;}
     std::vector<double> entered(train.cars*ops.size(),-1);
     constexpr double traceDt=1./60;double nextTrace=0;
-    std::array<double,3> verticalRatePeaks{};std::array<std::array<std::vector<double>,3>,3> riderForces;
+    std::array<double,3> verticalRatePeaks{};std::array<std::vector<double>,3> exposures;std::array<std::array<std::vector<double>,2>,3> horizontalForces;
     auto wrappedDistance=[&](double cs){
         double wrapped=std::fmod(cs,track.length);if(wrapped<0)wrapped+=track.length;
         return wrapped;
@@ -52,7 +49,7 @@ static SimulationResult simulateInterval(const Track& track,const std::vector<Op
     };
     // All acceleration is a sum of gravity, rolling/air resistance and the
     // bounded force/power of authored operations. There is no speed assignment.
-    auto acceleration=[&](double at,double speed,double time,DriveForces* drives=nullptr){
+    auto acceleration=[&](double at,double speed,double time){
         double total=0;
         for(int car=0;car<train.cars;++car){
             double cs=at+half-car*train.spacing;auto p=track.sample(cs);
@@ -62,13 +59,15 @@ static SimulationResult simulateInterval(const Track& track,const std::vector<Op
                 if(!active(op,wrapped,at))continue;
                 double entry=entered[car*ops.size()+j];
                 double remaining=op.end-wrapped;if(remaining<0)remaining+=track.length;
-                const double applied=detail::appliedDriveForce(op,train.carMass,speed,time,entry,remaining,finish-at);
-                force+=applied;
-                if(drives){
-                    const bool motor=op.kind==DriveKind::Launch||op.kind==DriveKind::Boost;
-                    (motor?drives->propulsion:drives->braking)+=applied;
-                    if(op.maxForce>0&&op.maxPower>0)(motor?drives->motorPresent:drives->brakePresent)=true;
-                }
+                // The persisted spatial fade reaches zero force and zero first
+                // derivative at the real exit. It cannot raise the drive cap.
+                double ramp=smooth((time-(entry<0?time:entry))/std::max(.001,op.rampSeconds))*smooth(remaining/op.exitFadeMeters);
+                double target=op.targetSpeed;
+                if(op.kind==DriveKind::Station)target=std::sqrt(2*op.stopDeceleration*std::max(0.,finish-at-op.stopOffset));
+                double demand=(target-speed)*train.carMass*4;
+                double cap=std::min(op.maxForce,op.maxPower/std::max(1.,speed));
+                if(op.kind==DriveKind::Launch||op.kind==DriveKind::Boost)force+=std::clamp(demand,0.,cap)*ramp;
+                else force+=std::clamp(demand,-cap,0.)*ramp;
             }total+=force;
         }
         total-=.5*train.airDensity*train.dragCdA*speed*std::abs(speed);
@@ -88,8 +87,7 @@ static SimulationResult simulateInterval(const Track& track,const std::vector<Op
             const double wrapped=wrappedDistance(s+half-car*train.spacing);
             for(size_t j=0;j<ops.size();++j){auto& entry=entered[car*ops.size()+j];if(!active(ops[j],wrapped,s))entry=-1;else if(entry<0)entry=t;}
         }
-        const bool trace=t+1e-9>=nextTrace;
-        DriveForces drives;double a=acceleration(s,v,t,trace?&drives:nullptr);
+        double a=acceleration(s,v,t);
         // Explicit midpoint integration; operation entry state is committed once.
         double predictedMid=v+a*dt*.5,vm=std::max(0.,predictedMid),sm=s+v*dt*.5;
         double am=acceleration(sm,vm,t+dt*.5),vn=std::max(0.,v+am*dt),sn=s+vm*dt;
@@ -108,7 +106,7 @@ static SimulationResult simulateInterval(const Track& track,const std::vector<Op
         if(!std::isfinite(sn)||!std::isfinite(vn)||vn>200){out.report.fail("NUMERICAL_DIVERGENCE","Simulation became nonfinite or exceeded domain",s);break;}
         if(!std::isfinite(out.metrics.launchTo180)&&v<50&&vn>=50)out.metrics.launchTo180=t+dt*(50-v)/(vn-v);
         out.metrics.maxSpeed=std::max(out.metrics.maxSpeed,vn);
-        Frame frame;frame.time=t;frame.distance=s;frame.speed=v;frame.drives=drives;
+        bool trace=t+1e-9>=nextTrace;Frame frame;frame.time=t;frame.distance=s;frame.speed=v;
         for(int seat=0;seat<3;++seat){double offset=seatDistanceOffset(train,seat),cs=s+offset;
             auto measured=measure(track,cs,v,a,train.seatHeight);SeatForces f=measured.force;frame.seats[seat]=f;
             auto& m=out.metrics;
@@ -116,7 +114,7 @@ static SimulationResult simulateInterval(const Track& track,const std::vector<Op
             m.minVerticalG=std::min(m.minVerticalG,f.vertical);m.maxVerticalG=std::max(m.maxVerticalG,f.vertical);m.maxLateralG=std::max(m.maxLateralG,std::abs(f.lateral));m.maxLongitudinalG=std::max(m.maxLongitudinalG,std::abs(f.longitudinal));
             double rate=std::abs(measured.verticalRate);verticalRatePeaks[seat]=std::max(verticalRatePeaks[seat],rate);
             if(rate>m.maxJerkGps){m.maxJerkGps=rate;m.maxJerkDistance=cs;}
-            riderForces[seat][0].push_back(f.vertical);riderForces[seat][1].push_back(f.lateral);riderForces[seat][2].push_back(f.longitudinal);
+            exposures[seat].push_back(f.vertical);horizontalForces[seat][0].push_back(f.lateral);horizontalForces[seat][1].push_back(f.longitudinal);
         }
         if(trace){out.frames.push_back(frame);nextTrace+=traceDt;}
         s=sn;v=vn;t+=dt;++step;
@@ -126,33 +124,11 @@ static SimulationResult simulateInterval(const Track& track,const std::vector<Op
         stalled=v<.02?stalled+dt:0;
         if(stalled>3&&t>3){out.report.fail("STALL","Train stopped before returning to its station",s);break;}
     }
-    if(!out.frames.empty()&&t>out.frames.back().time){Frame terminal;terminal.time=t;terminal.distance=s;terminal.speed=v;double a=acceleration(s,v,t,&terminal.drives);for(int seat=0;seat<3;++seat)terminal.seats[seat]=measureSeatForces(track,s+seatDistanceOffset(train,seat),v,a,train.seatHeight);out.frames.push_back(terminal);}
-    out.metrics.duration=t;
-    for(int seat=0;seat<3;++seat){auto& stats=out.metrics.seats[seat];const auto& vertical=riderForces[seat][0];
-        for(int axis=0;axis<3;++axis)stats.axes[axis]=summarizeAxis(riderForces[seat][axis],dt);
-        stats.axes[0].maxRateGps=verticalRatePeaks[seat];stats.exposure10Seconds=forceExposure(vertical,dt);
-        out.metrics.exposure10Seconds=std::max(out.metrics.exposure10Seconds,stats.exposure10Seconds);
-        std::array<double,4> current{};for(double f:vertical){bool exposureActive[]={f<0,f>2,f>3,f>4};double* total[]={&stats.airtimeBelowZeroSeconds,&stats.positiveAbove2Seconds,&stats.positiveAbove3Seconds,&stats.positiveAbove4Seconds};double* longest[]={&stats.longestAirtimeSeconds,&stats.longestAbove2Seconds,&stats.longestAbove3Seconds,&stats.longestAbove4Seconds};for(int i=0;i<4;++i){if(exposureActive[i]){*total[i]+=dt;current[i]+=dt;*longest[i]=std::max(*longest[i],current[i]);}else current[i]=0;}}
-        auto& envelope=out.forceEnvelope[seat];envelope=assessForceEnvelope(riderForces[seat],dt,cancel);
-        if(envelope.cancelled){out.cancelled=true;out.report.fail("CANCELLED","Force assessment cancelled",s);return out;}
-        const char* seats[]={"Front: ","Middle: ","Rear: "};
-        for(auto& error:envelope.report.errors){
-            // Assessment uses every solver sample. The presentation trace is
-            // used only to locate its elapsed-time diagnostic on the track.
-            auto at=std::lower_bound(out.frames.begin(),out.frames.end(),error.distance,[](const Frame& f,double time){return f.time<time;});
-            double distance=at==out.frames.end()?s:at->distance;
-            if(at!=out.frames.begin()&&at!=out.frames.end()){const auto& before=*(at-1);distance=before.distance+(at->distance-before.distance)*(error.distance-before.time)/(at->time-before.time);}
-            error.distance=distance+seatDistanceOffset(train,seat);error.message=seats[seat]+error.message;
-        }
-    }
+    if(!out.frames.empty()&&t>out.frames.back().time){Frame terminal;terminal.time=t;terminal.distance=s;terminal.speed=v;double a=acceleration(s,v,t);for(int seat=0;seat<3;++seat)terminal.seats[seat]=measureSeatForces(track,s+seatDistanceOffset(train,seat),v,a,train.seatHeight);out.frames.push_back(terminal);}
+    out.metrics.duration=t;for(const auto& e:exposures)out.metrics.exposure10Seconds=std::max(out.metrics.exposure10Seconds,forceExposure(e,dt));
+    for(int seat=0;seat<3;++seat){auto& stats=out.metrics.seats[seat];const auto& vertical=exposures[seat];stats.axes[0]=summarizeAxis(vertical,dt);stats.axes[0].maxRateGps=verticalRatePeaks[seat];stats.axes[1]=summarizeAxis(horizontalForces[seat][0],dt);stats.axes[2]=summarizeAxis(horizontalForces[seat][1],dt);stats.exposure10Seconds=forceExposure(vertical,dt);
+        std::array<double,4> current{};for(double f:vertical){bool exposureActive[]={f<0,f>2,f>3,f>4};double* total[]={&stats.airtimeBelowZeroSeconds,&stats.positiveAbove2Seconds,&stats.positiveAbove3Seconds,&stats.positiveAbove4Seconds};double* longest[]={&stats.longestAirtimeSeconds,&stats.longestAbove2Seconds,&stats.longestAbove3Seconds,&stats.longestAbove4Seconds};for(int i=0;i<4;++i){if(exposureActive[i]){*total[i]+=dt;current[i]+=dt;*longest[i]=std::max(*longest[i],current[i]);}else current[i]=0;}}}
     if(!out.completed&&out.report.valid())out.report.fail("TIMEOUT","Ride did not finish within 600 seconds",s);
     return out;
-}
-SimulationResult simulate(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel){
-    const double half=(train.cars-1)*train.spacing*.5,start=half+(track.closed?30:1);
-    return simulateInterval(track,ops,train,dt,cancel,start,track.closed?track.length+start:track.length-half-1,0);
-}
-SimulationResult detail::simulateSource(const Track& track,const TrainConfig& train,double speed,double dt,Cancel cancel){
-    return simulateInterval(track,{},train,dt,cancel,0,track.length,speed);
 }
 }

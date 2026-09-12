@@ -20,9 +20,6 @@
 #include "Misc/SecureHash.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "UnrealClient.h"
-#if WITH_EDITOR
-#include "ShaderCompiler.h"
-#endif
 #include <iomanip>
 #include <locale>
 #include <sstream>
@@ -73,9 +70,6 @@ struct FCoasterRuntimeVerification::FState
     TArray<double> ShotTimes;
     TSharedFuture<FString> CsvFinished;
     bool CsvStarted = false, PoseChecked = false, SaveCancelChecked = false;
-#if WITH_EDITOR
-    bool WaitingForShaders = false;
-#endif
 
     bool Write(const FString& Name, const FString& Text, bool Append = false)
     {
@@ -196,23 +190,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         S.PreviousTick = Now;
     }
     if (!S.PollCapture(PC)) return;
-#if WITH_EDITOR
-    // Editor -game can display the default checkerboard while materials compile.
-    // Wait only before playback, so the actual traversal stays uninterrupted.
-    if (S.Stage == FState::DefaultView || S.Stage == FState::OverviewView || S.Stage == FState::Warmup)
-    {
-        if (GShaderCompilingManager && GShaderCompilingManager->IsCompiling())
-        {
-            if (!S.WaitingForShaders) S.Event(TEXT("shader-readiness-wait"));
-            S.WaitingForShaders = true; return;
-        }
-        if (S.WaitingForShaders)
-        {
-            S.WaitingForShaders = false; S.StageStarted = Now;
-            S.Event(TEXT("shader-readiness-completed")); return;
-        }
-    }
-#endif
     switch (S.Stage)
     {
     case FState::DefaultView:
@@ -245,8 +222,8 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Event(TEXT("accepted-commit"), TEXT(",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"seed\":") + Q(FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(D.request.seed))) + TEXT(",\"terrain\":") + Q(FString(UTF8_TO_TCHAR(D.request.terrain.name().c_str()))) + TEXT(",\"duration_s\":") + N(S.Duration) + TEXT(",\"track_length_m\":") + N(D.track.length) + TEXT(",\"convergence_performed\":true,\"convergence_passed\":true"));
             double ApexTime = 0, ApexHeight = -1e30, HighestTime = 0, HighestGround = -1e30;
             double CliffTime = 0, CliffGrade = 0, LowPassTime = 0, LowPassHeight = 1e30;
-            TArray<double> InversionPassages, UprightReturns;
-            bool WasInverted = false, AwaitUprightReturn = false;
+            TArray<double> InversionPassages;
+            bool WasInverted = false;
             for (const auto& F : D.simulation.frames)
             {
                 const auto K = D.track.sample(F.distance + coaster::seatDistanceOffset(D.request.train, S.Seat));
@@ -257,8 +234,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                 if (K.element == coaster::Element::Inversion && K.up.z < -.5 && H > ApexHeight) { ApexHeight = H; ApexTime = F.time; }
                 const bool Inverted = K.up.z < -.5;
                 if (Inverted && !WasInverted) InversionPassages.Add(F.time);
-                if (Inverted) AwaitUprightReturn = true;
-                if (AwaitUprightReturn && K.up.z > .5) { UprightReturns.Add(F.time); AwaitUprightReturn = false; }
                 WasInverted = Inverted;
                 const double Ahead = D.request.terrain.height(K.position.x + K.tangent.x * 5, K.position.y + K.tangent.y * 5);
                 const double Behind = D.request.terrain.height(K.position.x - K.tangent.x * 5, K.position.y - K.tangent.y * 5);
@@ -271,8 +246,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             // Inspect each actual inverted passage, plus the descending terrain
             // edge. These are sampled frames during full playback, not video.
             for (double Time : InversionPassages) { S.ShotTimes.Add(FMath::Max(0., Time - 1)); S.ShotTimes.Add(Time + .5); }
-            // Entry/apex views alone miss the rolling descent and its pullout.
-            for (double Time : UprightReturns) { S.ShotTimes.Add(Time); S.ShotTimes.Add(FMath::Min(S.Duration, Time + 1)); }
             if (D.request.terrain.kind == coaster::TerrainKind::Canyon)
             {
                 S.ShotTimes.Add(FMath::Max(0., CliffTime - 2)); S.ShotTimes.Add(CliffTime); S.ShotTimes.Add(FMath::Min(S.Duration, CliffTime + 2));
@@ -285,41 +258,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             }
             S.ShotTimes.Sort();
             for (int32 I = S.ShotTimes.Num() - 1; I > 0; --I) if (S.ShotTimes[I] - S.ShotTimes[I - 1] < .25) S.ShotTimes.RemoveAt(I);
-            // Retain a view inside every persisted operation, using the selected
-            // rider's actual trace passage and the simulator's lap activation.
-            // Prefer its spatial midpoint; move inward if a one-second margin
-            // at both observed passage ends is feasible. This never alters playback.
-            for (size_t I = 0; I < D.operations.size(); ++I)
-            {
-                const auto& O = D.operations[I];
-                const double Length = O.end >= O.start ? O.end - O.start : D.track.length - O.start + O.end;
-                double Enter = -1, Exit = -1, Midpoint = -1, Nearest = 1e30;
-                for (const auto& F : D.simulation.frames)
-                {
-                    if ((O.kind == coaster::DriveKind::Launch && F.distance > D.track.length * .5) ||
-                        (O.kind == coaster::DriveKind::Station && F.distance < D.track.length * .5)) continue;
-                    double At = std::fmod(F.distance + coaster::seatDistanceOffset(D.request.train, S.Seat), D.track.length);
-                    if (At < 0) At += D.track.length;
-                    if (!(O.start <= O.end ? At >= O.start && At < O.end : At >= O.start || At < O.end)) continue;
-                    if (Enter < 0) Enter = F.time;
-                    Exit = F.time;
-                    double Along = At - O.start; if (Along < 0) Along += D.track.length;
-                    const double Difference = std::abs(Along - Length * .5);
-                    if (Difference < Nearest) { Nearest = Difference; Midpoint = F.time; }
-                }
-                const TCHAR* Kind = O.kind == coaster::DriveKind::Launch ? TEXT("Launch") : O.kind == coaster::DriveKind::Boost ? TEXT("Boost") : O.kind == coaster::DriveKind::Brake ? TEXT("Brake") : TEXT("Station");
-                const double Time = Exit - Enter >= 2 ? FMath::Clamp(Midpoint, Enter + 1, Exit - 1) : Midpoint;
-                S.Event(TEXT("operation-landmark"), TEXT(",\"operation_index\":") + FString::FromInt(int32(I)) +
-                    TEXT(",\"kind\":") + Q(Kind) + TEXT(",\"start_m\":") + N(O.start) + TEXT(",\"end_m\":") + N(O.end) +
-                    TEXT(",\"target_speed_ms\":") + N(O.targetSpeed) + TEXT(",\"observed\":") + (Enter >= 0 ? TEXT("true") : TEXT("false")) +
-                    TEXT(",\"entry_time_s\":") + N(Enter) + TEXT(",\"exit_time_s\":") + N(Exit) + TEXT(",\"spatial_midpoint_time_s\":") + N(Midpoint) +
-                    TEXT(",\"scheduled_time_s\":") + N(Time) + TEXT(",\"one_second_margin_feasible\":") + (Exit - Enter >= 2 ? TEXT("true") : TEXT("false")));
-                if (Enter >= 0) S.ShotTimes.Add(Time);
-            }
-            S.ShotTimes.Sort();
-            // Exact duplicates share a screenshot (e.g. paired controllers), but
-            // nearby operation views must not be discarded by landmark thinning.
-            for (int32 I = S.ShotTimes.Num() - 1; I > 0; --I) if (S.ShotTimes[I] == S.ShotTimes[I - 1]) S.ShotTimes.RemoveAt(I);
             PC.Menu = false; PC.ShowComparison = false; PC.ShowTelemetry = true; PC.Ride->SetSeat(S.Seat);
             if (!PC.Ride->IsPaused()) PC.Ride->TogglePause(); PC.Ride->Restart();
             if (!PC.Ride->IsOverview()) PC.Ride->ToggleOverview();

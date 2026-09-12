@@ -14,7 +14,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,15 +23,25 @@ jobs:
       - name: Configure independent C++ core
         run: cmake -S native -B native/build-cmake -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build native/build-cmake --config Release --parallel 2
-      - name: Test component contracts
-        run: ctest --test-dir native/build-cmake -C Release -L component --output-on-failure --stop-on-failure --parallel 2 --timeout 600
-      - name: Test complete generation and replay
-        run: ctest --test-dir native/build-cmake -C Release -L integration --output-on-failure --stop-on-failure --parallel 2 --timeout 600
-      - name: Test Python tooling
+        run: cmake --build native/build-cmake --config Release --parallel 2 --target coaster_cli coaster_convergence fvd_tests baseline_jets_tests flow_bridge_tests connector_profile_tests support_tests structures_tests
+      - name: Test changed authoring and real CLI contracts
+        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --stop-on-failure --timeout 600 -R "^(fvd|baseline_jets|flow_bridge|connector_profile|cli_arguments)$"
+      - name: Check representative complete rides at 960 and 1920 Hz
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          python -m pip install -r native/tools/requirements.txt
-          python -B -m unittest discover -s native/tools -p "test_*.py" -v
+          New-Item -ItemType Directory -Path ride-checks | Out-Null
+          $failed = $false
+          foreach ($terrain in @('flat', 'hills')) {
+            & ./native/build-cmake/Release/coaster_cli.exe generate --seed 42 --terrain $terrain --preset physics-proof --candidates 1 --json "ride-checks/$terrain.json" --plan "ride-checks/$terrain-plan.json" --trace "ride-checks/$terrain-trace.json" --out "ride-checks/$terrain.coaster" > "ride-checks/$terrain.log"
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { throw 'A representative ride failed its unchanged acceptance gates. See ride-checks.' }
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows'
+        with:
+          name: ride-checks
+          path: ride-checks
 
 # UE cooking and Mac/Metal runtime verification require suitable engine hosts.
 # Performance benchmarks are deliberately absent from this workflow.

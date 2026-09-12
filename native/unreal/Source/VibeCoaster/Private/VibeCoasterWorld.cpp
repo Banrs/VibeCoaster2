@@ -93,7 +93,7 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     PlatformEnds = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("PlatformEnds"));
     RoofPanels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("RoofPanels"));
     StationPosts = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationPosts"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrainCar(TEXT("/Game/Art/V072/Conventional2/SM_TrainCar.SM_TrainCar"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrainCar(TEXT("/Game/Art/V072/Import1/SM_TrainCar.SM_TrainCar"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> TrackTie(TEXT("/Game/Art/V072/TrackWeb1/SM_TrackTieWeb.SM_TrackTieWeb"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Platform(TEXT("/Game/Art/V072/Import1/SM_StationPlatformPanel.SM_StationPlatformPanel"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformEnd(TEXT("/Game/Art/V072/Import1/SM_StationPlatformEndPanel.SM_StationPlatformEndPanel"));
@@ -320,12 +320,7 @@ void AVibeCoasterWorld::CommitChunks()
         // Populate the hidden component before registration so its first scene
         // proxy already has the final section and material.
         Mesh->CreateMeshSection(0, Chunk.Vertices, Chunk.Indices, Chunk.Normals, Chunk.UV, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
-        UMaterialInterface* Material = Chunk.Terrain ? GroundMaterial : Chunk.Footing ? FootingMaterial : Chunk.Structure ? StructureMaterial : RailMaterial;
-        // Shared with the imported conventional train; hardware faces are exposed
-        // metal, while the running rails retain their painted finish.
-        if (Chunk.Hardware != VibeMesh::EDriveHardwareKind::None && !Chunk.Structure)
-            Material = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Art/V072/Conventional2/Materials/M_VCTrain4_Metal_BrushedAluminium.M_VCTrain4_Metal_BrushedAluminium"));
-        Mesh->SetMaterial(0, Material);
+        Mesh->SetMaterial(0, Chunk.Terrain ? GroundMaterial : Chunk.Footing ? FootingMaterial : Chunk.Structure ? StructureMaterial : RailMaterial);
         Mesh->RegisterComponent();
         Staging->Chunks.Add(Mesh);
         Chunk = VibeMesh::FChunk{}; // Release CPU vertex copies once committed.
@@ -364,7 +359,8 @@ void AVibeCoasterWorld::CommitChunks()
     Runtime->Message = Runtime->Design->request.targets.requireIntensity
         ? TEXT("Accepted against configured record targets and reference. Space to ride.")
         : TEXT("PHYSICS-PROOF accepted. Intensity comparison disabled by your preset. Space to ride.");
-    Runtime->Message += FString::Printf(TEXT("\nFull ride: %.0f s, including the final stop"), Runtime->Design->simulation.metrics.duration);
+    Runtime->Message += FString::Printf(TEXT("\n%.0f s to final braking | %.0f s to a complete stop"),
+        coaster::movingRideSeconds(*Runtime->Design), Runtime->Design->simulation.metrics.duration);
     Runtime->Prepared.Reset(); Runtime->Overview = false; Restart(); Runtime->Paused = true;
 }
 void AVibeCoasterWorld::Tick(float DeltaSeconds)
@@ -456,19 +452,13 @@ TArray<FString> AVibeCoasterWorld::Comparison() const
 FString AVibeCoasterWorld::Telemetry() const
 {
     if (!Runtime->Design || Runtime->Design->simulation.frames.empty()) return TEXT("No accepted trace.");
-    const auto& Frame = Runtime->Design->simulation.frames[Runtime->TraceIndex];
-    const auto& F = Frame.seats[Runtime->Seat];
-    const auto& Drives = Frame.drives;
-    const TCHAR* MotorState = Drives.propulsion > 1 ? TEXT("propelling") : Drives.motorPresent ? TEXT("inactive") : TEXT("no contact");
-    const TCHAR* BrakeState = Drives.braking < -1 ? TEXT("braking") : Drives.brakePresent ? TEXT("released") : TEXT("no contact");
+    const auto& F = Runtime->Design->simulation.frames[Runtime->TraceIndex].seats[Runtime->Seat];
     const auto& Metrics = Runtime->Design->simulation.metrics;
     const auto& D = *Runtime->Design;
     const auto Point = D.track.sample(Runtime->Distance + coaster::seatDistanceOffset(D.request.train, Runtime->Seat));
     const double LocalHeight = Point.position.z - D.request.terrain.height(Point.position.x, Point.position.y);
-    return FString::Printf(TEXT("%.1f km/h  |  %.1f s  |  %.0f m along track  |  %.1f m above ground\nVertical %.2f g  |  Lateral %.2f g  |  Longitudinal %.2f g\nLSM %s: +%.1f kN / +%.2f MW  |  Controlled brakes %s: %.1f kN / %.2f MW\nMechanical drive output only; gravity is separate\nPeak track height above ground %.1f m  |  Above station %.1f m\nEnhanced-restraint force profile; model verification pending"),
-        Runtime->Speed * 3.6, Runtime->RideTime, Runtime->Distance, LocalHeight, F.vertical, F.lateral, F.longitudinal,
-        MotorState, Drives.propulsion / 1000, Drives.propulsion * Frame.speed / 1e6,
-        BrakeState, Drives.braking / 1000, Drives.braking * Frame.speed / 1e6, Metrics.maxGroundHeight, Metrics.heightAboveStation);
+    return FString::Printf(TEXT("%.1f km/h  |  %.1f s  |  %.0f m along track  |  %.1f m above ground\nVertical %.2f g  |  Lateral %.2f g  |  Longitudinal %.2f g\nPeak track height above ground %.1f m  |  Above station %.1f m\nCore simulation trace; provisional game envelope"),
+        Runtime->Speed * 3.6, Runtime->RideTime, Runtime->Distance, LocalHeight, F.vertical, F.lateral, F.longitudinal, Metrics.maxGroundHeight, Metrics.heightAboveStation);
 }
 bool AVibeCoasterWorld::IsBusy() const { return Runtime->Running || Runtime->Queued.IsSet() || Runtime->Prepared.IsValid(); }
 bool AVibeCoasterWorld::HasRide() const { return bool(Runtime->Design); }
