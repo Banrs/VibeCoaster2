@@ -137,7 +137,8 @@ static void migration(const Design& current){
     for(const auto& fields:std::vector<std::pair<double,double>>{{0,.2},{-1,.2},{21,.2},{NAN,.2},{INFINITY,.2},{2.4,-1},{2.4,6},{2.4,NAN},{2.4,INFINITY}}){
         auto invalid=current;invalid.operations[0].stopDeceleration=fields.first;invalid.operations[0].stopOffset=fields.second;
         check(code(simulate(invalid.track,invalid.operations,invalid.request.train).report,"DRIVE_CONFIG"),"Invalid direct-API profile rejected before integration");
-        check(!saveDesign(invalid,newPath.string(),error),"Invalid profile cannot overwrite accepted save");check(readBytes(newPath)==currentBytes,"Rejected profile save preserves previous file");
+        int probes=0;check(!saveDesign(invalid,newPath.string(),error,[&]{++probes;return false;}),"Invalid profile cannot overwrite accepted save");
+        check(probes==0,"Invalid motor parameters reject before geometry or simulation work");check(readBytes(newPath)==currentBytes,"Rejected profile save preserves previous file");
     }
     for(const auto& fade:std::vector<std::string>{"0","0.001","1000.1","nan","inf","1e309","-1"}){
         const auto& op=current.operations.front();writeBadProfile(badPath,currentBytes,current.track.knots.size(),std::to_string(op.stopDeceleration),std::to_string(op.stopOffset),fade);
@@ -146,7 +147,8 @@ static void migration(const Design& current){
     for(double fade:std::array<double,6>{0.,.001,1000.1,NAN,INFINITY,-1.}){
         auto invalid=current;invalid.operations.front().exitFadeMeters=fade;
         check(code(simulate(invalid.track,invalid.operations,invalid.request.train).report,"DRIVE_CONFIG"),"Invalid direct-API fade rejected before integration");
-        check(!saveDesign(invalid,newPath.string(),error),"Invalid fade cannot overwrite accepted save");check(readBytes(newPath)==currentBytes,"Rejected fade save preserves prior bytes");
+        int probes=0;check(!saveDesign(invalid,newPath.string(),error,[&]{++probes;return false;}),"Invalid fade cannot overwrite accepted save");
+        check(probes==0,"Invalid fade rejects before geometry or simulation work");check(readBytes(newPath)==currentBytes,"Rejected fade save preserves prior bytes");
     }
     const auto priorFixture=std::filesystem::path(__FILE__).parent_path()/"fixtures/geometry-v1-work.coaster";const auto priorBytes=readBytes(priorFixture);auto priorOutput=current;
     check(!loadDesign(priorFixture.string(),priorOutput,error)&&error.find("Unsupported generator version")!=std::string::npos,"Previous work1 operation semantics are explicitly unsupported");
@@ -220,4 +222,14 @@ static void stationPlacementRepair(){
     check(!loadDesign(fixture.string(),prior,error),"Prior foundation geometry is not silently reinterpreted");check(reportJson(prior)==reportJson(d),"Unsupported schema preserves current design");check(readBytes(fixture)==original,"Prior foundation archive remains byte-identical");
 }
 
-int main(){try{analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}
+int main(int argc,char** argv){try{
+    if(argc==2&&std::string(argv[1])=="--persistence"){
+        GenerationRequest request;request.targets.requireIntensity=false;
+        auto d=generate(request);check(d.accepted(),"Persistence fixture accepted");
+        persistence(d);migration(d);
+        std::cout<<"PASS "<<checks<<" canonical persistence and invalid-input checks\n";
+        return 0;
+    }
+    check(argc==1,"Unknown test selection");
+    analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;
+}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}

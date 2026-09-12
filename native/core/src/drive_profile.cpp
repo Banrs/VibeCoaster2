@@ -1,10 +1,12 @@
 #include "coaster/coaster.hpp"
+#include "simulation_internal.hpp"
 namespace coaster {
-namespace {
-bool mergeable(const Operation& op){
+bool validDriveParameters(const Operation& op){
     for(double x:{op.start,op.end,op.targetSpeed,op.maxForce,op.maxPower,op.rampSeconds,op.stopDeceleration,op.stopOffset,op.exitFadeMeters})if(!std::isfinite(x))return false;
-    return op.start>=0&&op.end>op.start&&int(op.kind)>=0&&int(op.kind)<=3&&op.targetSpeed>=0&&op.maxForce>=0&&op.maxPower>=0&&op.rampSeconds>=0&&op.stopDeceleration>0&&op.stopDeceleration<=20&&op.stopOffset>=0&&op.stopOffset<=5&&op.exitFadeMeters>=.01&&op.exitFadeMeters<=1000;
+    return op.start>=0&&op.end>=0&&int(op.kind)>=0&&int(op.kind)<=3&&op.targetSpeed>=0&&op.maxForce>=0&&op.maxPower>=0&&op.rampSeconds>=0&&op.stopDeceleration>0&&op.stopDeceleration<=20&&op.stopOffset>=0&&op.stopOffset<=5&&op.exitFadeMeters>=.01&&op.exitFadeMeters<=1000;
 }
+namespace {
+bool mergeable(const Operation& op){return validDriveParameters(op)&&op.end>op.start;}
 bool sameProfile(const Operation& a,const Operation& b){
     return a.kind==b.kind&&a.targetSpeed==b.targetSpeed&&a.maxForce==b.maxForce&&a.maxPower==b.maxPower&&a.rampSeconds==b.rampSeconds&&a.stopDeceleration==b.stopDeceleration&&a.stopOffset==b.stopOffset&&a.exitFadeMeters==b.exitFadeMeters;
 }

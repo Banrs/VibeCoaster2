@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "simulation_internal.hpp"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -72,7 +73,20 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
     if(!seen.count("TERRAIN_PROFILE")){error="Missing required terrain profile";return false;}
     p>>std::ws;if(!p.eof()){error="Unexpected data after extensions";return false;}out=std::move(result);return true;
 }
-bool recheck(Design& d,Cancel cancel){if(!supportedVersion(d.generationVersion)){d.report.fail("GENERATOR_VERSION","Unsupported generation provenance");return false;}d.report=validateRequest(d.request);if(!d.report.valid())return false;d.track.rebuild();d.inversionDimensions=measureInversionDimensions(d.track,cancel);d.report=validateGeometry(d.track,d.request.terrain,d.request.limits,d.request.train,d.supports,cancel);auto structures=validateDesignStructures(d,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());d.convergence={};d.simulation=simulate(d.track,d.operations,d.request.train,d.request.simulationStep,cancel);evaluateTargets(d);verifyConvergence(d,cancel);return d.accepted();}
+bool recheck(Design& d,Cancel cancel){
+    if(!supportedVersion(d.generationVersion)){d.report.fail("GENERATOR_VERSION","Unsupported generation provenance");return false;}
+    d.report=validateRequest(d.request);if(!d.report.valid())return false;
+    for(const auto& op:d.operations)if(!validDriveParameters(op)){d.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return false;}
+    d.track.rebuild();d.inversionDimensions=measureInversionDimensions(d.track,cancel);
+    d.report=validateGeometry(d.track,d.request.terrain,d.request.limits,d.request.train,d.supports,cancel);
+    auto structures=validateDesignStructures(d,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());
+    if(!d.report.valid()){
+        if(std::any_of(d.report.errors.begin(),d.report.errors.end(),[](const Finding& f){return f.code=="CANCELLED";}))d.simulation.cancelled=true;
+        return false;
+    }
+    d.convergence={};d.simulation=simulate(d.track,d.operations,d.request.train,d.request.simulationStep,cancel);
+    evaluateTargets(d);verifyConvergence(d,cancel);return d.accepted();
+}
 }
 std::string reportJson(const Design& d){
     std::ostringstream o;o.imbue(std::locale::classic());o<<std::setprecision(17);

@@ -17,6 +17,7 @@ target_link_libraries(coaster_core PUBLIC Threads::Threads)
 add_executable(coaster_tests core/tests/tests.cpp)
 target_link_libraries(coaster_tests PRIVATE coaster_core)
 add_test(NAME core COMMAND coaster_tests)
+add_test(NAME core_persistence COMMAND coaster_tests --persistence)
 
 foreach(suite persistence_cancel baseline_jets flow_bridge connector_profile reference support support_family organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile)
   add_executable(${suite}_tests core/tests/${suite}_tests.cpp)
