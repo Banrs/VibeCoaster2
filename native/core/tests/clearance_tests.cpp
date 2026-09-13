@@ -38,6 +38,8 @@ static void coverage(const Track& t,const ClearanceSweep& sweep,size_t stride=1)
     check(!first&&previousSpan+1==t.spans.size()&&end==1,"Coverage finishes at final canonical endpoint");
 }
 int main(){try{
+    for(const auto& web:trackWebsLocal())for(const auto corner:trackWebCorners(web))
+        check(std::abs(corner.x)<=1.275&&std::abs(corner.y)<=1.5&&corner.z>=-spineDepth-spineRadius&&corner.z<=2.4,"Hardware rejection box encloses every canonical web corner before padding");
     std::vector<AuthoredPoint> points;for(int i=0;i<=100;++i){double a=.119*(i-50);points.push_back({{double(i),0,50},a,Element::Return,rotate({0,0,1},{1,0,0},a)});}Track t=compile(points,false);TrainConfig train;
     auto sweep=buildClearanceSweep(t,train);check(sweep.frames().size()>=2500,"Canonical cell coverage prepared");
     Support member;member.members={{{49.99,-1.49,52.39},{50.01,-1.49,52.39},.01,.01,SupportMemberKind::Steel,false}};

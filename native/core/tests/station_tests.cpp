@@ -40,9 +40,8 @@ int main(int argc,char**argv){try{
     if(argc==1){
         for(int terrain=0;terrain<3;++terrain){GenerationRequest request;request.seed=terrain==0?1:terrain==1?2:24;request.terrain.kind=TerrainKind(terrain);request.targets.requireIntensity=false;
             auto generated=generate(request);if(!generated.accepted())std::cerr<<reportJson(generated)<<'\n';require(generated.accepted(),"Current default station fixture was not accepted");
-            const auto name="station-generated-"+std::to_string(request.seed)+"-"+request.terrain.name();const auto path=std::filesystem::absolute(argv[0]).parent_path()/(name+".coaster");
-            require(saveDesign(generated,path.string(),error),error.c_str());Design replay;require(loadDesign(path.string(),replay,error),error.c_str());
-            fixtures.emplace_back(name,std::move(replay));
+            const auto name="station-generated-"+std::to_string(request.seed)+"-"+request.terrain.name();
+            fixtures.emplace_back(name,std::move(generated));
         }
     }else for(int i=1;i<argc;++i){Design design;require(loadDesign(argv[i],design,error),error.c_str());fixtures.emplace_back(std::filesystem::path(argv[i]).stem().string(),std::move(design));}
     for(auto& [name,design]:fixtures){

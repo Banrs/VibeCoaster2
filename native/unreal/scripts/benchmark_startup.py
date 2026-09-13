@@ -1,4 +1,4 @@
-"""Compare real executable launch through accepted, moving playback."""
+"""Compare Development executables from launch through accepted, moving playback."""
 import argparse
 import hashlib
 import json

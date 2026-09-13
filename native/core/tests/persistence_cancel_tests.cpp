@@ -32,18 +32,19 @@ int main(int argc,char** argv){try{
  const fs::path folder=argc>2?fs::path(argv[2]):fs::temp_directory_path()/"coaster-persistence-cancel-tests";
  fs::create_directories(folder);const auto dest=folder/"existing.coaster",tmp=folder/"existing.coaster.tmp",other=folder/"unrelated.tmp";
  const std::string sentinel="PREVIOUS SAVE MUST SURVIVE\n",unrelated="UNRELATED TEMP MUST SURVIVE\n";
+ // Learn the final checkpoints from a successful control. Inspect the actual
+ // temporary at the final callback, without scanning disk during every physics step.
+ int totalCalls=0;check(saveDesign(d,dest.string(),error,[&]{++totalCalls;return false;}),"Uncancelled save commits");
+ const auto committed=read(dest);check(committed.rfind("COASTER 5 ",0)==0,"Committed save retains COASTER5 format");check(totalCalls>=2,"Both final checkpoints were polled");
  // This targets the real late boundary without sleeps or thread scheduling.
- write(dest,sentinel);write(other,unrelated);fs::remove(tmp);bool sawTemp=false;
- const bool cancelled=saveDesign(d,dest.string(),error,[&]{const auto files=temporaries(dest);if(!files.empty()){sawTemp=true;check(files.size()==1&&fs::file_size(files.front())>0,"Late cancellation observes a written temp file");return true;}return false;});
+ write(dest,sentinel);write(other,unrelated);fs::remove(tmp);bool sawTemp=false;int lateCalls=0;
+ const bool cancelled=saveDesign(d,dest.string(),error,[&]{if(++lateCalls!=totalCalls)return false;const auto files=temporaries(dest);sawTemp=!files.empty();check(files.size()==1&&fs::file_size(files.front())>0,"Late cancellation observes a written temp file");return true;});
  check(sawTemp,"Cancellation is polled after temporary output exists");
  check(!cancelled&&error=="CANCELLED","Late save cancellation is reported");
  check(read(dest)==sentinel,"Late cancellation preserves existing destination bytes");
  check(temporaries(dest).empty(),"Late cancellation removes its own temporary output");
  check(read(other)==unrelated,"Late cancellation preserves unrelated temporary file");
- // Determine the two final checkpoints from a successful control call. The
- // penultimate callback is after serialization and before temp-file creation.
- int totalCalls=0;check(saveDesign(d,dest.string(),error,[&]{++totalCalls;return false;}),"Uncancelled save commits");
- const auto committed=read(dest);check(committed.rfind("COASTER 5 ",0)==0,"Committed save retains COASTER5 format");check(totalCalls>=2,"Both final checkpoints were polled");
+ // The penultimate callback is after serialization and before temp-file creation.
  write(dest,sentinel);write(tmp,unrelated);int calls=0;
  check(!saveDesign(d,dest.string(),error,[&]{return ++calls==totalCalls-1;}),"Pre-write cancellation refuses save");
  check(error=="CANCELLED"&&calls==totalCalls-1,"Pre-write callback targets the serialization boundary");

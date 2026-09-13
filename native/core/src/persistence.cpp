@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <set>
 #include <atomic>
+#include <future>
+#include <mutex>
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
@@ -74,6 +76,9 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
     p>>std::ws;if(!p.eof()){error="Unexpected data after extensions";return false;}out=std::move(result);return true;
 }
 bool recheck(Design& d,Cancel cancel){
+    std::mutex cancellationMutex;
+    const Cancel requestedCancel=std::move(cancel);
+    if(requestedCancel)cancel=[&]{std::lock_guard lock(cancellationMutex);return requestedCancel();};
     if(!supportedVersion(d.generationVersion)){d.report.fail("GENERATOR_VERSION","Unsupported generation provenance");return false;}
     d.report=validateRequest(d.request);if(!d.report.valid())return false;
     for(const auto& op:d.operations)if(!validDriveParameters(op)){d.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return false;}
@@ -84,8 +89,14 @@ bool recheck(Design& d,Cancel cancel){
         if(std::any_of(d.report.errors.begin(),d.report.errors.end(),[](const Finding& f){return f.code=="CANCELLED";}))d.simulation.cancelled=true;
         return false;
     }
+    // Both resolutions read the same rebuilt geometry; callback invocations stay
+    // serialized, and the worker joins before any design can escape this check.
+    std::atomic<bool> stopFine{false};
+    auto fine=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,d.request.train,d.request.simulationStep*.5,[&]{return stopFine.load()||(cancel&&cancel());});});
     d.convergence={};d.simulation=simulate(d.track,d.operations,d.request.train,d.request.simulationStep,cancel);
-    evaluateTargets(d);verifyConvergence(d,cancel);return d.accepted();
+    evaluateTargets(d);verifyConvergenceWith(d,[&]{return fine.get();},cancel);
+    if(fine.valid()){stopFine.store(true);fine.wait();}
+    return d.accepted();
 }
 }
 std::string reportJson(const Design& d){

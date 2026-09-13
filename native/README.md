@@ -1,6 +1,6 @@
 # Run
 
-Open [Play VibeCoaster.cmd](Play%20VibeCoaster.cmd) or [VibeCoaster.exe](game/VibeCoaster.exe). Keep the game folder together.
+Open [Play VibeCoaster.cmd](Play%20VibeCoaster.cmd) or [VibeCoaster.exe](game/VibeCoaster/Binaries/Win64/VibeCoaster.exe). Keep the game folder together.
 
 Choose PHYSICS-PROOF, terrain and seed. Enter generates; Space starts riding. Up/Down selects settings; Left/Right changes them. Tab toggles setup; 1/2/3 selects seats; M shows overview; R restarts; F5/F9 saves/loads; Alt+F4 exits.
 

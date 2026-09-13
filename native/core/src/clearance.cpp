@@ -141,6 +141,10 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
                 auto local=[&](Vec3 v){v=v-p.position;return Vec3{dot(v,p.tangent),dot(v,p.right),dot(v,p.up)};};
                 Vec3 al=local(a),bl=local(b);double margin=radius+sweep.padding();
                 if(intersectsBox(al,bl,{-1.275-margin,-1.5-margin,-margin},{1.275+margin,1.5+margin,sweep.top+margin}))return int(index);
+                // This box contains every hardware solid below and uses the
+                // larger train pad. A miss cannot reach any detailed web test.
+                if(!intersectsBox(al,bl,{-1.275-margin,-1.5-margin,-spineDepth-spineRadius-margin},
+                    {1.275+margin,1.5+margin,sweep.top+margin}))continue;
                 // Track hardware has corner radius <.9 m, so midpoint motion is
                 // at most .02+.04*.9=.056 m. Keep the larger train pad above.
                 margin=radius+.06;
