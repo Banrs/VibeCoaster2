@@ -1,6 +1,6 @@
 # Run
 
-Open [VibeCoaster.exe](game/VibeCoaster/Binaries/Win64/VibeCoaster.exe) directly. Keep the game folder together.
+Open `Play VibeCoaster.lnk` in the sibling `vibecoasterlegacy` folder. It directly launches `current-game/VibeCoaster/Binaries/Win64/VibeCoaster.exe`. Keep the complete game folder together.
 
 This build uses flat ground. Choose PHYSICS-PROOF and a seed. Enter generates; Space starts riding. Up/Down selects settings; Left/Right changes them. Tab toggles setup; 1/2/3 selects seats; M shows overview; R restarts; F5/F9 saves/loads; Alt+F4 exits.
 

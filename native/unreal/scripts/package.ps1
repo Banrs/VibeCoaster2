@@ -88,4 +88,4 @@ if ($LASTEXITCODE -ne 0) { throw "Unreal packaging failed ($LASTEXITCODE)." }
 $Executables = Get-ChildItem -LiteralPath $RunArchive -Filter 'VibeCoaster.exe' -File -Recurse
 if (-not $Executables) { throw 'BuildCookRun returned success but no packaged VibeCoaster.exe was found.' }
 $Executables | ForEach-Object { Write-Host "Packaged executable: $($_.FullName)" }
-Write-Host 'Packaging does not verify rendering. Complete README manual acceptance checks on the target GPU.'
+Write-Host 'Packaging does not verify rendering. Check the packaged game on the target GPU.'

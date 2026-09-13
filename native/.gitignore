@@ -1,13 +1,4 @@
-/game/
-/Play VibeCoaster.lnk
-/checkpoints/
 /build-cmake/
-/unreal/Binaries/
-/unreal/Intermediate/
-/unreal/Saved/
-/unreal/DerivedDataCache/
-/unreal/Packaged/
-/unreal/.vs/
 /test-output/
 /test-artifacts/
 /structure-test-output/

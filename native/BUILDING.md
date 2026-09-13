@@ -22,4 +22,4 @@ Windows game, with UE 5.8+ and its Visual Studio toolchain:
 & ./native/unreal/scripts/package.ps1 -UnrealRoot 'D:/Games/Epic Games/UE_5.8'
 ```
 
-The package is written under `native/unreal/Packaged`. The current playable installation is `native/game`.
+The package is written under `native/unreal/Packaged`; `-OutputDirectory <path>` overrides this. The current local playable installation is in the sibling `vibecoasterlegacy/current-game` folder.
