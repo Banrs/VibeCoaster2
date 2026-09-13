@@ -33,16 +33,14 @@ int main(int argc,char**argv){try{
         const Vec3 delta=skew.forward*((ix/16.-1)*skew.half.x)+skew.right*((iy/16.-1)*skew.half.y);
         require(std::hypot(delta.x,delta.y)<=skewRadius+1e-12,"Production local query disk encloses skew footprint corners and interior");
     }
-    if(argc==2&&std::string(argv[1])=="--terrain-footprints-only"){std::cout<<"PASS "<<checks<<" focused station terrain-footprint checks\n";return 0;}
     std::string error;StationGeometry disabled,parsed;require(parseStationPayload(stationPayload(disabled),parsed,error),"Empty legacy station failed");
     require(!parsed.enabled&&parsed.boxes.empty(),"Legacy station acquired geometry");
     std::vector<std::pair<std::string,Design>> fixtures;
     if(argc==1){
-        for(int terrain=0;terrain<3;++terrain){GenerationRequest request;request.seed=terrain==0?1:terrain==1?2:24;request.terrain.kind=TerrainKind(terrain);request.targets.requireIntensity=false;
+        {GenerationRequest request;request.seed=1;request.targets.requireIntensity=false;
             auto generated=generate(request);if(!generated.accepted())std::cerr<<reportJson(generated)<<'\n';require(generated.accepted(),"Current default station fixture was not accepted");
-            const auto name="station-generated-"+std::to_string(request.seed)+"-"+request.terrain.name();const auto path=std::filesystem::absolute(argv[0]).parent_path()/(name+".coaster");
-            require(saveDesign(generated,path.string(),error),error.c_str());Design replay;require(loadDesign(path.string(),replay,error),error.c_str());
-            fixtures.emplace_back(name,std::move(replay));
+            const auto name="station-generated-"+std::to_string(request.seed)+"-"+request.terrain.name();
+            fixtures.emplace_back(name,std::move(generated));
         }
     }else for(int i=1;i<argc;++i){Design design;require(loadDesign(argv[i],design,error),error.c_str());fixtures.emplace_back(std::filesystem::path(argv[i]).stem().string(),std::move(design));}
     for(auto& [name,design]:fixtures){
@@ -97,37 +95,7 @@ int main(int argc,char**argv){try{
         require(checkpoints==13,"Cancellation did not stop at its first requested checkpoint");
         auto parseBefore=stationPayload(restored);require(!parseStationPayload(payload,restored,error,[]{return true;}),"Parser cancellation ignored");require(stationPayload(restored)==parseBefore,"Cancelled parse replaced previous station");
         threw=false;try{buildStation(design.track,design.request.terrain,design.request.train,[]{return true;});}catch(...){threw=true;}require(threw,"Builder cancellation ignored");
-        if(design.request.terrain.kind==TerrainKind::Hills){
-            // Fixed analytic peak, independent of seeded terrain and generated
-            // footing margins. A 3x3 footprint grid misses this interior peak
-            // by >1.3 m, even though all nine probes enclose their local terrain.
-            const Vec3 knownPeak{696.1446760456421,583.5781706660686,0};
-            const auto anchor=*std::find_if(station.boxes.begin(),station.boxes.end(),[](const StationBox& b){return b.role==StationRole::Footing;});
-            Terrain peakTerrain{TerrainKind::Hills};peakTerrain.headingRadians=std::atan2(anchor.forward.y,anchor.forward.x);
-            const double fixtureX=knownPeak.x-200,fixtureY=knownPeak.y,c=std::cos(peakTerrain.headingRadians),sn=std::sin(peakTerrain.headingRadians);
-            peakTerrain.offsetX=anchor.center.x-(c*fixtureX-sn*fixtureY);peakTerrain.offsetY=anchor.center.y-(sn*fixtureX+c*fixtureY);
-            require(peakTerrain.valid(),"Interior-peak profile is outside the supported domain");
-            auto peakTrack=design.track;const auto departure=peakTrack.sample(0).position;
-            const double shift=peakTerrain.height(departure.x,departure.y)+20-departure.z;
-            for(auto& knot:peakTrack.knots)knot.position.z+=shift;peakTrack.rebuild();
-            auto peakStation=buildStation(peakTrack,peakTerrain,design.request.train);
-            auto large=*std::find_if(peakStation.boxes.begin(),peakStation.boxes.end(),[](const StationBox& b){return b.role==StationRole::Footing;});
-            large.half.x=400;large.half.y=50;double low=1e9,high=-1e9;
-            for(double x:{-large.half.x,0.,large.half.x})for(double y:{-large.half.y,0.,large.half.y}){auto p=large.center+large.forward*x+large.right*y;double h=peakTerrain.height(p.x,p.y);low=std::min(low,h);high=std::max(high,h);}
-            const double bottom=low-.4,top=high+.021;large.center.z=(bottom+top)*.5;large.half.z=(top-bottom)*.5;
-            for(double x:{-large.half.x,0.,large.half.x})for(double y:{-large.half.y,0.,large.half.y}){auto p=large.center+large.forward*x+large.right*y;double h=peakTerrain.height(p.x,p.y);require(bottom<=h+.02&&top>=h+.02,"Sparse footprint probes do not actually pass their old terrain test");}
-            const Vec3 peakWorld{peakTerrain.offsetX+c*knownPeak.x-sn*knownPeak.y,peakTerrain.offsetY+sn*knownPeak.x+c*knownPeak.y,0};
-            const Vec3 peakOffset=peakWorld-large.center;
-            require(std::abs(dot(peakOffset,large.forward))<large.half.x&&std::abs(dot(peakOffset,large.right))<large.half.y,"Known terrain peak is outside the footprint interior");
-            const double interiorGap=peakTerrain.height(peakWorld.x,peakWorld.y)+.02-top;
-            require(interiorGap>1.3,"Sparse-footprint regression no longer exposes the interior peak");
-            malformed=peakStation;malformed.boxes.push_back(large);
-            require(validateStationDefinition(malformed).valid(),"Anchoring counterexample is disconnected or malformed");
-            require(hasCode(validateStation(peakTrack,peakTerrain,design.request.train,malformed),"STATION_FOUNDATION"),"Nine-point anchoring false acceptance remains");
-            large.half.x=large.half.y=512;malformed=peakStation;malformed.boxes.push_back(large);
-            require(hasCode(validateStation(peakTrack,peakTerrain,design.request.train,malformed),"STATION_FOUNDATION_DOMAIN"),"Oversized footprint bypassed bounded work budget");
-            std::cout<<"Independent interior-peak fixture: nineProbeTop="<<top<<" interiorGap="<<interiorGap<<" m\n";
-        }
+
 
         std::ofstream out(std::filesystem::absolute(argv[0]).parent_path()/(name+"-station.txt"));out<<payload;
         std::cout<<"Station passes: "<<name<<" parts="<<station.boxes.size()<<"\n";

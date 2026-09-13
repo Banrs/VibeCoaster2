@@ -80,8 +80,8 @@ std::string referenceReportJson(const Targets& t){
 }
 AxisStatistics summarizeAxis(const std::vector<double>& v,double dt){
     AxisStatistics m;if(v.empty()||!std::isfinite(dt)||dt<=0)return m;
-    m.minG=*std::min_element(v.begin(),v.end());m.maxG=*std::max_element(v.begin(),v.end());std::vector<double> sum(1,0);
-    for(size_t i=0;i<v.size();++i){sum.push_back(sum.back()+v[i]*dt);if(i)m.maxRateGps=std::max(m.maxRateGps,std::abs(v[i]-v[i-1])/dt);}m.meanG=sum.back()/(v.size()*dt);
+    m.minG=*std::min_element(v.begin(),v.end());m.maxG=*std::max_element(v.begin(),v.end());std::vector<double> sum(v.size()+1);
+    for(size_t i=0;i<v.size();++i){sum[i+1]=sum[i]+v[i]*dt;if(i)m.maxRateGps=std::max(m.maxRateGps,std::abs(v[i]-v[i-1])/dt);}m.meanG=sum.back()/(v.size()*dt);
     auto integral=[&](double t){if(t<=0)return 0.;if(t>=v.size()*dt)return sum.back();size_t i=std::min(v.size()-1,size_t(t/dt));return sum[i]+v[i]*(t-i*dt);};
     auto window=[&](double w,double& low,double& high){double end=v.size()*dt-w;if(end<-1e-10)return;end=std::max(0.,end);low=INFINITY;high=-INFINITY;
         auto sample=[&](double start){if(start<0||start>end)return;double x=(integral(start+w)-integral(start))/w;low=std::min(low,x);high=std::max(high,x);};sample(0);sample(end);for(size_t i=0;i<=v.size();++i){sample(i*dt);sample(i*dt-w);}};

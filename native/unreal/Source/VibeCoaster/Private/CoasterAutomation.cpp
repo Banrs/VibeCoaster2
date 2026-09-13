@@ -1,5 +1,4 @@
 #include "CoasterMesh.h"
-#include "CoasterTerrainBackdrop.h"
 #include <map>
 #include <set>
 #include <array>
@@ -15,9 +14,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 namespace
 {
-// Independent pre-batching reference: each rail/spine independently samples
-// the accepted track. Deliberately do not use Tube(), its shared sample array,
-// or rendering coordinate helpers; test both attributes and tube/ring ordering.
+// Independent rail/spine reference samples the track without production
+// tube, shared-sample or coordinate helpers.
 bool RailChunkMatchesUnbatchedReference(const VibeMesh::FChunk& Chunk,
     const coaster::Track& Track, int32 RailChunkIndex)
 {
@@ -216,21 +214,21 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
     bool ValidIndices = true, ValidGround = true, ValidAttributes = true, ChunkBudget = true;
     bool RailAttributesMatch = true;
     const VibeMesh::FChunk* FirstRailChunk = nullptr;
-    int64 TotalVertices = 0; int32 TerrainChunks = 0, RailChunks = 0;
+    int64 TotalVertices = 0; int32 GroundChunks = 0, RailChunks = 0;
     bool FacingValid[4] = {true, true, true, true};
     int64 FacingTriangles[4] = {0, 0, 0, 0}; // Terrain, rail/spine, steel, footing.
     for (const auto& Chunk : Prepared.Chunks)
     {
         TotalVertices += Chunk.Vertices.Num();
-        const int32 FacingKind = Chunk.Terrain ? 0 : Chunk.Footing ? 3 : Chunk.Structure ? 2 : 1;
+        const int32 FacingKind = Chunk.Ground ? 0 : Chunk.Footing ? 3 : Chunk.Structure ? 2 : 1;
         FacingValid[FacingKind] &= HasEngineFrontFaces(Chunk.Vertices, Chunk.Normals, Chunk.Indices, FacingTriangles[FacingKind]);
         ValidIndices &= Chunk.Indices.Num() % 3 == 0;
         for (int32 Index : Chunk.Indices) ValidIndices &= Chunk.Vertices.IsValidIndex(Index);
         ValidAttributes &= Chunk.Normals.Num() == Chunk.Vertices.Num() && Chunk.UV.Num() == Chunk.Vertices.Num();
-        ChunkBudget &= Chunk.Vertices.Num() <= (Chunk.Terrain ? VibeMesh::TerrainBackdrop::CliffChunkVertices : 984);
-        if (Chunk.Terrain)
+        ChunkBudget &= Chunk.Vertices.Num() <= (Chunk.Ground ? 4 : 984);
+        if (Chunk.Ground)
         {
-            ++TerrainChunks;
+            ++GroundChunks;
             for (const FVector& P : Chunk.Vertices)
             {
                 const auto Q = VibeCoordinates::CorePosition({P.X, P.Y, P.Z});
@@ -265,14 +263,14 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
         Altered.UV[0].X += .001;
         TestFalse(TEXT("Rail reference rejects a changed UV"), RailChunkMatchesUnbatchedReference(Altered, D->track, 0));
     }
-    TestTrue(TEXT("Every terrain triangle follows Epic's front-face convention"), FacingValid[0] && FacingTriangles[0] > 0);
+    TestTrue(TEXT("Every ground triangle follows Epic's front-face convention"), FacingValid[0] && FacingTriangles[0] > 0);
     TestTrue(TEXT("Every rail/spine triangle follows Epic's front-face convention"), FacingValid[1] && FacingTriangles[1] > 0);
     TestTrue(TEXT("Every tapered steel side/cap follows Epic's front-face convention"), FacingValid[2] && FacingTriangles[2] > 0);
     TestTrue(TEXT("Every footing side/cap follows Epic's front-face convention"), FacingValid[3] && FacingTriangles[3] > 0);
     TestTrue(TEXT("Every triangle references a valid vertex"), ValidIndices);
     TestTrue(TEXT("Every vertex has its normal and UV"), ValidAttributes);
-    TestTrue(TEXT("Terrain vertices use the unchanged canonical height query"), ValidGround && TerrainChunks > 0);
-    TestTrue(TEXT("Rail, terrain and support sections obey per-section payload budgets"), ChunkBudget && RailChunks > 0);
+    TestTrue(TEXT("Ground vertices lie on the physical flat plane"), ValidGround && GroundChunks > 0);
+    TestTrue(TEXT("Rail, ground and support sections obey per-section payload budgets"), ChunkBudget && RailChunks > 0);
     TestTrue(TEXT("Complete rendering fits aggregate budgets"), Prepared.Chunks.Num() <= 4096 && TotalVertices <= 2000000 && Prepared.Ties.Num() + Prepared.Supports.Num() + Prepared.Station.Num() <= 100000);
 
     // Compare the engine boundary against the portable canonical member mesh,
@@ -325,53 +323,6 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Rejected designs cannot become ride meshes"), VibeMesh::Prepare(Bad, [] { return false; }));
     TestTrue(TEXT("Rejection creates no render buffers"), Bad.Chunks.IsEmpty() && Bad.Station.IsEmpty() && Bad.Ties.IsEmpty());
 
-    // Check actual canyon render triangles against the continuous heightfield,
-    // not just vertices (which also passed on the visibly faceted 20 m grid).
-    Request.terrain = coaster::Terrain::seeded(coaster::TerrainKind::Canyon, 42);
-    auto Canyon = std::make_shared<coaster::Design>(coaster::generate(Request));
-    if (!TestTrue(TEXT("Canyon tessellation fixture passes full acceptance"), Canyon->accepted())) return false;
-    VibeMesh::FPreparedRide Cliff; Cliff.Design = Canyon;
-    if (!TestTrue(TEXT("Accepted canyon prepares within unchanged render budgets"), VibeMesh::Prepare(Cliff, [] { return false; })))
-    { AddError(Cliff.Error); return false; }
-    const auto& Landscape = Canyon->request.terrain;
-    int64 CliffSamples = 0, CliffVertices = 0;
-    double HeightError = 0, NormalErrorDegrees = 0;
-    for (const auto& Chunk : Cliff.Chunks)
-    {
-        CliffVertices += Chunk.Vertices.Num();
-        if (!Chunk.Terrain) continue;
-        for (int32 I = 0; I < Chunk.Indices.Num(); I += 3)
-        {
-            FVector P[3], N[3]; bool NearRide = true;
-            for (int32 J = 0; J < 3; ++J)
-            {
-                P[J] = Chunk.Vertices[Chunk.Indices[I + J]]; N[J] = Chunk.Normals[Chunk.Indices[I + J]];
-                NearRide &= P[J].X >= Cliff.Bounds.Min.X && P[J].X <= Cliff.Bounds.Max.X &&
-                    P[J].Y >= Cliff.Bounds.Min.Y && P[J].Y <= Cliff.Bounds.Max.Y;
-            }
-            if (!NearRide) continue;
-            // Centroid and edge midpoints independently assess linear raster
-            // interpolation; a finer derivative is the reference normal.
-            for (const FVector& Weight : {FVector(1. / 3), FVector(.5, .5, 0), FVector(.5, 0, .5), FVector(0, .5, .5)})
-            {
-                const FVector V = P[0] * Weight.X + P[1] * Weight.Y + P[2] * Weight.Z;
-                const auto Q = VibeCoordinates::CorePosition({V.X, V.Y, V.Z});
-                const double DX = (Landscape.height(Q.x + .01, Q.y) - Landscape.height(Q.x - .01, Q.y)) / .02;
-                const double DY = (Landscape.height(Q.x, Q.y + .01) - Landscape.height(Q.x, Q.y - .01)) / .02;
-                if (std::hypot(DX, DY) < .2) continue; // Exercise the wall, not only the rims.
-                const FVector Normal = (N[0] * Weight.X + N[1] * Weight.Y + N[2] * Weight.Z).GetSafeNormal();
-                const FVector Reference = VibeMesh::Direction(coaster::unit({-DX, -DY, 1}));
-                HeightError = FMath::Max(HeightError, std::abs(Q.z - Landscape.height(Q.x, Q.y)));
-                NormalErrorDegrees = FMath::Max(NormalErrorDegrees, FMath::RadiansToDegrees(std::acos(FMath::Clamp(FVector::DotProduct(Normal, Reference), -1., 1.))));
-                ++CliffSamples;
-            }
-        }
-    }
-    AddInfo(FString::Printf(TEXT("Canyon near-wall samples=%lld max height error=%.6f m normal error=%.6f degrees vertices=%lld chunks=%d"),
-        CliffSamples, HeightError, NormalErrorDegrees, CliffVertices, Cliff.Chunks.Num()));
-    TestTrue(TEXT("Actual near-wall triangles stay within 0.35 m of the canonical cliff"), CliffSamples > 10000 && HeightError < .35);
-    TestTrue(TEXT("Interpolated near-wall normals stay within 0.6 degrees of the continuous cliff"), NormalErrorDegrees < .6);
-    TestTrue(TEXT("Fine canyon rendering retains aggregate budgets"), CliffVertices <= 2000000 && Cliff.Chunks.Num() <= 4096);
     return true;
 }
 
@@ -486,9 +437,7 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
         FBox VertexBounds(ForceInit);
         int64 VertexCount = 0, TriangleCount = 0;
         bool GeometryValid = true, TrainBodyFit = true, TieAssemblyFit = true;
-        // This editor-only test reads the already resident render buffers. The
-        // temporary flag only suppresses a cooked-access warning; restore it
-        // without dirtying/saving the asset or retaining runtime CPU buffers.
+        // The temporary flag permits reading resident buffers; the asset is not saved.
         const bool PreviousCPUAccess = Mesh->bAllowCPUAccess;
         Mesh->bAllowCPUAccess = true;
         for (int32 Section = 0; Section < Mesh->GetNumSections(0); ++Section)
@@ -556,138 +505,36 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
 
 #endif // WITH_EDITOR: imported source slot names and resident LOD CPU data.
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterTerrainBackdropTest, "VibeCoaster.TerrainBackdropContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-bool FCoasterTerrainBackdropTest::RunTest(const FString& Parameters)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterGroundTest, "VibeCoaster.GroundContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCoasterGroundTest::RunTest(const FString& Parameters)
 {
-    // Standalone geometry-helper fixtures; these are not accepted ride fixtures.
-    // Boundary incidence/area tests are independent of the zipper ordering.
-    using Point = std::array<double, 2>;
-    using Edge = std::array<double, 4>;
-    const auto EdgeKey = [](Point A, Point B) { if (B < A) std::swap(A, B); return Edge{A[0], A[1], B[0], B[1]}; };
-    constexpr double X0 = -320, Y0 = -640, X1 = X0 + 2 * 320, Y1 = Y0 + 3 * 320;
-    const FBox OriginalBounds(FVector(-100, -200, -300), FVector(400, 500, 600));
-    const auto RingPlan = VibeMesh::TerrainBackdrop::BuildRingPlan(X0, Y0, 2, 3, true);
-    TestEqual(TEXT("Backdrop plans 48 dense halo bands before 12 distant bands"), RingPlan.Num(), 61);
-    bool DenseHalo = true;
-    for (int32 Ring = 1; Ring < RingPlan.Num(); ++Ring)
+    VibeMesh::FPreparedRide Prepared;
+    const FBox Bounds(FVector(-10000,-20000,1000), FVector(30000,40000,50000));
+    Prepared.Bounds = Bounds;
+    if (!TestTrue(TEXT("Flat ground prepares"), VibeMesh::AppendGround(Prepared, {}))) return false;
+    TestEqual(TEXT("One ground component"), Prepared.Chunks.Num(), 1);
+    const auto& Ground = Prepared.Chunks[0];
+    TestTrue(TEXT("Plane preserves overview bounds"), Prepared.Bounds.Equals(Bounds, 0));
+    TestTrue(TEXT("Four vertices and two triangles"), Ground.Ground && Ground.Vertices.Num()==4 && Ground.Indices.Num()==6);
+    int64 FacingCount=0;
+    TestTrue(TEXT("Ground faces upward under UE winding"), HasEngineFrontFaces(Ground.Vertices,Ground.Normals,Ground.Indices,FacingCount) && FacingCount==2);
+    FBox Coverage(ForceInit);
+    for (int32 I=0; I<Ground.Vertices.Num(); ++I)
     {
-        const auto& Inner = RingPlan[Ring - 1]; const auto& Outer = RingPlan[Ring];
-        if (Ring <= 48) DenseHalo &= Inner.MinX - Outer.MinX == 20 && Inner.MinY - Outer.MinY == 20 &&
-            (Outer.MaxX - Outer.MinX) / Outer.SegmentsX <= 20 && (Outer.MaxY - Outer.MinY) / Outer.SegmentsY <= 20;
+        const auto& V=Ground.Vertices[I]; Coverage+=V;
+        TestTrue(TEXT("Plane vertices, normals and UVs agree with flat SI ground"), V.Z==0 && Ground.Normals[I]==FVector::UpVector && Ground.UV[I]==FVector2D(V.X/8000.,-V.Y/8000.));
     }
-    TestTrue(TEXT("Steep-wall halo keeps <=20 m side spacing through 960 m"), DenseHalo && RingPlan[48].MinX == X0 - 960);
-
-    const auto BoundsUnchanged = [&](const VibeMesh::FPreparedRide& P)
-    { return P.Bounds.IsValid == OriginalBounds.IsValid && P.Bounds.Min == OriginalBounds.Min && P.Bounds.Max == OriginalBounds.Max; };
-    for (const auto& Terrain : {coaster::Terrain::seeded(coaster::TerrainKind::Flat, 42),
-        coaster::Terrain::seeded(coaster::TerrainKind::Hills, 42), coaster::Terrain::seeded(coaster::TerrainKind::Canyon, 42),
-        coaster::Terrain{coaster::TerrainKind::Canyon}})
-    {
-        const bool DetailedCliffs = Terrain.kind == coaster::TerrainKind::Canyon && Terrain.cliffHeight > 0;
-        std::set<Edge> ExpectedInner;
-        const double NearStep = DetailedCliffs ? 5. : 20.;
-        for (int32 I = 0; I < (X1 - X0) / NearStep; ++I)
-        {
-            ExpectedInner.insert(EdgeKey(Point{X0 + I * NearStep, Y0}, Point{X0 + (I + 1) * NearStep, Y0}));
-            ExpectedInner.insert(EdgeKey(Point{X0 + I * NearStep, Y1}, Point{X0 + (I + 1) * NearStep, Y1}));
-        }
-        for (int32 I = 0; I < (Y1 - Y0) / NearStep; ++I)
-        {
-            ExpectedInner.insert(EdgeKey(Point{X0, Y0 + I * NearStep}, Point{X0, Y0 + (I + 1) * NearStep}));
-            ExpectedInner.insert(EdgeKey(Point{X1, Y0 + I * NearStep}, Point{X1, Y0 + (I + 1) * NearStep}));
-        }
-        const auto CasePlan = VibeMesh::TerrainBackdrop::BuildRingPlan(X0, Y0, 2, 3, DetailedCliffs);
-        const double Extension = DetailedCliffs ? 81900 + 48 * 20 : 81900;
-        const int32 ChunkLimit = DetailedCliffs ? VibeMesh::TerrainBackdrop::CliffChunkVertices : VibeMesh::TerrainBackdrop::DefaultChunkVertices;
-        int64 CaseTriangles = 0;
-        for (int32 Ring = 1; Ring < CasePlan.Num(); ++Ring) CaseTriangles += 2 * int64(CasePlan[Ring - 1].SegmentsX + CasePlan[Ring - 1].SegmentsY + CasePlan[Ring].SegmentsX + CasePlan[Ring].SegmentsY);
-        TestEqual(TEXT("Only actual cliff profiles add dense halo bands"), CasePlan.Num(), DetailedCliffs ? 61 : 13);
-        const FString Label = FString(UTF8_TO_TCHAR(Terrain.name().c_str())) +
-            (Terrain.kind == coaster::TerrainKind::Canyon && !DetailedCliffs ? TEXT(" default profile") : TEXT(""));
-        VibeMesh::FPreparedRide Prepared; Prepared.Bounds = OriginalBounds;
-        if (!TestTrue(Label + TEXT(": backdrop prepares"), VibeMesh::AppendTerrainBackdrop(Prepared, Terrain, X0, Y0, 2, 3, [] { return false; })))
-        { AddError(Prepared.Error); return false; }
-        bool Valid = true, Canonical = true, Facing = true, Nondegenerate = true, DenseEdges = true;
-        double Area = 0; int64 Checked = 0, VertexCount = 0, TriangleCount = 0;
-        std::map<Edge, int32> Edges;
-        for (const auto& Chunk : Prepared.Chunks)
-        {
-            VertexCount += Chunk.Vertices.Num();
-            Valid &= Chunk.Terrain && !Chunk.Structure && !Chunk.Footing && Chunk.Vertices.Num() <= ChunkLimit && Chunk.Vertices.Num() == Chunk.Normals.Num() && Chunk.Vertices.Num() == Chunk.UV.Num() && Chunk.Indices.Num() % 3 == 0;
-            Facing &= HasEngineFrontFaces(Chunk.Vertices, Chunk.Normals, Chunk.Indices, Checked);
-            for (int32 I = 0; I < Chunk.Vertices.Num(); ++I)
-            {
-                const auto& P = Chunk.Vertices[I]; const auto& Normal = Chunk.Normals[I];
-                const auto C = VibeCoordinates::CorePosition({P.X, P.Y, P.Z});
-                Canonical &= std::isfinite(C.x) && std::isfinite(C.y) && std::isfinite(C.z) && std::abs(C.z - Terrain.height(C.x, C.y)) < 1e-8;
-                Canonical &= std::isfinite(Normal.X) && std::isfinite(Normal.Y) && std::isfinite(Normal.Z) && Normal.Z > 0 && FMath::Abs(Normal.SizeSquared() - 1) < 1e-8;
-                Canonical &= Chunk.UV[I].Equals(FVector2D(C.x / 80, C.y / 80), 1e-8);
-            }
-            for (int32 I = 0; I + 2 < Chunk.Indices.Num(); I += 3)
-            {
-                Point XY[3]; bool TriangleValid = true;
-                for (int32 J = 0; J < 3; ++J)
-                {
-                    const int32 Index = Chunk.Indices[I + J];
-                    if (!Chunk.Vertices.IsValidIndex(Index)) { TriangleValid = false; break; }
-                    const auto& V = Chunk.Vertices[Index]; const auto P = VibeCoordinates::CorePosition({V.X, V.Y, V.Z}); XY[J] = {P.x, P.y};
-                }
-                if (!TriangleValid) { Valid = false; continue; }
-                const double TwiceArea = (XY[1][0] - XY[0][0]) * (XY[2][1] - XY[0][1]) - (XY[1][1] - XY[0][1]) * (XY[2][0] - XY[0][0]);
-                Nondegenerate &= std::isfinite(TwiceArea) && TwiceArea > 0;
-                const auto InHalo = [&](const Point& P) { return P[0] >= X0 - 960 && P[0] <= X1 + 960 && P[1] >= Y0 - 960 && P[1] <= Y1 + 960; };
-                if (DetailedCliffs && InHalo(XY[0]) && InHalo(XY[1]) && InHalo(XY[2]))
-                    for (int32 J = 0; J < 3; ++J) DenseEdges &= std::hypot(XY[J][0] - XY[(J + 1) % 3][0], XY[J][1] - XY[(J + 1) % 3][1]) <= 45;
-
-                Area += std::abs(TwiceArea) * .5; ++TriangleCount;
-                for (int32 J = 0; J < 3; ++J) ++Edges[EdgeKey(XY[J], XY[(J + 1) % 3])];
-            }
-        }
-        bool EdgeCoverage = true; int32 OuterEdges = 0;
-        for (const auto& E : ExpectedInner)
-        { const auto Found = Edges.find(E); EdgeCoverage &= Found != Edges.end() && Found->second == 1; }
-        for (const auto& Entry : Edges)
-        {
-            const Edge& E = Entry.first; const int32 Count = Entry.second;
-            if (ExpectedInner.count(E)) { EdgeCoverage &= Count == 1; continue; }
-            if (Count == 2) continue;
-            const bool Outer =
-                (E[0] == X0 - Extension && E[2] == X0 - Extension) ||
-                (E[0] == X1 + Extension && E[2] == X1 + Extension) ||
-                (E[1] == Y0 - Extension && E[3] == Y0 - Extension) ||
-                (E[1] == Y1 + Extension && E[3] == Y1 + Extension);
-            EdgeCoverage &= Count == 1 && Outer; if (Outer) ++OuterEdges;
-        }
-        const double ExpectedArea = (X1 - X0 + 2 * Extension) * (Y1 - Y0 + 2 * Extension) - (X1 - X0) * (Y1 - Y0);
-        TestTrue(Label + TEXT(": fine inner seam exact, internal edges paired, only outer boundary open"), EdgeCoverage && OuterEdges == 32);
-        TestTrue(Label + TEXT(": triangles cover exactly the rectangle annulus"), Nondegenerate && FMath::Abs(Area - ExpectedArea) < ExpectedArea * 1e-10);
-        TestTrue(Label + TEXT(": emitted dense-halo edges stay bounded and match planned triangle budget"), DenseEdges && TriangleCount == CaseTriangles);
-        TestTrue(Label + TEXT(": all faces follow Epic clockwise convention"), Facing && Checked == TriangleCount && Checked > 0);
-        TestTrue(Label + TEXT(": canonical heights, finite unit normals and world UV"), Canonical);
-        TestTrue(Label + TEXT(": valid attributes and bounded chunk/aggregate payload"), Valid && VertexCount <= 2000000 && Prepared.Chunks.Num() <= 4096);
-        TestEqual(Label + TEXT(": exact coalesced component count preserves all planned triangles"), int64(Prepared.Chunks.Num()), (CaseTriangles * 3 + ChunkLimit - 1) / ChunkLimit);
-        TestTrue(Label + TEXT(": ride overview bounds remain unchanged"), BoundsUnchanged(Prepared));
-    }
-    coaster::Terrain Terrain;
-    VibeMesh::FPreparedRide Cancelled; Cancelled.Bounds = OriginalBounds;
-    int32 CancelCalls = 0;
-    TestFalse(TEXT("Backdrop cancellation stops during staged triangle emission"), VibeMesh::AppendTerrainBackdrop(Cancelled, Terrain, X0, Y0, 2, 3, [&] { return ++CancelCalls > 6; }));
-    TestTrue(TEXT("Cancellation reached partial work without changing ride bounds"), CancelCalls > 6 && !Cancelled.Chunks.IsEmpty() && BoundsUnchanged(Cancelled));
-    VibeMesh::FPreparedRide CliffCancelled; CliffCancelled.Bounds = OriginalBounds;
-    const auto CliffTerrain = coaster::Terrain::seeded(coaster::TerrainKind::Canyon, 42);
-    TestFalse(TEXT("Cliff cancellation remains responsive after a coalesced chunk is staged"),
-        VibeMesh::AppendTerrainBackdrop(CliffCancelled, CliffTerrain, X0, Y0, 2, 3, [&] { return !CliffCancelled.Chunks.IsEmpty(); }));
-    TestTrue(TEXT("Cliff cancellation preserves one bounded completed staging chunk and ride bounds"),
-        CliffCancelled.Chunks.Num() == 1 && CliffCancelled.Chunks[0].Vertices.Num() == VibeMesh::TerrainBackdrop::CliffChunkVertices && BoundsUnchanged(CliffCancelled));
-    VibeMesh::FPreparedRide ChunkFull; ChunkFull.Bounds = OriginalBounds; ChunkFull.Chunks.SetNum(4096);
-    TestFalse(TEXT("Full aggregate chunk budget rejects before appending"), VibeMesh::AppendTerrainBackdrop(ChunkFull, Terrain, X0, Y0, 2, 3, [] { return false; }));
-    TestTrue(TEXT("Chunk-budget failure preserves prior buffers and bounds"), ChunkFull.Chunks.Num() == 4096 && BoundsUnchanged(ChunkFull));
-    VibeMesh::FPreparedRide VertexFull; VertexFull.Bounds = OriginalBounds; VertexFull.Chunks.AddDefaulted(); VertexFull.Chunks[0].Vertices.SetNumUninitialized(2000000);
-    TestFalse(TEXT("Full aggregate vertex budget rejects before appending"), VibeMesh::AppendTerrainBackdrop(VertexFull, Terrain, X0, Y0, 2, 3, [] { return false; }));
-    TestTrue(TEXT("Vertex-budget failure preserves prior buffers and bounds"), VertexFull.Chunks.Num() == 1 && VertexFull.Chunks[0].Vertices.Num() == 2000000 && BoundsUnchanged(VertexFull));
+    TestTrue(TEXT("Ground extends beyond the entire ride"), Coverage.Min.X<Bounds.Min.X && Coverage.Min.Y<Bounds.Min.Y && Coverage.Max.X>Bounds.Max.X && Coverage.Max.Y>Bounds.Max.Y);
+    VibeMesh::FPreparedRide Cancelled; Cancelled.Bounds=Bounds;
+    TestFalse(TEXT("Cancelled ground is not appended"),VibeMesh::AppendGround(Cancelled,[]{return true;}));
+    TestTrue(TEXT("Cancellation preserves existing state"),Cancelled.Chunks.IsEmpty() && Cancelled.Bounds.Equals(Bounds,0));
+    VibeMesh::FPreparedRide Full; Full.Bounds=Bounds; Full.Chunks.SetNum(4096);
+    TestFalse(TEXT("Ground respects component budget"),VibeMesh::AppendGround(Full,{}));
+    TestEqual(TEXT("Budget refusal preserves chunks"),Full.Chunks.Num(),4096);
+    VibeMesh::FPreparedRide VerticesFull; VerticesFull.Bounds=Bounds; VerticesFull.Chunks.AddDefaulted(); VerticesFull.Chunks[0].Vertices.SetNumUninitialized(2000000);
+    TestFalse(TEXT("Ground respects vertex budget"),VibeMesh::AppendGround(VerticesFull,{}));
+    VibeMesh::FPreparedRide Empty;
+    TestFalse(TEXT("Uninitialised bounds are refused"),VibeMesh::AppendGround(Empty,{}));
     return true;
 }
 #endif
-
-
-

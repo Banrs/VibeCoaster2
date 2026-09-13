@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "simulation_internal.hpp"
 #include <stdexcept>
 
 namespace coaster {
@@ -82,14 +83,14 @@ ValidationReport compareSimulationConvergence(const SimulationResult& coarse,con
     assessment.passed=report.valid();return report;
 }
 
-void verifyConvergence(Design& design,Cancel cancel){
+void verifyConvergenceWith(Design& design,const std::function<SimulationResult()>& fineReplay,Cancel cancel){
     design.convergence={};
     design.convergence.coarseStep=design.request.simulationStep;
     design.convergence.fineStep=design.request.simulationStep*.5;
     if(cancel&&cancel()){design.simulation.cancelled=true;design.report.fail("CANCELLED","Convergence verification cancelled");return;}
     if(!design.report.valid()||!design.simulation.completed||!design.simulation.report.valid()||design.simulation.cancelled)return;
     try{
-        const auto fine=simulate(design.track,design.operations,design.request.train,design.convergence.fineStep,cancel);
+        const auto fine=fineReplay();
         auto comparison=compareSimulationConvergence(design.simulation,fine,design.request.limits,design.convergence);
         design.report.errors.insert(design.report.errors.end(),comparison.errors.begin(),comparison.errors.end());
         if(fine.cancelled||(cancel&&cancel())){
@@ -111,5 +112,8 @@ void verifyConvergence(Design& design,Cancel cancel){
         if(cancel&&cancel()){design.simulation.cancelled=true;design.report.fail("CANCELLED","Convergence verification cancelled");}
         else design.report.fail("CONVERGENCE_EXCEPTION",error.what());
     }
+}
+void verifyConvergence(Design& design,Cancel cancel){
+    verifyConvergenceWith(design,[&]{return simulate(design.track,design.operations,design.request.train,design.request.simulationStep*.5,cancel);},cancel);
 }
 }

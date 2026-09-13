@@ -13,8 +13,8 @@ static std::string bytes(const fs::path& p){std::ifstream f(p,std::ios::binary);
 static uint64_t hash(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
 static void write(const fs::path& p,const std::string& s){std::ofstream f(p,std::ios::binary);f<<"COASTER 5 "<<s.size()<<' '<<hash(s)<<'\n'<<s;}
 int main(){try{
-    const auto root=fs::path(__FILE__).parent_path().parent_path().parent_path(),out=root/"structure-test-output";fs::create_directories(out);
-    GenerationRequest req;req.terrain.kind=TerrainKind::Hills;req.targets.requireIntensity=false;Design d=generate(req);check(d.accepted(),"Combined candidate accepted");
+    const auto out=fs::current_path()/"structure-test-output";fs::create_directories(out);
+    GenerationRequest req;req.targets.requireIntensity=false;Design d=generate(req);check(d.accepted(),"Combined candidate accepted");
     check(d.station.enabled&&!d.station.boxes.empty(),"New candidate owns station geometry");check(validateDesignStructures(d).valid(),"Every new canonical structure validated");
     for(const auto& s:d.supports){check(!s.members.empty(),"New support explicit");check(!supportStationCollision(s,d.station),"Every member clears the station");}
     auto bad=d;bad.station={};check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"New provenance cannot omit station");

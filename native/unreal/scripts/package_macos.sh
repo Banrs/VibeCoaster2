@@ -10,7 +10,7 @@ Usage: bash package_macos.sh --unreal-root PATH [options]
   --output-directory PATH              (default: native/unreal/Packaged/Mac)
   --prepare-only                       Build editor, create assets, run UE tests
   --help
-All builds run all three named UE automation contracts. Nothing is notarized or submitted.
+All builds run all six named UE automation contracts. Nothing is notarized or submitted.
 USAGE
 }
 fail() {
@@ -144,7 +144,7 @@ done
 run_logged Automation "$editor" "$project" -unattended -nop4 -NullRHI -nosplash -stdout -FullStdOutLogOutput \
     '-ExecCmds=Automation RunTests VibeCoaster' '-TestExit=Automation Test Queue Empty' \
     "-ReportExportPath=$run_dir/Automation" "-abslog=$run_dir/Automation.engine.log"
-for contract in CoordinateContract MeshContract TerrainBackdropContract StationArtContract ImportedArtContract SeedInputContract; do
+for contract in CoordinateContract MeshContract GroundContract StationArtContract ImportedArtContract SeedInputContract; do
     grep -Eq "Result=\\{Success\\}.*Path=\\{VibeCoaster\\.$contract\\}" "$run_dir/Automation.log" || fail "UE automation success unconfirmed: VibeCoaster.$contract"
 done
 if grep -Eq 'Result=\{Fail' "$run_dir/Automation.log"; then fail 'UE automation reported a failure'; fi

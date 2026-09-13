@@ -12,10 +12,7 @@ FootingGeometry footing(Vec3 p,const Terrain& terrain,double broadRadius,double 
     Vec3 top=shortBent?Vec3{p.x,p.y,ground+slope*radius+legRadius*(1+slope)+slope+.35}:
         Vec3{p.x,p.y,ground+slope*radius+legRadius+.35};
     if(top.z-base.z>12){
-        // A broad footing spanning a steep rock wall can exceed the supported
-        // 12 m depth even though its tower clears the track. Use a narrower
-        // embedded rock pier sized to its steel leg, with a raised steel joint.
-        // These are geometric families; no rock/foundation load capacity is claimed.
+        // Narrow the footing if its calculated embedment exceeds 12 m.
         radius=std::min(broadRadius,std::max(.9,legRadius*1.65));
         slope=terrain.localSlopeBound(p.x,p.y,radius+2);
         base.z=ground-slope*radius-1.5;
@@ -23,14 +20,11 @@ FootingGeometry footing(Vec3 p,const Terrain& terrain,double broadRadius,double 
     }
     return {base,top,radius};
 }
-// Compact bents share the same persisted member representation and collision
-// gates as tall towers. These are geometric proportions, not a structural-load
-// certificate. Upright, low sections should not inherit a 12-48 m cantilever.
+// Short bents use the same persisted members and collision checks as towers.
 Support compactBent(const TrackSample& q,Vec3 right,double distance,const Terrain& terrain,bool paired){
     const Vec3 attachment=q.position-q.up*(spineDepth+spineRadius);
     const double localHeight=attachment.z-terrain.height(attachment.x,attachment.y);
-    // A low pier needs a short rail joint, not the same two-metre neck as a
-    // tall bent. The complete resulting steel still faces the rider sweep.
+    // Short piers use shorter rail joints.
     double standoff=paired?2.:std::clamp(localHeight-3.,.6,2.);
     Vec3 cap=attachment-q.up*standoff;
     if(!paired&&standoff>.6&&cap.z-terrain.height(cap.x,cap.y)<3){
@@ -194,15 +188,10 @@ void buildSupportLayout(Design& d,Cancel cancel){
             if(totalMembers>maxTotalSupportMembers)throw std::runtime_error("SUPPORT_MEMBER_BUDGET");
             d.supports.push_back(std::move(support));return true;
         };
-        // The narrow single-post family is tried only within its low/upright
-        // domain, then a paired bent. Station platforms, banked train envelopes
-        // and other tracks may reject either; tall cantilever towers remain the
-        // exact same validated fallback instead of bypassing an obstruction.
+        // Try a single post, then a paired bent, before taller supports.
         placed=tryPlace(compactBent(q,right,distance,d.request.terrain,false));
         if(!placed)placed=tryPlace(compactBent(q,right,distance,d.request.terrain,true));
-        // An upright tall spine can sit above its tower. Try a centred cap
-        // before cantilevers; each candidate still faces the full banked sweep.
-        // Small terrain-adaptive outreach can avoid a nearby footing obstacle.
+        // Try centred and nearby towers before larger cantilever offsets.
         if(!placed&&q.up.z>.65){
             const double height=attachment.z-d.request.terrain.height(attachment.x,attachment.y);
             const double nearOffset=std::clamp(height*.025,3.,8.);
@@ -213,11 +202,7 @@ void buildSupportLayout(Design& d,Cancel cancel){
         if(!placed)for(double offset:{12.,-12.,18.,-18.,26.,-26.,36.,-36.,48.,-48.}){
             if(tryPlace(tower(attachment,right,q.up,q.right,offset,distance,d.request.terrain,d.station.enabled))){placed=true;break;}
         }
-        // During sideways inversion rolls rail-right is nearly vertical. A
-        // larger displacement along the canonical under-spine normal keeps the
-        // tower body away from riders while the final narrow joint stays exact.
-        // Try it only after all ordinary placements fail; existing valid towers
-        // retain their geometry and every new member still faces the same sweep.
+        // Larger under-spine standoffs provide additional rider clearance during rolls.
         if(!placed)for(double standoff:{6.,10.}){
             for(double offset:{12.,-12.,18.,-18.,26.,-26.,36.,-36.,48.,-48.}){
                 if(tryPlace(tower(attachment,right,q.up,q.right,offset,distance,d.request.terrain,d.station.enabled,standoff))){placed=true;break;}
@@ -225,10 +210,7 @@ void buildSupportLayout(Design& d,Cancel cancel){
             if(placed)break;
         }
         if(!placed)throw std::runtime_error("No validated connected tower placement at distance "+std::to_string(distance));
-        // Layout density follows the strongest nearby curvature/frame change,
-        // including look-ahead so an approaching roll does not inherit the long
-        // span of its straight entry. Keep the old 40 m maximum. This is a
-        // geometric support layout rule, not a beam stress or fatigue analysis.
+        // Curvature and frame-rate look-ahead set support spacing, capped at 40 m.
         double curvature=0,frameRate=0;
         for(double ahead:{0.,10.,20.,30.,40.}){
             const auto k=sampleKinematics(d.track,std::min(distance+ahead,d.track.length));

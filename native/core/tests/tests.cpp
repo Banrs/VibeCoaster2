@@ -58,7 +58,7 @@ static void geometry(){
     bool threw=false;try{auto bad=loop;bad.knots.back().up={NAN,0,0};bad.rebuild();}catch(...){threw=true;}check(threw,"Nonfinite last knot rejected");
     threw=false;try{auto bad=loop;bad.knots[1].element=Element(99);bad.rebuild();}catch(...){threw=true;}check(threw,"Invalid element enum rejected");
 }
-static Design generation(){
+static void generation(){
     GenerationRequest r;r.targets.requireIntensity=false;r.seed=42;
     auto d=generate(r);if(!d.accepted())std::cerr<<reportJson(d)<<'\n';check(d.accepted(),"Physics-proof seed42 accepted");
     auto replay=simulate(d.track,d.operations,r.train,r.simulationStep);check(replay.completed&&replay.report.valid(),"Independent final replay completes");near(replay.frames.back().time,replay.metrics.duration,0,"Terminal trace timestamp");near(replay.frames.back().speed,0,0,"Physical terminal stop speed");near(replay.metrics.maxSpeed,d.simulation.metrics.maxSpeed,1e-12,"Replay max speed");
@@ -66,11 +66,9 @@ static Design generation(){
     auto finer=simulate(d.track,d.operations,r.train,1./480);check(finer.completed,"Half-step replay completes");near(finer.metrics.maxSpeed,replay.metrics.maxSpeed,.01,"Time-step max speed convergence");near(finer.metrics.launchTo180,replay.metrics.launchTo180,.005,"Time-step launch convergence");near(finer.metrics.maxVerticalG,replay.metrics.maxVerticalG,.03,"Time-step vertical force convergence");near(finer.metrics.maxLateralG,replay.metrics.maxLateralG,.03,"Time-step lateral force convergence");near(finer.metrics.exposure10Seconds,replay.metrics.exposure10Seconds,.05,"Time-step exposure convergence");near(finer.metrics.maxJerkGps,replay.metrics.maxJerkGps,1.,"Time-step jerk convergence");
     auto strict=d;strict.report={};strict.request.targets.requireIntensity=true;evaluateTargets(strict);check(!strict.accepted()&&code(strict.report,"REFERENCE_UNAVAILABLE"),"Unavailable benchmark rejects strict record claim");
     auto impossible=r;impossible.targets.speed=NAN;check(code(generate(impossible).report,"REQUEST_RANGE"),"NaN target rejected");
-    auto stationRegression=r;stationRegression.seed=9;stationRegression.terrain.kind=TerrainKind::Hills;stationRegression.maxCandidates=1;
-    auto stationRide=generate(stationRegression);check(stationRide.accepted(),"Seed9 hills must finish its physically valid station return");near(stationRide.simulation.frames.back().speed,0,0,"Seed9 terminal speed");
-    stationRegression.seed=10;stationRegression.terrain.kind=TerrainKind::Flat;stationRide=generate(stationRegression);check(stationRide.accepted(),"Seed10 flat must finish its station return");near(stationRide.simulation.frames.back().speed,0,0,"Seed10 terminal speed");
+    auto stationRegression=r;stationRegression.seed=10;stationRegression.maxCandidates=1;
+    auto stationRide=generate(stationRegression);check(stationRide.accepted(),"Seed10 flat must finish its station return");near(stationRide.simulation.frames.back().speed,0,0,"Seed10 terminal speed");
     auto cancelled=generate(r,[]{return true;});check(cancelled.simulation.cancelled&&!cancelled.accepted(),"Generation cancellation");int calls=0;auto interrupted=simulate(d.track,d.operations,r.train,r.simulationStep,[&]{return ++calls>3;});check(interrupted.cancelled&&!interrupted.completed,"Mid-simulation cancellation");
-    return d;
 }
 static void persistence(const Design& d){
     auto folder=std::filesystem::temp_directory_path()/"coaster-foundation-core-tests";std::filesystem::create_directories(folder);auto path=(folder/"roundtrip.coaster").string();std::filesystem::remove(path);std::string error;
@@ -120,6 +118,15 @@ static void migration(const Design& current){
     check(saveDesign(current,newPath.string(),error),"Save current explicit profile: "+error);const auto currentBytes=readBytes(newPath);check(currentBytes.rfind("COASTER 5 ",0)==0,"New canonical semantics use COASTER5");
     check(loadDesign(newPath.string(),replay,error),"Reload current explicit profile: "+error);
     check(reportJson(current)==reportJson(replay),"Current profile physics/provenance roundtrip");
+    auto rejectedSurface=[&](std::vector<std::string> lines){
+        std::string payload;for(const auto& line:lines)payload+=line+"\n";
+        {std::ofstream file(badPath,std::ios::binary);file<<"COASTER 5 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;}
+        auto unchanged=current;check(!loadDesign(badPath.string(),unchanged,error)&&error.find("flat")!=std::string::npos,"Checksummed non-flat save is explicitly refused");
+        check(reportJson(unchanged)==reportJson(current),"Unsupported ground leaves the accepted design intact");
+    };
+    for(int kind:{1,2}){auto lines=payloadLines(currentBytes);auto fields=tokens(lines[0]);fields[2]=std::to_string(kind);lines[0].clear();for(const auto& field:fields){if(!lines[0].empty())lines[0]+=' ';lines[0]+=field;}rejectedSurface(lines);}
+    for(const std::string profile:{"2 1 0 0 0 0 600","1 1 0 0 0 5 600"}){auto lines=payloadLines(currentBytes);bool found=false;for(size_t i=0;i+1<lines.size();++i)if(lines[i].starts_with("TERRAIN_PROFILE ")){lines[i]="TERRAIN_PROFILE 1 "+std::to_string(profile.size()+1);lines[i+1]=profile;found=true;break;}check(found,"Saved flat-profile extension exists");rejectedSurface(lines);}
+
     check(current.operations.size()==replay.operations.size(),"Current operation count roundtrip");bool station=false;
     for(size_t i=0;i<current.operations.size();++i){
         near(replay.operations[i].stopDeceleration,current.operations[i].stopDeceleration,0,"Explicit deceleration roundtrip");
@@ -137,7 +144,8 @@ static void migration(const Design& current){
     for(const auto& fields:std::vector<std::pair<double,double>>{{0,.2},{-1,.2},{21,.2},{NAN,.2},{INFINITY,.2},{2.4,-1},{2.4,6},{2.4,NAN},{2.4,INFINITY}}){
         auto invalid=current;invalid.operations[0].stopDeceleration=fields.first;invalid.operations[0].stopOffset=fields.second;
         check(code(simulate(invalid.track,invalid.operations,invalid.request.train).report,"DRIVE_CONFIG"),"Invalid direct-API profile rejected before integration");
-        check(!saveDesign(invalid,newPath.string(),error),"Invalid profile cannot overwrite accepted save");check(readBytes(newPath)==currentBytes,"Rejected profile save preserves previous file");
+        int probes=0;check(!saveDesign(invalid,newPath.string(),error,[&]{++probes;return false;}),"Invalid profile cannot overwrite accepted save");
+        check(probes==0,"Invalid motor parameters reject before geometry or simulation work");check(readBytes(newPath)==currentBytes,"Rejected profile save preserves previous file");
     }
     for(const auto& fade:std::vector<std::string>{"0","0.001","1000.1","nan","inf","1e309","-1"}){
         const auto& op=current.operations.front();writeBadProfile(badPath,currentBytes,current.track.knots.size(),std::to_string(op.stopDeceleration),std::to_string(op.stopOffset),fade);
@@ -146,7 +154,8 @@ static void migration(const Design& current){
     for(double fade:std::array<double,6>{0.,.001,1000.1,NAN,INFINITY,-1.}){
         auto invalid=current;invalid.operations.front().exitFadeMeters=fade;
         check(code(simulate(invalid.track,invalid.operations,invalid.request.train).report,"DRIVE_CONFIG"),"Invalid direct-API fade rejected before integration");
-        check(!saveDesign(invalid,newPath.string(),error),"Invalid fade cannot overwrite accepted save");check(readBytes(newPath)==currentBytes,"Rejected fade save preserves prior bytes");
+        int probes=0;check(!saveDesign(invalid,newPath.string(),error,[&]{++probes;return false;}),"Invalid fade cannot overwrite accepted save");
+        check(probes==0,"Invalid fade rejects before geometry or simulation work");check(readBytes(newPath)==currentBytes,"Rejected fade save preserves prior bytes");
     }
     const auto priorFixture=std::filesystem::path(__FILE__).parent_path()/"fixtures/geometry-v1-work.coaster";const auto priorBytes=readBytes(priorFixture);auto priorOutput=current;
     check(!loadDesign(priorFixture.string(),priorOutput,error)&&error.find("Unsupported generator version")!=std::string::npos,"Previous work1 operation semantics are explicitly unsupported");
@@ -155,29 +164,20 @@ static void migration(const Design& current){
 }
 
 
-static std::vector<double> horizontalTurnAngles(const Track& track){
-    std::vector<double> angles;
-    for(size_t i=0;i<track.knots.size();++i)if(track.knots[i].element==Element::Turn){size_t end=i;while(end+1<track.knots.size()&&track.knots[end+1].element==Element::Turn)++end;Vec3 a=track.knots[i].tangent,b=track.knots[end].tangent;a.z=b.z=0;angles.push_back(std::abs(std::atan2(cross(a,b).z,dot(a,b))));i=end;}return angles;
-}
 static void planningAndTargets(){
     GenerationRequest req;req.seed=1;req.targets.requireIntensity=false;auto flat=generate(req);check(flat.accepted(),"Variety flat fixture accepted");
-    req.terrain.kind=TerrainKind::Hills;auto hills=generate(req);check(hills.accepted(),"Variety hills fixture accepted");
-    // Added S-connectors can merge adjacent Turn runs. Run count is not
-    // corridor count; different terrain may select a different accepted route.
-    auto flatAngles=horizontalTurnAngles(flat.track),hillAngles=horizontalTurnAngles(hills.track);check(!flatAngles.empty()&&!hillAngles.empty(),"Accepted terrain routes retain turning geometry");
-    double difference=0;for(size_t i=0;i<std::min(flatAngles.size(),hillAngles.size());++i)difference=std::max(difference,std::abs(flatAngles[i]-hillAngles[i]));check(difference>.01,"Terrain changes intrinsic corridor angles, beyond rigid rotation or vertical following");
-    auto repeated=generate(req);check(repeated.planningDiagnostics==hills.planningDiagnostics,"Deterministic ranked plan and search diagnostics");
-    req.seed=2;auto varied=generate(req);check(varied.accepted(),"Second seeded hills profile completes");
+    auto repeated=generate(req);check(repeated.planningDiagnostics==flat.planningDiagnostics,"Deterministic ranked plan and search diagnostics");
+    req.seed=2;auto varied=generate(req);check(varied.accepted(),"Second seeded flat profile completes");
     // The folded family deliberately retains its record hill before the full
     // loop and reversing pair. Variation is in canonical shape, not a legacy
     // inversion-first ordering. The organic suite measures each inversion's
     // topology and the physically separated crossovers independently.
     for(Element element:{Element::Hill,Element::Inversion,Element::Airtime})
         check(std::any_of(varied.track.knots.begin(),varied.track.knots.end(),[&](const Knot& k){return k.element==element;}),"Seeded folded profile retains hill, inversion and airtime geometry");
-    check(std::abs(varied.track.length-hills.track.length)>1,"Different seeds on the same terrain change canonical circuit geometry");
-    check(varied.simulation.metrics.launchTo180<=1.4,"Second seeded hills actual departure meets launch target");
-    req.seed=3;req.terrain.kind=TerrainKind::Canyon;auto stadium=generate(req);check(stadium.accepted(),"Terrain-ranked stadium accepted");
-    check(std::any_of(stadium.track.knots.begin(),stadium.track.knots.end(),[](const Knot& k){return k.element==Element::Airtime;}),"Stadium retains canonical airtime");
+    auto intrinsicPoint=[](const Track& track,double fraction){const auto origin=track.sample(0);const auto delta=track.sample(track.length*fraction).position-origin.position;return Vec3{dot(delta,origin.tangent),dot(delta,origin.right),delta.z};};
+    double shapeDifference=0;for(int i=1;i<64;++i)shapeDifference=std::max(shapeDifference,norm(intrinsicPoint(varied.track,i/64.)-intrinsicPoint(flat.track,i/64.)));
+    check(shapeDifference>1,"Different seeds change circuit shape after removing station translation and heading");
+    check(varied.simulation.metrics.launchTo180<=1.4,"Second seeded flat actual departure meets launch target");
     req.seed=1;req.terrain.kind=TerrainKind::Flat;req.targets.requireIntensity=true;req.targets.referenceId="TEST_ONLY_SYNTHETIC_NOT_I305";req.targets.referenceExposure=20;
     auto lowReference=generate(req);check(lowReference.accepted(),"Synthetic 20 g*s reference drives a feasible design");
     req.targets.referenceExposure=30;auto highReference=generate(req);check(highReference.accepted(),"Synthetic 30 g*s reference drives a feasible design");
@@ -190,7 +190,7 @@ static void planningAndTargets(){
     auto path=(std::filesystem::temp_directory_path()/"coaster-synthetic-target.coaster").string();std::string error;check(saveDesign(highReference,path,error),"Synthetic target geometry independently validates before save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Synthetic target saved geometry replays: "+error);check(reportJson(loaded)==reportJson(highReference),"Synthetic configured target and exact measured result survive save/replay");std::filesystem::remove(path);
 
     req.targets.referenceExposure=51;check(code(generate(req).report,"INTENSITY_FEASIBILITY"),"Exposure above the force-duration ceiling rejected honestly");
-    req.seed=2;req.terrain.kind=TerrainKind::Hills;req.targets.requireIntensity=false;req.targets.launchSeconds=1.2;auto fastLaunch=generate(req);
+    req.seed=2;req.targets.requireIntensity=false;req.targets.launchSeconds=1.2;auto fastLaunch=generate(req);
     check(fastLaunch.accepted()&&fastLaunch.simulation.metrics.launchTo180<=1.2,"Launch request sizes explicit motor force");
     check(fastLaunch.simulation.metrics.maxLongitudinalG<=req.limits.maxLongitudinalG,"Faster departure preserves longitudinal force ceiling");
     auto launchForce=[](const Design& d){for(const auto& op:d.operations)if(op.kind==DriveKind::Launch)return op.maxForce;return 0.;};
@@ -198,26 +198,14 @@ static void planningAndTargets(){
     req.targets.launchSeconds=1.15;check(code(generate(req).report,"LAUNCH_FEASIBILITY"),"Unreachable flat-departure target rejected with physical bound");
 }
 
-static void stationPlacementRepair(){
-    GenerationRequest req;req.seed=39;req.terrain.kind=TerrainKind::Canyon;req.targets.requireIntensity=false;
-    auto d=generate(req);check(d.station.enabled&&!d.track.spans.empty()&&d.simulation.completed,"Previously rejected canyon station request finds a complete feasible ranked site");
-    check(validateSimulationTargets(d.simulation,req.targets,req.limits).valid(),"Station regression retains all coarse force and record targets");
-    check(d.accepted()||(!d.convergence.passed&&code(d.report,"CONVERGENCE_METRIC")),"Unconverged station candidate must remain rejected");
-    auto key=d.planningDiagnostics.find("\"selectedTerrainRank\":");check(key!=std::string::npos,"Selected station preference rank is observable");
-    int rank=std::stoi(d.planningDiagnostics.substr(key+std::string("\"selectedTerrainRank\":").size()));
-    // The richer folded grammar can make seed39's first site feasible. Its
-    // old positive-rank assumption is not a station safety requirement; the
-    // independent dense height/solid/force checks below remain mandatory.
-    check(rank>=0,"Selected station has a valid terrain preference rank");
-    if(rank>0)check(d.planningDiagnostics.find("\"stationBudgetFeasible\":false")!=std::string::npos,"Bypassed infeasible sites remain visible when a later site is selected");
-    auto q=d.track.sample(0);double low=1e9;
-    for(double x=d.station.boardingBegin-2;x<=d.station.boardingEnd+4;x+=.25)for(double y=-6;y<=6;y+=.25){auto point=q.position+q.tangent*x+q.right*y;low=std::min(low,d.request.terrain.height(point.x,point.y));}
-    check(q.position.z-low<=16,"Independent dense station bay height retains the16 m design budget");
-    check(validateDesignStructures(d).valid(),"Selected station and explicit support solids independently clear");
-    check(d.simulation.metrics.maxLateralG<=req.limits.maxLateralG&&d.simulation.metrics.maxJerkGps<=req.limits.maxJerkGps,"Station search does not weaken independent force gates");
-    int checksBeforeCancel=0;auto cancelled=generate(req,[&]{return ++checksBeforeCancel>40;});check(cancelled.simulation.cancelled||code(cancelled.report,"CANCELLED"),"Station-site search remains cancellable during construction");
-    auto fixture=std::filesystem::path(__FILE__).parent_path()/"fixtures/foundation-v1.coaster";auto original=readBytes(fixture);Design prior=d;std::string error;
-    check(!loadDesign(fixture.string(),prior,error),"Prior foundation geometry is not silently reinterpreted");check(reportJson(prior)==reportJson(d),"Unsupported schema preserves current design");check(readBytes(fixture)==original,"Prior foundation archive remains byte-identical");
-}
-
-int main(){try{analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}
+int main(int argc,char** argv){try{
+    if(argc==2&&std::string(argv[1])=="--persistence"){
+        GenerationRequest request;request.targets.requireIntensity=false;
+        auto d=generate(request);check(d.accepted(),"Persistence fixture accepted");
+        persistence(d);migration(d);
+        std::cout<<"PASS "<<checks<<" canonical persistence and invalid-input checks\n";
+        return 0;
+    }
+    check(argc==1,"Unknown test selection");
+    analytical();geometry();generation();planningAndTargets();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;
+}catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}

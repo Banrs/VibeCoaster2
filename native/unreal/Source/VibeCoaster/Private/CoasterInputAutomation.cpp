@@ -59,6 +59,14 @@ bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
     TestEqual(TEXT("Missing-reference guard remains explicit"), Controller->InputError,
         FString(TEXT("ALL RECORDS unavailable: the measured I305/Pantherian force benchmark is missing.\nThis is not a failed seed search. PHYSICS-PROOF can test the other selected targets.")));
     TestTrue(TEXT("Input validation never created a ride"), Controller->Ride == nullptr);
+    const TCHAR* Prefixes[]={TEXT("Seed:"),TEXT("Mode:"),TEXT("Maximum track height"),TEXT("Maximum speed"),TEXT("Inversion height"),TEXT("Launch 0-180"),TEXT("Candidate search budget")};
+    for (int32 Row=0; Row<7; ++Row)
+        TestTrue(TEXT("Flat-only menu retains the correct row mapping"),Controller->RowText(Row).StartsWith(Prefixes[Row]));
+    Controller->SelectedRow=1;Controller->Settings.targets.requireIntensity=true;Controller->ChangeRow(1);
+    TestFalse(TEXT("Second row changes the mode"),Controller->Settings.targets.requireIntensity);
+    Controller->SelectedRow=6;Controller->Settings.maxCandidates=8;Controller->ChangeRow(1);
+    TestEqual(TEXT("Last row changes the candidate budget"),Controller->Settings.maxCandidates,9);
+    TestTrue(TEXT("Removed terrain row is not present"),Controller->RowText(7).IsEmpty());
     return true;
 }
 #endif

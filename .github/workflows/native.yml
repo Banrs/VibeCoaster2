@@ -23,25 +23,53 @@ jobs:
       - name: Configure independent C++ core
         run: cmake -S native -B native/build-cmake -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build native/build-cmake --config Release --parallel 2 --target coaster_cli coaster_convergence fvd_tests baseline_jets_tests flow_bridge_tests connector_profile_tests support_tests structures_tests
-      - name: Test changed authoring and real CLI contracts
-        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --stop-on-failure --timeout 600 -R "^(fvd|baseline_jets|flow_bridge|connector_profile|cli_arguments)$"
-      - name: Check representative complete rides at 960 and 1920 Hz
-        if: runner.os == 'Windows'
-        shell: pwsh
+        id: build
+        run: cmake --build native/build-cmake --config Release --parallel 2
+      - name: Test components and real CLI contracts
+        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --timeout 600 --output-junit component-tests.xml -R "^(fvd|baseline_jets|flow_bridge|connector_profile|cli_arguments|geometry|frame_force|convergence|drive_profile|terrain_profile|dimensions|clearance|track_web|terrain)$"
+      - name: Test all remaining integration contracts
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --timeout 600 --output-junit integration-tests.xml -E "^(fvd|baseline_jets|flow_bridge|connector_profile|cli_arguments|geometry|frame_force|convergence|drive_profile|terrain_profile|dimensions|clearance|track_web|terrain)$"
+      - name: Check flat acceptance and removed-terrain refusal contracts
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: python
         run: |
-          New-Item -ItemType Directory -Path ride-checks | Out-Null
-          $failed = $false
-          foreach ($terrain in @('flat', 'hills')) {
-            & ./native/build-cmake/Release/coaster_cli.exe generate --seed 42 --terrain $terrain --preset physics-proof --candidates 1 --json "ride-checks/$terrain.json" --plan "ride-checks/$terrain-plan.json" --trace "ride-checks/$terrain-trace.json" --out "ride-checks/$terrain.coaster" > "ride-checks/$terrain.log"
-            if ($LASTEXITCODE -ne 0) { $failed = $true }
-          }
-          if ($failed) { throw 'A representative ride failed its unchanged acceptance gates. See ride-checks.' }
+          import json, platform, subprocess
+          from pathlib import Path
+          output = Path('ride-checks')
+          output.mkdir()
+          executable = Path('native/build-cmake') / ('Release/coaster_cli.exe' if platform.system() == 'Windows' else 'coaster_cli')
+          print(f'Native host: {platform.system()} {platform.machine()}', flush=True)
+          failed = False
+          for seed, terrain in [(5, 'flat'), (7, 'flat'), (39, 'flat'), (42, 'flat'),
+                                (2, 'hills'), (9, 'hills'), (42, 'hills'),
+                                (1, 'canyon'), (24, 'canyon'), (42, 'canyon')]:
+              name = output / f'{terrain}-{seed}'
+              with Path(f'{name}.log').open('w') as stdout, Path(f'{name}-progress.log').open('w') as stderr:
+                  result = subprocess.run([str(executable), 'generate', '--seed', str(seed), '--terrain', terrain,
+                      '--preset', 'physics-proof', '--candidates', '1', '--json', f'{name}.json',
+                      '--plan', f'{name}-plan.json', '--trace', f'{name}-trace.json', '--out', f'{name}.coaster'],
+                      stdout=stdout, stderr=stderr, timeout=600)
+              if terrain != 'flat':
+                  refused = result.returncode == 1 and 'Only flat ground' in Path(f'{name}-progress.log').read_text()
+                  refused &= not Path(f'{name}.coaster').exists() and not Path(f'{name}.json').exists()
+                  failed |= not refused
+                  print(f'{terrain}/{seed}: unsupported request refused={refused}', flush=True)
+                  continue
+              report = json.loads(Path(f'{name}.json').read_text())
+              failed |= result.returncode != 0 or not report['accepted'] or report['candidate'] != 0 or not report['convergence']['passed']
+              print(f'{terrain}/{seed}: accepted={report["accepted"]} generationSeconds={report["generationSeconds"]}', flush=True)
+          if failed:
+              raise SystemExit('A ride failed its unchanged acceptance gates. See ride-checks.')
       - uses: actions/upload-artifact@v4
-        if: always() && runner.os == 'Windows'
+        if: always()
         with:
-          name: ride-checks
-          path: ride-checks
+          name: native-checks-${{ runner.os }}
+          path: |
+            ride-checks
+            *-tests.xml
+            native/build-cmake/*-tests.xml
+            native/build-cmake/Testing/Temporary
 
 # UE cooking and Mac/Metal runtime verification require suitable engine hosts.
 # Performance benchmarks are deliberately absent from this workflow.

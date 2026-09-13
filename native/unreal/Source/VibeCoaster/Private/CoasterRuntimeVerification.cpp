@@ -45,8 +45,7 @@ FString GeometryIdentity(const coaster::Design& D)
     std::ostringstream S; S.imbue(std::locale::classic()); S << std::setprecision(17);
     auto V = [&](coaster::Vec3 P) { S << P.x << ',' << P.y << ',' << P.z << ';'; };
     S << D.generationVersion << ';' << D.request.seed << ';' << int(D.request.terrain.kind) << ';' << D.track.closed << ';';
-    const auto& Landscape = D.request.terrain;
-    S << Landscape.verticalScale << ';' << Landscape.horizontalScale << ';' << Landscape.offsetX << ';' << Landscape.offsetY << ';' << Landscape.headingRadians << ';' << Landscape.cliffHeight << ';' << Landscape.cliffWidth << ';';
+    S << "1;1;0;0;0;0;600;";
     const auto& T = D.request.train;
     S << T.cars << ';' << T.carMass << ';' << T.spacing << ';' << T.seatHeight << ';' << T.dragCdA << ';' << T.rollingResistance << ';' << T.airDensity << ';';
     for (const auto& K : D.track.knots) { V(K.position); V(K.tangent); V(K.curvature); V(K.up); S << K.bank << ';' << int(K.element) << ';'; }
@@ -59,7 +58,7 @@ FString GeometryIdentity(const coaster::Design& D)
 
 struct FCoasterRuntimeVerification::FState
 {
-    enum EStage { Init, DefaultView, StartRequest, AwaitRide, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, Finish, Done } Stage = Init;
+    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, Finish, Done } Stage = Init;
     FString Output, Profile, SavePath, Error, Identity, SaveHash, PendingShot, FrameRows = TEXT("wall_seconds,ride_seconds,distance_m,speed_ms,wall_frame_ms,engine_delta_ms\n");
     FString Seed = TEXT("42"), Terrain = TEXT("flat");
     uint64 CommittedRevision = 0;
@@ -69,7 +68,8 @@ struct FCoasterRuntimeVerification::FState
     double Started = FPlatformTime::Seconds(), StageStarted = Started, TraversalStarted = 0, PreviousTick = 0, PauseTime = 0, LastRideTime = 0, LastDistance = 0, ShotRequested = 0, Duration = 0, FinalDistance = 0;
     TArray<double> ShotTimes;
     TSharedFuture<FString> CsvFinished;
-    bool CsvStarted = false, PoseChecked = false, SaveCancelChecked = false;
+    bool CsvStarted = false, PoseChecked = false, SaveCancelChecked = false, Benchmark = false;
+    int32 MotionFrames = 0;
 
     bool Write(const FString& Name, const FString& Text, bool Append = false)
     {
@@ -149,11 +149,12 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (!IFileManager::Get().MakeDirectory(*S.Output, true)) { FatalBeforeOutput(TEXT("Could not create output directory")); return; }
         if (!S.LoadOnly && !FFileHelper::SaveStringToFile(TEXT("VibeCoaster isolated runtime verification profile v1\n"), *Marker, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) { S.Fail(TEXT("Could not mark isolated profile")); return; }
         if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI")) || FApp::UseFixedTimeStep()) { S.Fail(TEXT("Real rendering and normal wall-time playback are required")); return; }
-        S.Screenshots = !FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyNoScreenshots"));
+        S.Benchmark = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyBenchmark"));
+        S.Screenshots = !S.Benchmark && !FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyNoScreenshots"));
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeed="), S.Seed);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifyTerrain="), S.Terrain);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeat="), S.Seat);
-        if (S.Seat < 0 || S.Seat > 2 || (S.Terrain != TEXT("flat") && S.Terrain != TEXT("hills") && S.Terrain != TEXT("canyon"))) { S.Fail(TEXT("Invalid terrain or seat (0 front, 1 middle, 2 rear)")); return; }
+        if (S.Seat < 0 || S.Seat > 2 || S.Terrain != TEXT("flat")) { S.Fail(TEXT("Only flat ground is available; seat must be 0 front, 1 middle or 2 rear")); return; }
         S.Write(TEXT("environment.json"), TEXT("{\"utc\":") + Q(FDateTime::UtcNow().ToIso8601()) + TEXT(",\"engine\":") + Q(FEngineVersion::Current().ToString()) + TEXT(",\"cpu\":") + Q(FPlatformMisc::GetCPUBrand()) + TEXT(",\"os\":") + Q(FPlatformMisc::GetOSVersion()) + TEXT(",\"executable\":") + Q(FPlatformProcess::ExecutablePath()) + TEXT(",\"profile\":") + Q(S.Profile) + TEXT(",\"save\":") + Q(S.SavePath) + TEXT(",\"screenshots_enabled\":") + (S.Screenshots ? TEXT("true") : TEXT("false")) + TEXT("}\n"));
         S.Event(TEXT("begin"), TEXT(",\"app_version\":") + Q(VibeCoasterAppVersion) + TEXT(",\"geometry_version\":") + Q(UTF8_TO_TCHAR(coaster::generatorVersion))); S.Advance(FState::DefaultView); return;
     }
@@ -204,7 +205,7 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         S.Advance(FState::StartRequest); break;
     case FState::StartRequest:
         PC.Settings.targets.requireIntensity = false;
-        PC.Settings.terrain.kind = S.Terrain == TEXT("flat") ? coaster::TerrainKind::Flat : S.Terrain == TEXT("hills") ? coaster::TerrainKind::Hills : coaster::TerrainKind::Canyon;
+        PC.Settings.terrain = coaster::Terrain{};
         if (S.LoadOnly) { S.SaveHash = HashFile(S.SavePath); PC.Ride->Load(); S.Event(TEXT("cross-process-load-requested")); }
         else { PC.RequestGeneration(); S.Event(TEXT("generation-requested"), TEXT(",\"seed\":") + Q(S.Seed) + TEXT(",\"terrain\":") + Q(S.Terrain)); }
         if (!S.LoadOnly && !PC.InputError.IsEmpty()) { S.Fail(PC.InputError); break; }
@@ -220,8 +221,15 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Identity = GeometryIdentity(D); S.Duration = D.simulation.frames.back().time; S.FinalDistance = D.simulation.frames.back().distance;
             if (S.LoadOnly) S.LoadChecked = true;
             S.Event(TEXT("accepted-commit"), TEXT(",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"seed\":") + Q(FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(D.request.seed))) + TEXT(",\"terrain\":") + Q(FString(UTF8_TO_TCHAR(D.request.terrain.name().c_str()))) + TEXT(",\"duration_s\":") + N(S.Duration) + TEXT(",\"track_length_m\":") + N(D.track.length) + TEXT(",\"convergence_performed\":true,\"convergence_passed\":true"));
+            if (S.Benchmark)
+            {
+                PC.Menu = false; PC.Ride->SetSeat(S.Seat);
+                PC.Ride->Restart();
+                if (PC.Ride->IsPaused()) PC.Ride->TogglePause();
+                S.Advance(FState::AwaitMotion); break;
+            }
             double ApexTime = 0, ApexHeight = -1e30, HighestTime = 0, HighestGround = -1e30;
-            double CliffTime = 0, CliffGrade = 0, LowPassTime = 0, LowPassHeight = 1e30;
+            double LowPassTime = 0, LowPassHeight = 1e30;
             TArray<double> InversionPassages;
             bool WasInverted = false;
             for (const auto& F : D.simulation.frames)
@@ -235,22 +243,12 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                 const bool Inverted = K.up.z < -.5;
                 if (Inverted && !WasInverted) InversionPassages.Add(F.time);
                 WasInverted = Inverted;
-                const double Ahead = D.request.terrain.height(K.position.x + K.tangent.x * 5, K.position.y + K.tangent.y * 5);
-                const double Behind = D.request.terrain.height(K.position.x - K.tangent.x * 5, K.position.y - K.tangent.y * 5);
-                const double GroundGrade = (Ahead - Behind) / 10;
-                if (GroundGrade < CliffGrade) { CliffGrade = GroundGrade; CliffTime = F.time; }
             }
             if (ApexHeight == -1e30) { S.Fail(TEXT("Accepted trace lacks an observable inverted-apex passage")); break; }
             S.ShotTimes = { HighestTime, S.Duration * .15, S.Duration * .35, S.Duration * .55, S.Duration * .75, FMath::Max(0., ApexTime - .4), ApexTime };
             S.Event(TEXT("pov-landmarks"), TEXT(",\"highest_ground_time_s\":") + N(HighestTime) + TEXT(",\"highest_ground_m\":") + N(HighestGround) + TEXT(",\"inverted_apex_time_s\":") + N(ApexTime) + TEXT(",\"inverted_apex_ground_m\":") + N(ApexHeight));
-            // Inspect each actual inverted passage, plus the descending terrain
-            // edge. These are sampled frames during full playback, not video.
+            // Inspect each actual inverted passage during full playback.
             for (double Time : InversionPassages) { S.ShotTimes.Add(FMath::Max(0., Time - 1)); S.ShotTimes.Add(Time + .5); }
-            if (D.request.terrain.kind == coaster::TerrainKind::Canyon)
-            {
-                S.ShotTimes.Add(FMath::Max(0., CliffTime - 2)); S.ShotTimes.Add(CliffTime); S.ShotTimes.Add(FMath::Min(S.Duration, CliffTime + 2));
-                S.Event(TEXT("cliff-landmark"), TEXT(",\"time_s\":") + N(CliffTime) + TEXT(",\"ground_grade\":") + N(CliffGrade));
-            }
             if (LowPassHeight < 1e30)
             {
                 for (double Offset : {-1., 0., 1.}) S.ShotTimes.Add(FMath::Clamp(LowPassTime + Offset, 0., S.Duration));
@@ -264,6 +262,17 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Advance(FState::OverviewView);
         }
         break;
+    case FState::AwaitMotion:
+        if (PC.Ride->IsPaused() || !PC.Ride->ActiveDesign()->accepted()) { S.Fail(TEXT("Benchmark lost its accepted playing ride")); break; }
+        if (P.Speed <= 0 || P.Time <= 0 || P.Distance <= PC.Ride->ActiveDesign()->simulation.frames.front().distance)
+        { if (Now - S.StageStarted > 10) S.Fail(TEXT("Accepted ride did not start moving")); break; }
+        // Observe motion across consecutive game ticks. Full traversal,
+        // screenshots and save/reload remain separate smoke-test requirements.
+        if (++S.MotionFrames < 3) break;
+        S.Event(TEXT("first-motion"), TEXT(",\"ride_time\":") + N(P.Time) + TEXT(",\"distance_m\":") + N(P.Distance) + TEXT(",\"speed_ms\":") + N(P.Speed));
+        if (!S.Write(TEXT("result.json"), TEXT("{\"status\":\"launch-benchmark-passed\",\"full_traversal\":false,\"verification_seconds\":") + N(Now - S.Started) + TEXT("}\n")))
+        { S.Fail(TEXT("Could not retain launch benchmark result")); break; }
+        S.Stage = FState::Done; FPlatformMisc::RequestExitWithStatus(false, 0); break;
     case FState::OverviewView:
         if (Now - S.StageStarted < 1) break;
         for (const auto& Knot : PC.Ride->ActiveDesign()->track.knots)

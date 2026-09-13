@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "../src/simulation_internal.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -55,11 +56,17 @@ int main(){try{
     auto track=straight(.003,0);TrainConfig train;train.cars=1;
     std::vector<Operation> ops{{0,track.length,DriveKind::Launch,20,4000,1000000,.2}};
     auto coarse=simulate(track,ops,train,1./240),fine=simulate(track,ops,train,1./480);
+    const auto motion=simulateMotion(track,ops,train,1./240,{});
+    check(motion.completed==coarse.completed&&motion.cancelled==coarse.cancelled&&motion.frames.size()==coarse.frames.size(),"Motion-only authoring preserves completion and trace cadence");
+    for(size_t i=0;i<motion.frames.size();++i){const auto& a=motion.frames[i];const auto& b=coarse.frames[i];
+        check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed,"Preliminary authoring motion is bit-exact with full rider-force replay");}
     check(coarse.completed&&fine.completed&&coarse.report.valid()&&fine.report.valid(),"Physical test train completes at both actual steps");
     near(coarse.metrics.maxSpeed,fine.metrics.maxSpeed,.01,"Unchanged finite-train dynamics converge");
     for(const auto* result:{&coarse,&fine}){
         double rate=0;for(const auto& seat:result->metrics.seats)rate=std::max(rate,seat.axes[0].maxRateGps);
         near(rate,result->metrics.maxJerkGps,0,"Global and per-seat analytic vertical rates use one convention");
+        double exposure=0;for(const auto& seat:result->metrics.seats)exposure=std::max(exposure,seat.exposure10Seconds);
+        near(exposure,result->metrics.exposure10Seconds,0,"Global exposure is the maximum of the same per-seat measurements");
     }
     check(std::abs(coarse.metrics.maxJerkGps-fine.metrics.maxJerkGps)/std::max(1.,std::abs(fine.metrics.maxJerkGps))<.02,"Analytic vertical rate converges without differencing or smoothing");
     auto finest=simulate(track,ops,train,1./4000);check(finest.completed&&finest.report.valid(),"Minimum public requested step has a valid genuine half-step");

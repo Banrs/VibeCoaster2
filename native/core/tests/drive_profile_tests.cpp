@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "../src/simulation_internal.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -7,6 +8,15 @@ static void check(bool ok,const char* why){++checks;if(!ok)throw std::runtime_er
 static bool equal(const Operation& a,const Operation& b){return a.start==b.start&&a.end==b.end&&a.kind==b.kind&&a.targetSpeed==b.targetSpeed&&a.maxForce==b.maxForce&&a.maxPower==b.maxPower&&a.rampSeconds==b.rampSeconds&&a.stopDeceleration==b.stopDeceleration&&a.stopOffset==b.stopOffset&&a.exitFadeMeters==b.exitFadeMeters;}
 static Operation op(double start,double end){return {start,end,DriveKind::Boost,65,5250,525000,.5,2.4,.2};}
 int main(){try{
+    std::vector<Operation> indexed;
+    for(int i=0;i<97;++i)indexed.push_back(op(std::fmod(i*137.,1024.),std::fmod(i*59.,1024.)));
+    indexed.push_back(op(1024,0));indexed.push_back(op(0,1024));
+    const DriveIndex index(indexed,1024);
+    for(double s=0;s<=1024;s+=.25)for(double probe:{s,std::nextafter(s,0.),std::nextafter(s,INFINITY)})if(probe<1024){
+        const auto& candidates=index.at(probe);check(std::is_sorted(candidates.begin(),candidates.end()),"Spatial drive lookup preserves force summation order");
+        for(size_t i=0;i<indexed.size();++i){const auto& op=indexed[i];bool active=op.start<=op.end?(probe>=op.start&&probe<op.end):(probe>=op.start||probe<op.end);
+            check(!active||std::binary_search(candidates.begin(),candidates.end(),i),"Spatial lookup includes overlapping, wrapping and exact-boundary operations");}
+    }
     std::vector<Operation> empty;coalesceDriveProfiles(empty);check(empty.empty(),"Empty operations remain empty");
     auto a=op(0,100),b=op(100,200),c=op(200,300);std::vector<Operation> chain{a,b,c};coalesceDriveProfiles(chain);check(chain.size()==1&&equal(chain[0],op(0,300)),"Exactly identical contiguous run coalesces");auto once=chain;coalesceDriveProfiles(chain);check(chain.size()==once.size()&&equal(chain[0],once[0]),"Coalescing is idempotent");
     for(int field=0;field<8;++field){auto changed=b;switch(field){case 0:changed.kind=DriveKind::Brake;break;case 1:changed.targetSpeed=66;break;case 2:changed.maxForce+=1;break;case 3:changed.maxPower+=1;break;case 4:changed.rampSeconds+=.1;break;case 5:changed.stopDeceleration+=.1;break;case 6:changed.stopOffset+=.1;break;case 7:changed.exitFadeMeters+=.1;break;}
