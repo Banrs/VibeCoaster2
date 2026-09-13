@@ -59,7 +59,7 @@ FString GeometryIdentity(const coaster::Design& D)
 
 struct FCoasterRuntimeVerification::FState
 {
-    enum EStage { Init, DefaultView, StartRequest, AwaitRide, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, Finish, Done } Stage = Init;
+    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, Finish, Done } Stage = Init;
     FString Output, Profile, SavePath, Error, Identity, SaveHash, PendingShot, FrameRows = TEXT("wall_seconds,ride_seconds,distance_m,speed_ms,wall_frame_ms,engine_delta_ms\n");
     FString Seed = TEXT("42"), Terrain = TEXT("flat");
     uint64 CommittedRevision = 0;
@@ -69,7 +69,8 @@ struct FCoasterRuntimeVerification::FState
     double Started = FPlatformTime::Seconds(), StageStarted = Started, TraversalStarted = 0, PreviousTick = 0, PauseTime = 0, LastRideTime = 0, LastDistance = 0, ShotRequested = 0, Duration = 0, FinalDistance = 0;
     TArray<double> ShotTimes;
     TSharedFuture<FString> CsvFinished;
-    bool CsvStarted = false, PoseChecked = false, SaveCancelChecked = false;
+    bool CsvStarted = false, PoseChecked = false, SaveCancelChecked = false, Benchmark = false;
+    int32 MotionFrames = 0;
 
     bool Write(const FString& Name, const FString& Text, bool Append = false)
     {
@@ -149,7 +150,8 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (!IFileManager::Get().MakeDirectory(*S.Output, true)) { FatalBeforeOutput(TEXT("Could not create output directory")); return; }
         if (!S.LoadOnly && !FFileHelper::SaveStringToFile(TEXT("VibeCoaster isolated runtime verification profile v1\n"), *Marker, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) { S.Fail(TEXT("Could not mark isolated profile")); return; }
         if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI")) || FApp::UseFixedTimeStep()) { S.Fail(TEXT("Real rendering and normal wall-time playback are required")); return; }
-        S.Screenshots = !FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyNoScreenshots"));
+        S.Benchmark = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyBenchmark"));
+        S.Screenshots = !S.Benchmark && !FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyNoScreenshots"));
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeed="), S.Seed);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifyTerrain="), S.Terrain);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeat="), S.Seat);
@@ -220,6 +222,13 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Identity = GeometryIdentity(D); S.Duration = D.simulation.frames.back().time; S.FinalDistance = D.simulation.frames.back().distance;
             if (S.LoadOnly) S.LoadChecked = true;
             S.Event(TEXT("accepted-commit"), TEXT(",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"seed\":") + Q(FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(D.request.seed))) + TEXT(",\"terrain\":") + Q(FString(UTF8_TO_TCHAR(D.request.terrain.name().c_str()))) + TEXT(",\"duration_s\":") + N(S.Duration) + TEXT(",\"track_length_m\":") + N(D.track.length) + TEXT(",\"convergence_performed\":true,\"convergence_passed\":true"));
+            if (S.Benchmark)
+            {
+                PC.Menu = false; PC.Ride->SetSeat(S.Seat);
+                PC.Ride->Restart();
+                if (PC.Ride->IsPaused()) PC.Ride->TogglePause();
+                S.Advance(FState::AwaitMotion); break;
+            }
             double ApexTime = 0, ApexHeight = -1e30, HighestTime = 0, HighestGround = -1e30;
             double CliffTime = 0, CliffGrade = 0, LowPassTime = 0, LowPassHeight = 1e30;
             TArray<double> InversionPassages;
@@ -264,6 +273,17 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Advance(FState::OverviewView);
         }
         break;
+    case FState::AwaitMotion:
+        if (PC.Ride->IsPaused() || !PC.Ride->ActiveDesign()->accepted()) { S.Fail(TEXT("Benchmark lost its accepted playing ride")); break; }
+        if (P.Speed <= 0 || P.Time <= 0 || P.Distance <= PC.Ride->ActiveDesign()->simulation.frames.front().distance)
+        { if (Now - S.StageStarted > 10) S.Fail(TEXT("Accepted ride did not start moving")); break; }
+        // Observe motion across consecutive game ticks. Full traversal,
+        // screenshots and save/reload remain separate smoke-test requirements.
+        if (++S.MotionFrames < 3) break;
+        S.Event(TEXT("first-motion"), TEXT(",\"ride_time\":") + N(P.Time) + TEXT(",\"distance_m\":") + N(P.Distance) + TEXT(",\"speed_ms\":") + N(P.Speed));
+        if (!S.Write(TEXT("result.json"), TEXT("{\"status\":\"launch-benchmark-passed\",\"full_traversal\":false,\"verification_seconds\":") + N(Now - S.Started) + TEXT("}\n")))
+        { S.Fail(TEXT("Could not retain launch benchmark result")); break; }
+        S.Stage = FState::Done; FPlatformMisc::RequestExitWithStatus(false, 0); break;
     case FState::OverviewView:
         if (Now - S.StageStarted < 1) break;
         for (const auto& Knot : PC.Ride->ActiveDesign()->track.knots)

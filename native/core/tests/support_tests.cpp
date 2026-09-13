@@ -21,10 +21,10 @@ static void corrupt(const fs::path& p,std::vector<std::string> v,size_t row,size
 static bool code(const ValidationReport& r,const char* s){for(auto& f:r.errors)if(f.code==s)return true;return false;}
 static void sameSupport(const Support& a,const Support& b){exact(a.base,b.base,"Support base exact");exact(a.top,b.top,"Support top exact");exact(a.attachment,b.attachment,"Support attachment exact");check(a.hasAttachment==b.hasAttachment&&a.trackDistance==b.trackDistance,"Support contact identity exact");check(a.members.size()==b.members.size(),"Member count exact");for(size_t i=0;i<a.members.size();++i){auto& x=a.members[i];auto& y=b.members[i];exact(x.base,y.base,"Member base exact");exact(x.top,y.top,"Member top exact");check(x.radiusBase==y.radiusBase&&x.radiusTop==y.radiusTop&&x.kind==y.kind&&x.spineContact==y.spineContact,"Member radii/kind/contact exact");}}
 int main(int argc,char** argv){try{
-    if(argc!=2)throw std::runtime_error("Pass native directory");fs::path native=fs::absolute(argv[1]),root=fs::path(__FILE__).parent_path().parent_path().parent_path(),out=root/"test-output";fs::create_directories(out);
+    if(argc!=2)throw std::runtime_error("Pass historical fixture directory");fs::path fixtures=fs::absolute(argv[1]),root=fs::current_path(),out=root/"support-test-output";fs::create_directories(out);
     std::string error;int legacyCases=0,legacyRejected=0;
     for(const auto& relative:{"legacy-v021-hills.coaster","legacy-v021-canyon.coaster","legacy-v021.coaster","pacing-hills.coaster","pacing-canyon.coaster","pacing-flat.coaster"}){
-        fs::path path=native/relative;std::string original=bytes(path);check(!original.empty(),"Historical fixture exists");Design retained;retained.request.seed=98765;const auto before=reportJson(retained);
+        fs::path path=fixtures/relative;std::string original=bytes(path);check(!original.empty(),"Historical fixture exists");Design retained;retained.request.seed=98765;const auto before=reportJson(retained);
         check(!loadDesign(path.string(),retained,error),"Prior geometry schemas are explicitly unsupported");check(reportJson(retained)==before,"Unsupported load retains its destination");check(bytes(path)==original,"Historical fixture unchanged");++legacyRejected;
     }
     GenerationRequest baselineRequest;baselineRequest.seed=42;baselineRequest.terrain.kind=TerrainKind::Hills;baselineRequest.targets.requireIntensity=false;Design baseline=generate(baselineRequest);check(baseline.accepted(),"Current geometry baseline accepted");

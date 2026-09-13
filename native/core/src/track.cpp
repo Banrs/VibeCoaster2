@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "arc_length.hpp"
 #include <stdexcept>
 #include <unordered_map>
 #include <optional>
@@ -67,13 +68,7 @@ double Terrain::height(double x,double y) const {
 std::string Terrain::name() const {return kind==TerrainKind::Flat?"flat":kind==TerrainKind::Hills?"hills":"canyon";}
 static Vec3 transport(Vec3 up,Vec3 a,Vec3 b){Vec3 c=cross(a,b);double s=norm(c);if(s>1e-10)up=rotate(up,c/s,std::atan2(s,dot(a,b)));return unit(up-b*dot(up,b));}
 static Vec3 der(const Span& sp,double u){Vec3 v=sp.c[7]*7;for(int i=6;i>=1;--i)v=v*u+sp.c[i]*i;return v;}
-static double arc(const Span& sp,double u){
-    // Positive eight-point Gaussian quadrature integrates the degree-six
-    // forward projection exactly. The narrow derivative cone keeps speed smooth.
-    constexpr double x[4]={.18343464249564980494,.52553240991632898582,.79666647741362673959,.96028985649753623168};
-    constexpr double w[4]={.36268378337836198297,.31370664587788728734,.22238103445337447054,.10122853629037625915};
-    double r=0;for(int i=0;i<4;++i)r+=w[i]*(norm(der(sp,(1-x[i])*u*.5))+norm(der(sp,(1+x[i])*u*.5)));return r*u*.5;
-}
+static double arc(const Span& sp,double u){return detail::spanArcLength(sp,u);}
 static double binomial(int n,int k){double result=1;for(int i=1;i<=k;++i)result=result*(n-i+1)/i;return result;}
 void Track::rebuild(){
     if(knots.size()<4||knots.size()>200000)throw std::runtime_error("Invalid knot count");

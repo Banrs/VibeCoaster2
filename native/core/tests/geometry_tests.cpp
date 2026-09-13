@@ -6,6 +6,12 @@ static int checks;
 static void check(bool ok,const char* what){++checks;if(!ok)throw std::runtime_error(what);}
 static void close(Vec3 a,Vec3 b,double eps,const char* what){check(norm(a-b)<=eps,what);}
 static Vec3 derivative(const Span& sp,double u,int order){Vec3 sum{};for(int k=7;k>=order;--k){double f=1;for(int j=0;j<order;++j)f*=k-j;sum=sum*u+sp.c[k]*f;}return sum;}
+static double scalarArc(const Span& sp,double u){
+    constexpr double x[]={.18343464249564980494,.52553240991632898582,.79666647741362673959,.96028985649753623168};
+    constexpr double w[]={.36268378337836198297,.31370664587788728734,.22238103445337447054,.10122853629037625915};
+    auto speed=[&](double at){Vec3 v=sp.c[7]*7;for(int k=6;k>=1;--k)v=v*at+sp.c[k]*k;return norm(v);};
+    double sum=0;for(int i=0;i<4;++i)sum+=w[i]*(speed((1-x[i])*u*.5)+speed((1+x[i])*u*.5));return sum*u*.5;
+}
 static Vec3 geometricJ(const Span& sp,double u){
     Vec3 d=derivative(sp,u,1),dd=derivative(sp,u,2),ddd=derivative(sp,u,3);double q=norm(d);Vec3 t=d/q;
     const double qu=dot(t,dd);Vec3 tu=(dd-t*qu)/q;
@@ -16,6 +22,7 @@ static void verifyJoins(const Track& t){
     bool highOrder=false;
     for(size_t i=0;i<t.spans.size();++i){
         const auto& sp=t.spans[i];highOrder=highOrder||norm(sp.c[6])+norm(sp.c[7])>1e-13;
+        for(double u:{0.,.013,.23,.5,.91,1.})check(t.distanceAtSpan(i,u)==sp.start+scalarArc(sp,u),"Paired quadrature is bit-exact with the scalar Gaussian rule");
         close(derivative(sp,0,0),t.knots[i].position,2e-10,"Septic start interpolation");close(derivative(sp,1,0),t.knots[i+1].position,2e-9,"Septic end interpolation");
         for(int k=0;k<=10;++k){double u=k/10.,distance=t.distanceAtSpan(i,u);if(t.closed&&i+1==t.spans.size()&&k==10)distance=0;
             auto at=t.locate(distance);auto a=t.sampleSpan(i,u),b=t.sample(distance);close(a.position,b.position,2e-9,"Distance/parameter roundtrip");close(a.up,b.up,2e-9,"Distance/frame parameter roundtrip");check(at.parameter>=0&&at.parameter<=1,"Inversion bounded parameter");}
