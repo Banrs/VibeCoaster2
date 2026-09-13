@@ -46,6 +46,11 @@ add_executable(fvd_tests core/tests/fvd_tests.cpp)
 target_link_libraries(fvd_tests PRIVATE coaster_fvd)
 add_test(NAME fvd COMMAND fvd_tests)
 
+get_property(core_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${core_tests} PROPERTIES LABELS component)
+set_tests_properties(core core_persistence persistence_cancel reference support
+  support_family organic_generation station structures PROPERTIES LABELS integration)
+
 # Explicit matrix convergence tool, excluded from automatic CTest runs.
 add_executable(coaster_convergence core/src/convergence_main.cpp)
 target_link_libraries(coaster_convergence PRIVATE coaster_core)
