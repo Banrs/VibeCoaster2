@@ -7,8 +7,8 @@ namespace {
 int checks=0;
 void check(bool condition,const char* message){++checks;if(!condition)throw std::runtime_error(message);}
 size_t feet(const Support& s){return std::count_if(s.members.begin(),s.members.end(),[](const SupportMember& m){return m.kind==SupportMemberKind::Footing;});}
-Design circle(double height,TerrainKind terrain=TerrainKind::Flat,double bank=0,const Terrain* profile=nullptr){
-    Design d;d.request.terrain.kind=terrain;if(profile)d.request.terrain=*profile;
+Design circle(double height,double bank=0){
+    Design d;
     std::vector<AuthoredPoint> points;
     for(int i=0;i<=360;++i){double a=2*pi*i/360;points.push_back({{200*std::cos(a),200*std::sin(a),height},bank,Element::Return});}
     d.track=compile(points,true);buildSupportLayout(d);return d;
@@ -25,7 +25,7 @@ void validate(const Design& d){
     }
 }
 }
-int main(int argc,char** argv){try{
+int main(){try{
     // Standalone geometric fixtures do not claim physics or record acceptance.
     auto low=circle(10),medium=circle(45),tall=circle(180);
     validate(low);validate(medium);validate(tall);
@@ -43,19 +43,10 @@ int main(int argc,char** argv){try{
     check(maximumGap-minimumGap>3,"Curved crest and straight approach receive different support spacing");
     auto groundHugging=circle(4.7);validate(groundHugging);
     for(const auto& s:groundHugging.supports)check(feet(s)==1&&norm(s.top-s.attachment)<1.1,"Low rail uses a shortened connected pier neck while retaining full swept clearance");
-    // Lowering a cap along tilted rail-up also changes its ground location.
-    // A neck sized at attachment XY can leave a nominal 3 m pier below 3 m.
-    Design slopedLow;slopedLow.request.terrain=Terrain::seeded(TerrainKind::Hills,9);
-    std::vector<AuthoredPoint> slopedLowPoints;
-    for(int i=0;i<=20;++i)slopedLowPoints.push_back({{-263.03-.534*i,390.986+.845*i,11.086+.041*i},0,Element::Return});
-    slopedLow.track=compile(slopedLowPoints,false);buildSupportLayout(slopedLow);validate(slopedLow);
-    check(slopedLow.supports.size()==1&&feet(slopedLow.supports.front())==1,"Low inclined track on sloped ground retains a connected compact pier");
-    const auto& slopedPier=slopedLow.supports.front();
-    check(slopedPier.top.z-slopedLow.request.terrain.height(slopedPier.top.x,slopedPier.top.y)>=3,"Actual cap ground location respects the unchanged 3 m compact-pier minimum");
     auto lower=circle(7),higher=circle(20);validate(lower);validate(higher);
     check(higher.supports[0].members[1].radiusBase>lower.supports[0].members[1].radiusBase,"Post thickness adapts to height");
     check(higher.supports[0].members[0].radiusBase>lower.supports[0].members[0].radiusBase,"Footing radius adapts to height");
-    auto banked=circle(45,TerrainKind::Flat,.55);validate(banked);
+    auto banked=circle(45,.55);validate(banked);
     for(const auto& s:banked.supports)check(feet(s)==2,"Moderately banked sections remain connected paired bents");
     Design sideways;std::vector<AuthoredPoint> rollingPoints;
     for(int i=0;i<=200;++i)rollingPoints.push_back({{double(i),0,100},pi*smooth(i/80.),Element::Inversion});
@@ -63,51 +54,6 @@ int main(int argc,char** argv){try{
     // A clear ordinary placement is preferable here; the frozen production
     // regression independently exercises the additional bank-normal candidates.
     check(!sideways.supports.empty(),"Rolling open-section fixture produces certified supports");
-    auto hill=circle(45,TerrainKind::Hills),canyon=circle(100,TerrainKind::Canyon);validate(hill);validate(canyon);
-    bool changedTerrainHeights=false;
-    for(const auto& s:hill.supports)if(feet(s)==2)changedTerrainHeights|=std::abs(s.members[0].base.z-s.members[2].base.z)>1e-5;
-    check(changedTerrainHeights,"Each paired footing adapts independently to local terrain");
-    // Support-specific regression: a rotated, compressed seeded cliff needs a
-    // larger footing envelope than the former fixed canyon slope of .30.
-    auto cliffProfile=Terrain::seeded(TerrainKind::Canyon,42);
-    cliffProfile.horizontalScale=.5;cliffProfile.verticalScale=.4;
-    check(cliffProfile.valid()&&cliffProfile.slopeBound()>.30,"Cliff footprint fixture exceeds the historical slope bound");
-    double cliffTop=-1e30;
-    for(int i=0;i<360;++i){double a=2*pi*i/360;cliffTop=std::max(cliffTop,cliffProfile.height(200*std::cos(a),200*std::sin(a)));}
-    auto cliff=circle(cliffTop+35,TerrainKind::Canyon,0,&cliffProfile);validate(cliff);
-    size_t cliffFootings=0;
-    for(const auto& s:cliff.supports)for(const auto& m:s.members)if(m.kind==SupportMemberKind::Footing){
-        ++cliffFootings;const double radius=std::max(m.radiusBase,m.radiusTop);
-        for(int i=0;i<32;++i){double a=2*pi*i/32;double ground=cliffProfile.height(m.base.x+radius*std::cos(a),m.base.y+radius*std::sin(a));
-            check(m.base.z<=ground-.5&&m.top.z>=ground+.2,"Full footing circumference remains terrain anchored on rotated cliff");}
-    }
-    check(cliffFootings>0,"Cliff footprint fixture exercises real canonical footings");
-    // The first generated footing can correctly be on the flat floor/rim.
-    // Put this negative control at the actual wall derivative maximum instead.
-    const double wallY=260+.5*cliffProfile.cliffWidth;
-    const double heading=cliffProfile.headingRadians;
-    Vec3 wall{cliffProfile.offsetX-cliffProfile.horizontalScale*std::sin(heading)*wallY,
-        cliffProfile.offsetY+cliffProfile.horizontalScale*std::cos(heading)*wallY,0};
-    wall.z=cliffProfile.height(wall.x,wall.y);
-    constexpr double wallRadius=.5;
-    const double wallSlope=cliffProfile.localSlopeBound(wall.x,wall.y,wallRadius);
-    check(wallSlope>.30,"Negative footing control lies on an actual steep wall disk");
-    const Vec3 wallBase=wall-Vec3{0,0,wallSlope*wallRadius+.6};
-    const Vec3 wallTop=wall+Vec3{0,0,wallSlope*wallRadius+.3};
-    const Vec3 wallJoint=wallTop+Vec3{0,0,.1};
-    // Isolated canonical support-definition fixture, not an accepted ride.
-    Support wallSupport{wall,wallTop,wallJoint,true,0,{
-        {wallBase,wallTop,wallRadius,wallRadius,SupportMemberKind::Footing,false},
-        {wallTop,wallJoint,supportRadius,supportRadius,SupportMemberKind::Steel,true}}};
-    check(validateSupportMembers(wallSupport,cliffProfile).valid(),"Full-depth wall footing positive control is geometrically valid");
-    auto undersized=wallSupport;
-    undersized.members.front().base.z=wall.z-.30*wallRadius-.5;
-    bool actualAnchorGap=false;
-    for(int i=0;i<64;++i){double angle=2*pi*i/64;double ground=cliffProfile.height(wall.x+wallRadius*std::cos(angle),wall.y+wallRadius*std::sin(angle));
-        actualAnchorGap|=undersized.members.front().base.z>ground-.5;}
-    check(actualAnchorGap,"Old .30 envelope actually misses terrain anchoring around the wall footing");
-    auto insufficient=validateSupportMembers(undersized,cliffProfile);
-    check(insufficient.errors.size()==1&&insufficient.errors.front().code=="SUPPORT_FOOTING","Under-depth steep-wall footing fails specifically SUPPORT_FOOTING");
     // Near-vertical axes are accepted within 1e-6 m of XY drift. Their actual
     // frustum caps still tilt: an axis endpoint at the old enclosure boundary
     // must not stand in for the highest/lowest point of the circular cap.
@@ -134,20 +80,11 @@ int main(int argc,char** argv){try{
         auto rejected=validateSupportMembers(tilted,flatFootingTerrain);
         check(rejected.errors.size()==1&&rejected.errors.front().code=="SUPPORT_FOOTING","Tolerated axis tilt cannot hide a cap anchoring gap");
     }
-    auto wallBoundary=wallSupport;
-    wallBoundary.members[0].base.z=wall.z-wallSlope*wallRadius-.5+1e-6;
-    check(validateSupportMembers(wallBoundary,cliffProfile).valid(),"Vertical wall boundary is the valid local-disk positive control");
-    auto tiltedWall=tiltFixture(wallBoundary);
-    auto tiltedWallReport=validateSupportMembers(tiltedWall,cliffProfile);
-    check(tiltedWallReport.errors.size()==1&&tiltedWallReport.errors.front().code=="SUPPORT_FOOTING","Tilted wall footing includes XY drift in the local terrain disk");
-    auto invalidProfile=cliffProfile;invalidProfile.horizontalScale=0;
-    check(!validateSupportMembers(cliff.supports.front(),invalidProfile).valid(),"Invalid terrain profile fails before support validation");
-    if(argc==2&&std::string(argv[1])=="--terrain-footprints-only"){std::cout<<"PASS "<<checks<<" focused support terrain-footprint checks\n";return 0;}
     int calls=0;bool cancelled=false;
     try{buildSupportLayout(low,[&]{return ++calls>12;});}catch(const std::exception& e){cancelled=std::string(e.what())=="CANCELLED";}
     check(cancelled,"New placement path preserves cancellation");
-    for(const auto kind:{TerrainKind::Flat,TerrainKind::Hills,TerrainKind::Canyon}){
-        GenerationRequest request;request.seed=42;request.terrain.kind=kind;request.targets.requireIntensity=false;
+    {
+        GenerationRequest request;request.seed=42;request.targets.requireIntensity=false;
         auto d=generate(request);
         if(!d.accepted())for(const auto& e:d.report.errors)std::cerr<<e.code<<": "<<e.message<<'\n';
         check(d.accepted(),"Actual seed42 generation passes unchanged physics and mandatory convergence");

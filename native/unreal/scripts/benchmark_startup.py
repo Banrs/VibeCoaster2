@@ -104,7 +104,7 @@ def main():
     (root / "metadata.json").write_text(json.dumps(metadata, indent=2))
     rows = []
     for repetition in range(args.runs + 1):
-        for terrain in ("flat", "hills", "canyon"):
+        for terrain in ("flat",):
             order = ("before", "after") if repetition % 2 == 0 else ("after", "before")
             for variant in order:
                 row = {"variant": variant, "terrain": terrain, "seed": args.seed, "repetition": repetition,
@@ -114,7 +114,7 @@ def main():
                     stream.write(json.dumps(row) + "\n")
                 print(json.dumps(row), flush=True)
     summary = []
-    for terrain in ("flat", "hills", "canyon"):
+    for terrain in ("flat",):
         values = {v: [r["launch_to_motion_seconds"] for r in rows if r["terrain"] == terrain
                       and r["variant"] == v and r["repetition"] > 0] for v in executables}
         medians = {v: statistics.median(times) for v, times in values.items()}

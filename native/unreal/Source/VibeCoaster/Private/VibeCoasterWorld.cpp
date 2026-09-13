@@ -79,7 +79,7 @@ struct FCoasterRuntime
     int32 Seat = 0;
     bool Paused = true, Overview = false;
     FBox Bounds{ForceInit};
-    FString Message = TEXT("Configure a seed and terrain, then Generate. All-record mode needs an I305 exposure reference.");
+    FString Message = TEXT("Configure a seed, then Generate on flat ground. All-record mode needs an I305 exposure reference.");
 };
 
 void FCoasterRuntimeDeleter::operator()(FCoasterRuntime* Pointer) const { delete Pointer; }
@@ -359,7 +359,7 @@ void AVibeCoasterWorld::CommitChunks()
         // Populate the hidden component before registration so its first scene
         // proxy already has the final section and material.
         Mesh->CreateMeshSection(0, Chunk.Vertices, Chunk.Indices, Chunk.Normals, Chunk.UV, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
-        Mesh->SetMaterial(0, Chunk.Terrain ? GroundMaterial : Chunk.Footing ? FootingMaterial : Chunk.Structure ? StructureMaterial : RailMaterial);
+        Mesh->SetMaterial(0, Chunk.Ground ? GroundMaterial : Chunk.Footing ? FootingMaterial : Chunk.Structure ? StructureMaterial : RailMaterial);
         Mesh->RegisterComponent();
         Staging->Chunks.Add(Mesh);
         Chunk = VibeMesh::FChunk{}; // Release CPU vertex copies once committed.

@@ -67,13 +67,12 @@ void AVibeCoasterController::ChangeRow(int32 Direction)
         SeedText = FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(Value));
         break;
     }
-    case 1: Settings.terrain.kind = static_cast<coaster::TerrainKind>((static_cast<int32>(Settings.terrain.kind) + Direction + 3) % 3); break;
-    case 2: Settings.targets.requireIntensity = !Settings.targets.requireIntensity; break;
-    case 3: Settings.targets.height = FMath::Clamp(Settings.targets.height + Direction * 5, 220., 350.); break;
-    case 4: Settings.targets.speed = FMath::Clamp(Settings.targets.speed + Direction, 75., 110.); break;
-    case 5: Settings.targets.inversionHeight = FMath::Clamp(Settings.targets.inversionHeight + Direction * 5, 80., 140.); break;
-    case 6: Settings.targets.launchSeconds = FMath::Clamp(Settings.targets.launchSeconds + Direction * .05, .8, 1.4); break;
-    case 7: Settings.maxCandidates = FMath::Clamp(Settings.maxCandidates + Direction, 1, 32); break;
+    case 1: Settings.targets.requireIntensity = !Settings.targets.requireIntensity; break;
+    case 2: Settings.targets.height = FMath::Clamp(Settings.targets.height + Direction * 5, 220., 350.); break;
+    case 3: Settings.targets.speed = FMath::Clamp(Settings.targets.speed + Direction, 75., 110.); break;
+    case 4: Settings.targets.inversionHeight = FMath::Clamp(Settings.targets.inversionHeight + Direction * 5, 80., 140.); break;
+    case 5: Settings.targets.launchSeconds = FMath::Clamp(Settings.targets.launchSeconds + Direction * .05, .8, 1.4); break;
+    case 6: Settings.maxCandidates = FMath::Clamp(Settings.maxCandidates + Direction, 1, 32); break;
     }
 }
 void AVibeCoasterController::RequestGeneration()
@@ -123,8 +122,8 @@ void AVibeCoasterController::PlayerTick(float DeltaSeconds)
         }
     }
     if (!Menu || ShowComparison) return;
-    if (WasInputKeyJustPressed(EKeys::Up)) SelectedRow = (SelectedRow + 7) % 8;
-    if (WasInputKeyJustPressed(EKeys::Down)) SelectedRow = (SelectedRow + 1) % 8;
+    if (WasInputKeyJustPressed(EKeys::Up)) SelectedRow = (SelectedRow + 6) % 7;
+    if (WasInputKeyJustPressed(EKeys::Down)) SelectedRow = (SelectedRow + 1) % 7;
     if (WasInputKeyJustPressed(EKeys::Left)) ChangeRow(-1);
     if (WasInputKeyJustPressed(EKeys::Right)) ChangeRow(1);
     if (WasInputKeyJustPressed(EKeys::Enter)) RequestGeneration();
@@ -142,16 +141,15 @@ FString AVibeCoasterController::RowText(int32 Row) const
     switch (Row)
     {
     case 0: return TEXT("Seed: ") + SeedText + TEXT("   (Left/Right changes; type digits; Delete clears)");
-    case 1: return TEXT("Terrain: ") + FString(UTF8_TO_TCHAR(Settings.terrain.name().c_str()));
-    case 2:
+    case 1:
         if (!Settings.targets.requireIntensity) return TEXT("Mode: PHYSICS-PROOF (intensity comparison OFF)");
         return std::isfinite(Settings.targets.referenceExposure) && !Settings.targets.referenceId.empty()
             ? TEXT("Mode: ALL RECORDS (configured reference)") : TEXT("Mode: ALL RECORDS — UNAVAILABLE: I305 benchmark missing");
-    case 3: return FString::Printf(TEXT("Maximum track height above ground >= %.0f m"), Settings.targets.height);
-    case 4: return FString::Printf(TEXT("Maximum speed >= %.1f km/h"), Settings.targets.speed * 3.6);
-    case 5: return FString::Printf(TEXT("Inversion height above ground >= %.0f m"), Settings.targets.inversionHeight);
-    case 6: return FString::Printf(TEXT("Launch 0-180 km/h <= %.2f s"), Settings.targets.launchSeconds);
-    case 7: return FString::Printf(TEXT("Candidate search budget: %d"), Settings.maxCandidates);
+    case 2: return FString::Printf(TEXT("Maximum track height above ground >= %.0f m"), Settings.targets.height);
+    case 3: return FString::Printf(TEXT("Maximum speed >= %.1f km/h"), Settings.targets.speed * 3.6);
+    case 4: return FString::Printf(TEXT("Inversion height above ground >= %.0f m"), Settings.targets.inversionHeight);
+    case 5: return FString::Printf(TEXT("Launch 0-180 km/h <= %.2f s"), Settings.targets.launchSeconds);
+    case 6: return FString::Printf(TEXT("Candidate search budget: %d"), Settings.maxCandidates);
     default: return FString();
     }
 }
@@ -239,7 +237,7 @@ void AVibeCoasterHUD::DrawHUD()
         Line(FString(TEXT("VIBECOASTER  /  ")) + VibeCoasterAppVersion, Accent);
         Line(TEXT("Up/Down selects  |  Left/Right changes  |  Enter/G generates"));
         Y += 8 * Scale;
-        for (int32 Row = 0; Row < 8; ++Row) Line((Row == PC->SelectedRow ? TEXT("> ") : TEXT("  ")) + PC->RowText(Row), Row == PC->SelectedRow ? Accent : FLinearColor::White);
+        for (int32 Row = 0; Row < 7; ++Row) Line((Row == PC->SelectedRow ? TEXT("> ") : TEXT("  ")) + PC->RowText(Row), Row == PC->SelectedRow ? Accent : FLinearColor::White);
         Y += 8 * Scale;
         if (!std::isfinite(PC->Settings.targets.referenceExposure)) Line(TEXT("ALL RECORDS needs authentic I305/Pantherian force recordings."), Amber);
         else Line(PC->Settings.targets.reference.processed ? TEXT("Processed reference group loaded. C: median, spread, n and uncertainty.") : TEXT("Reference: user-configured/unverified. C opens comparison."), Amber);

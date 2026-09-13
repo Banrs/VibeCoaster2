@@ -27,7 +27,7 @@ int main(int argc,char** argv){try{
         fs::path path=fixtures/relative;std::string original=bytes(path);check(!original.empty(),"Historical fixture exists");Design retained;retained.request.seed=98765;const auto before=reportJson(retained);
         check(!loadDesign(path.string(),retained,error),"Prior geometry schemas are explicitly unsupported");check(reportJson(retained)==before,"Unsupported load retains its destination");check(bytes(path)==original,"Historical fixture unchanged");++legacyRejected;
     }
-    GenerationRequest baselineRequest;baselineRequest.seed=42;baselineRequest.terrain.kind=TerrainKind::Hills;baselineRequest.targets.requireIntensity=false;Design baseline=generate(baselineRequest);check(baseline.accepted(),"Current geometry baseline accepted");
+    GenerationRequest baselineRequest;baselineRequest.seed=42;baselineRequest.targets.requireIntensity=false;Design baseline=generate(baselineRequest);check(baseline.accepted(),"Current geometry baseline accepted");
     auto d=baseline;d.station=buildStation(d.track,d.request.terrain,d.request.train);buildSupportLayout(d);d.generationVersion=generatorVersion;d.report=validateGeometry(d.track,d.request.terrain,d.request.limits,d.request.train,d.supports);d.simulation=simulate(d.track,d.operations,d.request.train,d.request.simulationStep);evaluateTargets(d);verifyConvergence(d);check(d.accepted(),"Explicit tower replacement accepted");check(validateDesignStructures(d).valid(),"Explicit replacement station and supports mutually clear");check(d.track.knots.size()==baseline.track.knots.size(),"Support replacement preserves knot count");
     for(size_t i=0;i<d.track.knots.size();++i){auto& a=d.track.knots[i];auto& b=baseline.track.knots[i];exact(a.position,b.position,"Track position unchanged");exact(a.tangent,b.tangent,"Track tangent unchanged");exact(a.curvature,b.curvature,"Track curvature unchanged");exact(a.up,b.up,"Track up unchanged");check(a.bank==b.bank&&a.element==b.element,"Track bank/element unchanged");}
     check(d.simulation.frames.size()==baseline.simulation.frames.size(),"Physics sample count unchanged");for(size_t i=0;i<d.simulation.frames.size();++i){auto& a=d.simulation.frames[i];auto& b=baseline.simulation.frames[i];check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed,"Physics timing/distance/speed unchanged");for(int seat=0;seat<3;++seat)check(a.seats[seat].vertical==b.seats[seat].vertical&&a.seats[seat].lateral==b.seats[seat].lateral&&a.seats[seat].longitudinal==b.seats[seat].longitudinal,"Measured rider forces unchanged");}
@@ -41,19 +41,6 @@ int main(int argc,char** argv){try{
                 auto u=VibeCoordinates::Position(mesh.positions[a]),v=VibeCoordinates::Position(mesh.positions[c]),w=VibeCoordinates::Position(mesh.positions[b]);auto expected=VibeCoordinates::Direction(mesh.normals[a]+mesh.normals[b]+mesh.normals[c]);check(dot(cross(Vec3{v.X-u.X,v.Y-u.Y,v.Z-u.Z},Vec3{w.X-u.X,w.Y-u.Y,w.Z-u.Z}),Vec3{expected.X,expected.Y,expected.Z})>0,"Reflected UE winding remains outward");}
         }
     }
-    // Regression: a horizontal cap offset crossed riders on the steeply banked
-    // low canyon turn. Placement must use the canonical bank frame without
-    // changing its track, request, force envelope or every-member validation.
-    GenerationRequest bankedRequest;bankedRequest.seed=24;bankedRequest.terrain.kind=TerrainKind::Canyon;bankedRequest.targets.requireIntensity=false;
-    auto banked=generate(bankedRequest);check(banked.accepted(),"Banked canyon outreach regression accepted under unchanged gates");
-    check(validateDesignStructures(banked).valid(),"Banked outreach clears canonical station and train");
-    for(const auto& tower:banked.supports){auto frame=banked.track.sample(tower.trackDistance);
-        const double standoff=-dot(tower.top-tower.attachment,frame.up);check(std::abs(standoff-2)<1e-8||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Tower cap uses a bounded canonical under-spine stand-off across banking");}
-    const auto bankedPath=out/"banked-outreach.coaster";check(saveDesign(banked,bankedPath.string(),error),"Banked outreach saves after independent validation: "+error);Design bankedReplay;
-    check(loadDesign(bankedPath.string(),bankedReplay,error),"Banked outreach normally replays: "+error);
-    const std::string pacingWarning="Moving ride exceeds the 180-second pacing goal; physical acceptance is unchanged.";
-    for(const auto* ride:{&banked,&bankedReplay})check((std::find(ride->report.warnings.begin(),ride->report.warnings.end(),pacingWarning)!=ride->report.warnings.end())==(movingRideSeconds(*ride)>180),"Pacing warning derives from actual duration on both generation and saved replay");
-    check(reportJson(banked)==reportJson(bankedReplay),"Banked outreach complete physical replay is exact");
     auto good=out/"new.coaster";check(saveDesign(d,good.string(),error),"New save: "+error);Design replay;check(loadDesign(good.string(),replay,error),"New load: "+error);check(reportJson(d)==reportJson(replay),"Schema5 exact independent replay");for(size_t i=0;i<d.supports.size();++i)sameSupport(d.supports[i],replay.supports[i]);
     auto support=d.supports.front();
     check(!support.members.empty()&&support.members.front().kind==SupportMemberKind::Footing,"Malformed-footing fixtures start from a real footing");

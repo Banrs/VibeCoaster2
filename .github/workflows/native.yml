@@ -30,7 +30,7 @@ jobs:
       - name: Test all remaining integration contracts
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: ctest --test-dir native/build-cmake -C Release --output-on-failure --parallel 2 --timeout 600 --output-junit integration-tests.xml -E "^(fvd|baseline_jets|flow_bridge|connector_profile|cli_arguments|geometry|frame_force|convergence|drive_profile|terrain_profile|dimensions|clearance|track_web|terrain)$"
-      - name: Check candidate-zero terrain regressions at 960 and 1920 Hz
+      - name: Check flat acceptance and removed-terrain refusal contracts
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: python
         run: |
@@ -50,6 +50,12 @@ jobs:
                       '--preset', 'physics-proof', '--candidates', '1', '--json', f'{name}.json',
                       '--plan', f'{name}-plan.json', '--trace', f'{name}-trace.json', '--out', f'{name}.coaster'],
                       stdout=stdout, stderr=stderr, timeout=600)
+              if terrain != 'flat':
+                  refused = result.returncode == 1 and 'Only flat ground' in Path(f'{name}-progress.log').read_text()
+                  refused &= not Path(f'{name}.coaster').exists() and not Path(f'{name}.json').exists()
+                  failed |= not refused
+                  print(f'{terrain}/{seed}: unsupported request refused={refused}', flush=True)
+                  continue
               report = json.loads(Path(f'{name}.json').read_text())
               failed |= result.returncode != 0 or not report['accepted'] or report['candidate'] != 0 or not report['convergence']['passed']
               print(f'{terrain}/{seed}: accepted={report["accepted"]} generationSeconds={report["generationSeconds"]}', flush=True)

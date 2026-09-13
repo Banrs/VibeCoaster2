@@ -5,67 +5,6 @@
 #include <optional>
 
 namespace coaster {
-bool Terrain::isDefaultProfile() const {
-    return verticalScale==1&&horizontalScale==1&&offsetX==0&&offsetY==0&&headingRadians==0&&cliffHeight==0&&cliffWidth==600;
-}
-bool Terrain::valid() const {
-    for(double value:{verticalScale,horizontalScale,offsetX,offsetY,headingRadians,cliffHeight,cliffWidth})if(!std::isfinite(value))return false;
-    return int(kind)>=0&&int(kind)<=2&&verticalScale>=.1&&verticalScale<=6&&horizontalScale>=.5&&horizontalScale<=4&&
-        std::abs(offsetX)<=100000&&std::abs(offsetY)<=100000&&std::abs(headingRadians)<=pi&&cliffHeight>=0&&cliffHeight<=250&&
-        cliffWidth>=80&&cliffWidth<=2500&&(kind==TerrainKind::Canyon||cliffHeight==0);
-}
-Terrain Terrain::seeded(TerrainKind terrainKind,uint64_t seed) {
-    Terrain result;result.kind=terrainKind;if(terrainKind==TerrainKind::Flat)return result;
-    uint64_t state=seed^0xa07e1c9d3b5264f8ull;
-    auto range=[&](double lo,double hi){uint64_t z=(state+=0x9e3779b97f4a7c15ull);z=(z^(z>>30))*0xbf58476d1ce4e5b9ull;z=(z^(z>>27))*0x94d049bb133111ebull;z^=z>>31;return lo+(hi-lo)*double(z>>11)*0x1.0p-53;};
-    result.horizontalScale=range(.9,1.4);result.offsetX=range(-500,500);result.offsetY=range(-500,500);result.headingRadians=range(-pi,pi);
-    if(terrainKind==TerrainKind::Hills)result.verticalScale=range(2.5,4);
-    else {result.verticalScale=range(.1,.16);result.cliffHeight=range(195,225);result.cliffWidth=range(120,180);}
-    return result;
-}
-namespace {
-constexpr double canyonHalfFloorWidth=260;
-// C3 compact wall: derivatives 1..3 vanish at both floor and rim.
-double canyonStep(double u){u=std::clamp(u,0.,1.);return u*u*u*u*(35+u*(-84+u*(70-20*u)));}
-double canyonStepDerivative(double u){u=std::clamp(u,0.,1.);const double v=u*(1-u);return 140*v*v*v;}
-double canyonCoordinateSlope(){return std::hypot(1.,120./850);}
-}
-double Terrain::slopeBound() const {
-    if(!valid())return std::numeric_limits<double>::infinity();
-    const double base=kind==TerrainKind::Flat?0:kind==TerrainKind::Hills?.056:.28;
-    // max S7'(u)=140*(1/4)^3=2.1875. The meandering valley coordinate
-    // y-120*sin(x/850) has gradient norm <= hypot(1,120/850).
-    return (base*verticalScale+2.1875*cliffHeight*canyonCoordinateSlope()/cliffWidth)/horizontalScale;
-}
-double Terrain::localSlopeBound(double x,double y,double radius) const {
-    if(!valid()||!std::isfinite(x)||!std::isfinite(y)||!std::isfinite(radius)||radius<0)return std::numeric_limits<double>::infinity();
-    const double base=(kind==TerrainKind::Flat?0:kind==TerrainKind::Hills?.056:.28)*verticalScale/horizontalScale;
-    if(cliffHeight==0)return base;
-    const double dx=(x-offsetX)/horizontalScale,dy=(y-offsetY)/horizontalScale,c=std::cos(headingRadians),s=std::sin(headingRadians);
-    const double localX=c*dx+s*dy,localY=-s*dx+c*dy;
-    const double coordinate=std::abs(localY-120*std::sin(localX/850));
-    // The entire query disk maps into this interval, even when it crosses
-    // the valley center, floor/wall join, derivative maximum or wall/rim join.
-    const double delta=canyonCoordinateSlope()*radius/horizontalScale;
-    const double lo=(std::max(0.,coordinate-delta)-canyonHalfFloorWidth)/cliffWidth;
-    const double hi=(coordinate+delta-canyonHalfFloorWidth)/cliffWidth;
-    if(hi<=0||lo>=1)return base;
-    const double peak=std::clamp(.5,std::max(0.,lo),std::min(1.,hi));
-    return base+cliffHeight*canyonStepDerivative(peak)*canyonCoordinateSlope()/(cliffWidth*horizontalScale);
-}
-double Terrain::height(double x,double y) const {
-    if(kind==TerrainKind::Flat)return 0;
-    const double dx=(x-offsetX)/horizontalScale,dy=(y-offsetY)/horizontalScale;
-    const double c=std::cos(headingRadians),s=std::sin(headingRadians);
-    x=c*dx+s*dy;y=-s*dx+c*dy;
-    switch(kind){
-    case TerrainKind::Flat:return 0;
-    case TerrainKind::Hills:return verticalScale*(12*std::sin(x/470)*std::sin(y/390)+8*std::sin((x+y)/720));
-    case TerrainKind::Canyon:return verticalScale*(-65*std::exp(-std::pow((y-120*std::sin(x/850))/210,2))+12*std::sin(x/630))+
-        cliffHeight*canyonStep((std::abs(y-120*std::sin(x/850))-canyonHalfFloorWidth)/cliffWidth);
-    }return 0;
-}
-std::string Terrain::name() const {return kind==TerrainKind::Flat?"flat":kind==TerrainKind::Hills?"hills":"canyon";}
 static Vec3 transport(Vec3 up,Vec3 a,Vec3 b){Vec3 c=cross(a,b);double s=norm(c);if(s>1e-10)up=rotate(up,c/s,std::atan2(s,dot(a,b)));return unit(up-b*dot(up,b));}
 static Vec3 der(const Span& sp,double u){Vec3 v=sp.c[7]*7;for(int i=6;i>=1;--i)v=v*u+sp.c[i]*i;return v;}
 static double arc(const Span& sp,double u){return detail::spanArcLength(sp,u);}

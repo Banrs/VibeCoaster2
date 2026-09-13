@@ -42,16 +42,15 @@ static TurnShape makeTurn(double angle,double radius,double ramp){
 }
 struct RoutePlan {
     bool stationChecked{},stationFeasible{},stationSelectionEligible{};double stationBayMinimum{},stationBayMaximum{},stationRequiredDatum{};
-    int shape{},placement{};double heading{},length{},score{},relief{},deviation{},grade{},stationGrade{},groundMinimum{},groundMaximum{},valleyFraction{},valleyDistance{};int valleyCrossings{};
+    int shape{},placement{};double heading{},length{},score{};
     Vec3 origin;std::vector<double> angles,lengths;std::vector<TurnShape> turns;
 };
 static double stationBankFactor(double remaining,const TrainConfig& train){double upright=std::max(40.,(train.cars-1)*train.spacing*.5+18);return smooth((remaining-upright)/100);}
 static double layoutWarp(double u,double shape){return u+shape*std::sin(2*pi*u)/(2*pi);}
 static double layoutSmooth(double u){u=std::clamp(u,0.,1.);return u*u*u*u*(35+u*(-84+u*(70-20*u)));}
 static Vec3 inFrame(Vec3 p,double h){return {p.x*std::cos(h)-p.y*std::sin(h),p.x*std::sin(h)+p.y*std::cos(h),p.z};}
-static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,const std::vector<double>& minimum,double radius,double ramp,int holdCorner,bool reversingPair,Random& rng,Cancel cancel){
+static std::vector<RoutePlan> planRoutes(int sides,const std::vector<double>& minimum,double radius,double ramp,int holdCorner,bool reversingPair,Random& rng,Cancel cancel){
     std::vector<RoutePlan> feasible;
-    const bool dramaticTerrain=req.terrain.kind==TerrainKind::Canyon&&!req.terrain.isDefaultProfile();
     double startingHeading=rng.range(-pi,pi);Vec3 stationAnchor{rng.range(-200,200),rng.range(-160,160),0};
     for(int shape=0;shape<48;++shape){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
@@ -84,32 +83,18 @@ static std::vector<RoutePlan> planRoutes(const GenerationRequest& req,int sides,
         // resource/clearance checks, but do not charge the same footprint twice.
         const double repeatedHelixLength=reversingPair&&holdCorner>=0?2*pi*radius:0;
         if(!valid||p.length<4700||p.length-repeatedHelixLength>9800)continue;
-        std::vector<Vec3> corridor;Vec3 cursor{};h=0;
+        Vec3 cursor{};h=0;
         for(int side=0;side<sides;++side){
-            int n=int(std::ceil(p.lengths[side]/25));Vec3 forward{std::cos(h),std::sin(h),0};
-            for(int i=0;i<=n;++i)corridor.push_back(cursor+forward*(p.lengths[side]*i/n));cursor=cursor+forward*p.lengths[side];
-            for(size_t i=14;i<p.turns[side].points.size();i+=14)corridor.push_back(cursor+inFrame(p.turns[side].points[i],h));
+            Vec3 forward{std::cos(h),std::sin(h),0};
+            cursor=cursor+forward*p.lengths[side];
             cursor=cursor+inFrame(p.turns[side].points.back(),h);h+=p.angles[side];
         }
         if(norm(cursor)>1e-6)continue;
         for(int placement=0;placement<36;++placement){
             auto q=p;q.placement=placement;
-            // Shape, orientation and anchored station placement are jointly
-            // ranked from actual terrain; the landscape is never modified.
             q.heading=startingHeading+(placement/3)*pi/6;
             q.origin=stationAnchor+inFrame({0,double(placement%3-1)*180,0},q.heading);
-            double station=req.terrain.height(q.origin.x,q.origin.y),lo=1e9,hi=-1e9,totalDeviation=0,slope2=0,valleyNear=0,totalValleyDistance=0;Vec3 previous{};double previousGround=0,previousValley=0;bool first=true;
-            for(const auto& local:corridor){
-                Vec3 point=q.origin+inFrame(local,q.heading);double ground=req.terrain.height(point.x,point.y);lo=std::min(lo,ground);hi=std::max(hi,ground);totalDeviation+=std::abs(ground-station);
-                Vec3 terrainPoint=inFrame({(point.x-req.terrain.offsetX)/req.terrain.horizontalScale,(point.y-req.terrain.offsetY)/req.terrain.horizontalScale,0},-req.terrain.headingRadians);
-                double valley=terrainPoint.y-120*std::sin(terrainPoint.x/850);totalValleyDistance+=std::abs(valley);valleyNear+=std::abs(valley)<210?1:0;if(!first&&valley*previousValley<0)++q.valleyCrossings;previousValley=valley;
-                if(!first){double span=norm(point-previous);if(span>1)slope2+=std::pow((ground-previousGround)/span,2);}first=false;previous=point;previousGround=ground;
-            }
-            q.groundMinimum=lo;q.groundMaximum=hi;q.valleyFraction=valleyNear/corridor.size();q.valleyDistance=totalValleyDistance/corridor.size();
-            q.relief=hi-lo;q.deviation=totalDeviation/corridor.size();q.grade=std::sqrt(slope2/corridor.size());
-            Vec3 stationEnd=q.origin+inFrame({80,0,0},q.heading);q.stationGrade=std::abs(req.terrain.height(stationEnd.x,stationEnd.y)-station)/80;
-            if(req.terrain.kind==TerrainKind::Canyon&&!dramaticTerrain&&q.valleyFraction<.12)continue;
-            q.score=dramaticTerrain?2*std::abs(q.relief-req.terrain.cliffHeight)+.1*q.deviation+200*q.grade+350*q.stationGrade+q.length/65+100*(1-q.valleyFraction):1.5*q.relief+.5*q.deviation+200*q.grade+150*q.stationGrade+q.length/65+(req.terrain.kind==TerrainKind::Canyon?100*(1-q.valleyFraction):0);
+            q.score=q.length/65;
             feasible.push_back(std::move(q));
         }
     }
@@ -137,7 +122,6 @@ double movingRideSeconds(const Design& d){
 }
 static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,const AuthoringFeedback& feedback,CandidatePorts& ports){
     const int geometryAttempt=attempt/2,placementVariant=attempt%2;
-    const bool dramaticTerrain=req.terrain.kind==TerrainKind::Canyon&&!req.terrain.isDefaultProfile();
     Design d;d.request=req;d.candidate=attempt;Random rng{req.seed};rng.next();int sides=4;bool helix=false;
     rng.next();int order=0;
     bool intensityDesign=req.targets.requireIntensity&&std::isfinite(req.targets.referenceExposure);double exposureGoal=intensityDesign?req.targets.referenceExposure*1.1:0;
@@ -209,8 +193,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         else minimum[side]=130;
     }
     int holdCorner=intensityDesign&&exposureGoal>18&&sides>2?(hillSide+1)%(sides-1):-1;
-    auto plans=planRoutes(req,sides,minimum,radius,ramp,holdCorner,reversingPair,rng,cancel);if(plans.empty())throw std::runtime_error("No terrain route fits exact closure and footprint budget");
-    // Visit terrain-ranked plans in order. Exact raw departure/return boundary
+    auto plans=planRoutes(sides,minimum,radius,ramp,holdCorner,reversingPair,rng,cancel);if(plans.empty())throw std::runtime_error("No route fits exact closure and footprint budget");
+    // Visit ranked plans in order. Exact raw departure/return boundary
     // and bay must fit the local budget before committing to a station site.
     // The candidate list is bounded by 48 shapes x 36 placements; rejected
     // station sites do not spend a geometry/physics attempt or alter its limits.
@@ -314,7 +298,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     // Full connecting crests occupy existing transit envelopes. Dimensions
     // follow the gravity energy budget and v^2 curvature, not random telemetry.
     // All existing operation indices survive and finite-train replay remains
-    // authoritative after terrain composition and force-aligned banking.
+    // authoritative after ground placement and force-aligned banking.
     struct PacingCrest {size_t begin,end;double height,speed;int count;};std::vector<PacingCrest> pacingCrests;
     Random pacing{req.seed^0x5fb6d99a781ec341ull};
     auto pace=[&](size_t first,size_t last,double speed,int count){
@@ -396,13 +380,10 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     for(size_t i=0;i<raw.size();++i)raw[i].bank*=stationBankFactor(distance.back()-distance[i],req.train);
     if(norm(raw.back().position-raw.front().position)>.001)throw std::runtime_error("Solved route failed canonical height closure");raw.back().position=raw.front().position;
 
-    // Fix the station to its local ground, then solve a smooth baseline away
-    // from the boarding/launch boundary. A distant canyon rim cannot lift it.
-    Vec3 stationForward{std::cos(plan.heading),std::sin(plan.heading),0},stationRight=cross(stationForward,Vec3{0,0,1});
-    double trainHalf=(req.train.cars-1)*req.train.spacing*.5,stationBegin=-std::max(18.,trainHalf+8.),stationEnd=std::max(64.,2*trainHalf+38.);
-    double stationGroundMin=1e9,stationGroundMax=-1e9;
-    for(double x=stationBegin-2;x<=stationEnd+4;x+=2)for(double y=-6;y<=6;y+=2){Vec3 p=origin+stationForward*x+stationRight*y;double ground=req.terrain.height(p.x,p.y);stationGroundMin=std::min(stationGroundMin,ground);stationGroundMax=std::max(stationGroundMax,ground);}
-    double stationDatum=stationGroundMax+req.limits.minClearance+4;
+    // Fit the rider envelope above the flat ground while fixing the station boundary.
+    const double trainHalf=(req.train.cars-1)*req.train.spacing*.5;
+    const double stationGroundMin=0,stationGroundMax=0;
+    double stationDatum=req.limits.minClearance+4;
     const int controls=int(std::ceil(distance.back()/50));const double spacing=distance.back()/controls;
     std::vector<double> base(controls),target(controls),lower(controls,-1e9),weight(controls),required(unique);std::vector<bool> fixed(controls);
     size_t tallest=0,inverted=0;double maxHill=-1e9,maxLoop=-1e9;
@@ -432,7 +413,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     plan.stationChecked=true;plan.stationBayMinimum=stationGroundMin;plan.stationBayMaximum=stationGroundMax;plan.stationRequiredDatum=stationDatum;
     plan.stationFeasible=stationDatum-stationGroundMin<=16;
     if(!plan.stationFeasible)continue;
-    // A failed ride deserves one different terrain placement at the same
+    // A failed ride deserves one different station placement at the same
     // geometry scale before larger radii/ramps spend the footprint budget.
     // Placement identifiers jointly encode heading and anchored site; merely
     // selecting another shape at the same site is not this second alternative.
@@ -442,21 +423,6 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     }
     plan.stationSelectionEligible=true;
     for(int k=0;k<controls;++k){target[k]=weight[k]?target[k]/weight[k]:stationDatum;base[k]=std::max(target[k],lower[k]);fixed[k]=fixedStationBoundary(k*spacing);if(fixed[k]){if(lower[k]>stationDatum+1e-8)throw std::runtime_error("Local station datum cannot clear its fixed launch/boarding boundary");base[k]=stationDatum;}}
-    // Preserve authored inversion and airtime shapes by translating complete
-    // modules rigidly above their terrain envelope. Fixed constant control
-    // plateaus extend two cells beyond their ports; the shared C3 baseline
-    // joins those plateaus through the surrounding lead/recovery geometry.
-    if(req.terrain.kind!=TerrainKind::Flat){
-        std::vector<std::pair<int,int>> rigidRegions;
-        for(const auto& run:modules)if(run.identity=="record-inversion"||run.identity=="high-immelmann"||run.identity=="fvd-airtime"){
-            const int first=std::max(0,int(std::floor(distance[run.begin]/spacing))-2),last=std::min(controls-1,int(std::ceil(distance[run.end]/spacing))+2);
-            if(!rigidRegions.empty()&&first<=rigidRegions.back().second)rigidRegions.back().second=std::max(last,rigidRegions.back().second);
-            else rigidRegions.push_back({first,last});
-        }
-        for(const auto& [first,last]:rigidRegions){double datum=-INFINITY;
-            for(int k=first;k<=last;++k)datum=std::max(datum,std::max(base[k],lower[k]));
-            for(int k=first;k<=last;++k){if(fixed[k]&&std::abs(base[k]-datum)>1e-8)throw std::runtime_error("Authored element terrain envelope conflicts with station datum");base[k]=datum;fixed[k]=true;}}
-    }
     auto wrap=[&](int k){return (k%controls+controls)%controls;};
     // Minimize squared second and third spatial differences together. The
     // third-difference term spreads curvature changes over roughly two 50 m
@@ -477,48 +443,13 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     auto at=[&](size_t index){return index>=d.track.spans.size()?d.track.length:d.track.spans[index].start;};
     for(size_t i=0;i<forceEntryIndices.size();++i)ports.airtimeEntry[i]=at(forceEntryIndices[i]);
     ports.reversalExit=at(reversalExitIndex);ports.reversalSpeedHint=immelmann.exit.speed;
-    const bool terrainDriveControl=req.terrain.kind!=TerrainKind::Flat&&!req.terrain.isDefaultProfile();
-    struct TerrainDriveSizing{std::string module;double nominalSpeed,targetSpeed,actualRise,rawRise;};std::vector<TerrainDriveSizing> terrainDriveSizing;
     for(auto p:pending){
-        bool hard=p.kind==DriveKind::Launch;double acc=hard?launchAcceleration:3.5,targetSpeed=p.speed;
-        if(terrainDriveControl){
-            for(size_t index=0;index+1<modules.size();++index)if(modules[index].begin==p.begin&&modules[index].end==p.end){
-                const auto& next=modules[index+1];double rawRise=next.identity=="record-hill"?elevation:next.identity=="record-inversion"?loopHeight:next.identity=="high-immelmann"?reversalHeight:0;
-                if(rawRise>0){
-                    const double start=at(next.begin),end=at(next.end),entryHeight=d.track.sample(start).position.z;double crestHeight=entryHeight;
-                    for(double location=start;location<end;location+=2)crestHeight=std::max(crestHeight,d.track.sample(location).position.z);
-                    crestHeight=std::max(crestHeight,d.track.sample(end).position.z);
-                    const double actualRise=crestHeight-entryHeight;
-                    // Preserve the nominal kinetic-energy margin over the real
-                    // canonical climb. This is only a controller target; motor
-                    // force/power, losses and finite train dynamics remain real.
-                    targetSpeed=std::sqrt(std::max(20*20.,p.speed*p.speed+2*gravity*(actualRise-rawRise)));
-                    terrainDriveSizing.push_back({next.identity,p.speed,targetSpeed,actualRise,rawRise});
-                }
-                break;
-            }
-        }
-        d.operations.push_back({at(p.begin),at(p.end),p.kind,targetSpeed,req.train.carMass*acc,req.train.carMass*acc*100,hard?.08:.5});
-        if(terrainDriveControl){
-            // A brake alone cannot recover a train already below its intended
-            // entry speed after climbing terrain. Paired explicit controllers
-            // have identical target/zone; opposite demand signs mean only the
-            // accelerating or braking force can act on each car at a time.
-            DriveKind complement=p.kind==DriveKind::Brake?DriveKind::Boost:DriveKind::Brake;
-            d.operations.push_back({at(p.begin),at(p.end),complement,targetSpeed,req.train.carMass*3.5,req.train.carMass*350,.5});
-        }
+        bool hard=p.kind==DriveKind::Launch;double acc=hard?launchAcceleration:3.5;
+        d.operations.push_back({at(p.begin),at(p.end),p.kind,p.speed,req.train.carMass*acc,req.train.carMass*acc*100,hard?.08:.5});
     }
     double brakingStart=d.track.length-(65*65/(2*2.4)+60);
     for(auto& op:d.operations)if(op.kind==DriveKind::Boost)op.end=std::min(op.end,brakingStart);
     d.operations.erase(std::remove_if(d.operations.begin(),d.operations.end(),[](const Operation& op){return op.end<=op.start;}),d.operations.end());
-    // The final corridor can climb a real canyon shelf. Brakes cannot supply
-    // that potential energy. An explicit bounded transfer drive holds only
-    // the low approach speed when needed; it ends before the level station
-    // boundary, leaving the existing independently simulated station stop.
-    double terminalLow=d.track.knots.front().position.z;
-    for(double s=brakingStart;s<d.track.length;s+=5)terminalLow=std::min(terminalLow,d.track.sample(s).position.z);
-    const double terminalRise=d.track.knots.front().position.z-terminalLow;
-    if(terminalRise>12) d.operations.push_back({brakingStart,d.track.length-100,DriveKind::Boost,24,req.train.carMass*3.5,req.train.carMass*350,.5});
     // A real descent can exert more than the former 4 m/s^2 brake rating.
     // Size the hardware against the canonical downhill grade plus the same
     // requested stopping deceleration; the controller still applies bounded
@@ -533,9 +464,20 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     if(!flowJoins.empty())d.topology+="/continuous-module-joins";
     if(!pacingCrests.empty())d.topology+="/paced-connectors";
     if(organicRecoveryCount)d.topology+="/organic-recovery";
-    std::ostringstream diagnostic;diagnostic<<std::setprecision(12)<<"{\"schemaVersion\":1,\"generationOnly\":true,\"seed\":"<<req.seed<<",\"candidate\":"<<attempt<<",\"order\":\""<<orderName<<"\",\"stationAnchoring\":{\"geometryScale\":"<<geometryAttempt<<",\"placementVariant\":"<<placementVariant<<",\"deferredFirstPlacement\":"<<firstFeasiblePlacement<<",\"selectedTerrainRank\":"<<(&plan-plans.data())<<",\"checkedPlanCount\":"<<(&plan-plans.data()+1)<<",\"heightBudget\":16,\"datum\":"<<stationDatum<<",\"groundMinimum\":"<<stationGroundMin<<",\"groundMaximum\":"<<stationGroundMax<<",\"datumAboveLowestGround\":"<<stationDatum-stationGroundMin<<",\"datumAboveHighestGround\":"<<stationDatum-stationGroundMax<<",\"fixedDepartureMeters\":"<<fixedDeparture<<",\"fixedReturnMeters\":"<<fixedReturn<<",\"controlSpacing\":"<<spacing<<"},\"launchPlanning\":{\"requestedSeconds\":"<<req.targets.launchSeconds<<",\"motorAcceleration\":"<<launchAcceleration<<",\"predictedSeconds\":"<<plannedLaunchTime(launchAcceleration,req.train)<<"},\"intensityPlanning\":{\"configured\":"<<(intensityDesign?"true":"false")<<",\"exposureGoal\":"<<exposureGoal<<",\"normalLoadHint\":"<<designNormalG<<",\"extraHelixCorner\":"<<holdCorner<<"},\"sides\":"<<sides<<",\"plannedHorizontalLength\":"<<plan.length<<",\"canonicalLength\":"<<d.track.length<<",\"selected\":{\"shape\":"<<plan.shape<<",\"placement\":"<<plan.placement<<",\"score\":"<<plan.score<<",\"terrainRelief\":"<<plan.relief<<",\"terrainStationDeviation\":"<<plan.deviation<<",\"terrainGradeRms\":"<<plan.grade<<",\"stationGrade\":"<<plan.stationGrade<<",\"groundMinimum\":"<<plan.groundMinimum<<",\"groundMaximum\":"<<plan.groundMaximum<<",\"valleyFraction\":"<<plan.valleyFraction<<",\"meanValleyDistance\":"<<plan.valleyDistance<<",\"valleyCrossings\":"<<plan.valleyCrossings<<"},\"scoreWeights\":{\"terrainRelief\":"<<(dramaticTerrain?0:1.5)<<",\"terrainReliefTarget\":"<<(dramaticTerrain?req.terrain.cliffHeight:0)<<",\"terrainReliefTargetDeviation\":"<<(dramaticTerrain?2:0)<<",\"terrainStationDeviation\":"<<(dramaticTerrain?.1:.5)<<",\"terrainGradeRms\":200,\"stationGrade\":"<<(dramaticTerrain?350:150)<<",\"horizontalLength\":0.015384615384615385,\"canyonOutsideValleyFraction\":"<<(req.terrain.kind==TerrainKind::Canyon?100:0)<<",\"valleyCoordinateUsesTerrainProfile\":"<<"true"<<"},\"corridors\":[";
+    std::ostringstream diagnostic;diagnostic<<std::setprecision(12)
+        <<"{\"schemaVersion\":1,\"generationOnly\":true,\"seed\":"<<req.seed<<",\"candidate\":"<<attempt
+        <<",\"order\":\""<<orderName<<"\",\"stationAnchoring\":{\"geometryScale\":"<<geometryAttempt
+        <<",\"placementVariant\":"<<placementVariant<<",\"selectedPlanRank\":"<<(&plan-plans.data())
+        <<",\"heightBudget\":16,\"datum\":"<<stationDatum<<",\"fixedDepartureMeters\":"<<fixedDeparture
+        <<",\"fixedReturnMeters\":"<<fixedReturn<<",\"controlSpacing\":"<<spacing
+        <<"},\"launchPlanning\":{\"requestedSeconds\":"<<req.targets.launchSeconds<<",\"motorAcceleration\":"<<launchAcceleration
+        <<",\"predictedSeconds\":"<<plannedLaunchTime(launchAcceleration,req.train)
+        <<"},\"intensityPlanning\":{\"configured\":"<<(intensityDesign?"true":"false")<<",\"exposureGoal\":"<<exposureGoal
+        <<",\"normalLoadHint\":"<<designNormalG<<",\"extraHelixCorner\":"<<holdCorner
+        <<"},\"sides\":"<<sides<<",\"plannedHorizontalLength\":"<<plan.length<<",\"canonicalLength\":"<<d.track.length
+        <<",\"selected\":{\"shape\":"<<plan.shape<<",\"placement\":"<<plan.placement<<",\"score\":"<<plan.score<<"},\"corridors\":[";
     for(int i=0;i<sides;++i){if(i)diagnostic<<',';diagnostic<<"{\"length\":"<<plan.lengths[i]<<",\"turnAngle\":"<<plan.angles[i]<<'}';}diagnostic<<"],\"rankedPlans\":[";
-    for(size_t i=0;i<plans.size();++i){if(i)diagnostic<<',';auto& p=plans[i];diagnostic<<"{\"shape\":"<<p.shape<<",\"placement\":"<<p.placement<<",\"score\":"<<p.score<<",\"relief\":"<<p.relief<<",\"deviation\":"<<p.deviation<<",\"grade\":"<<p.grade<<",\"stationGrade\":"<<p.stationGrade<<",\"length\":"<<p.length<<",\"groundMinimum\":"<<p.groundMinimum<<",\"groundMaximum\":"<<p.groundMaximum<<",\"valleyFraction\":"<<p.valleyFraction<<",\"meanValleyDistance\":"<<p.valleyDistance<<",\"valleyCrossings\":"<<p.valleyCrossings<<",\"stationBudgetChecked\":"<<(p.stationChecked?"true":"false")<<",\"stationBudgetFeasible\":"<<(p.stationFeasible?"true":"false")<<",\"stationSelectionEligible\":"<<(p.stationSelectionEligible?"true":"false");if(p.stationChecked)diagnostic<<",\"stationBayMinimum\":"<<p.stationBayMinimum<<",\"stationBayMaximum\":"<<p.stationBayMaximum<<",\"stationRequiredDatum\":"<<p.stationRequiredDatum;diagnostic<<'}';}diagnostic<<"],\"modules\":[";
+    for(size_t i=0;i<plans.size();++i){if(i)diagnostic<<',';const auto& p=plans[i];diagnostic<<"{\"shape\":"<<p.shape<<",\"placement\":"<<p.placement<<",\"length\":"<<p.length<<",\"score\":"<<p.score<<",\"stationBudgetChecked\":"<<(p.stationChecked?"true":"false")<<",\"stationBudgetFeasible\":"<<(p.stationFeasible?"true":"false")<<'}';}diagnostic<<"],\"modules\":[";
     for(size_t i=0;i<modules.size();++i){if(i)diagnostic<<',';auto& m=modules[i];diagnostic<<"{\"identity\":\""<<m.identity<<"\",\"corridor\":"<<m.corridor<<",\"start\":"<<at(m.begin)<<",\"end\":"<<at(m.end)<<'}';}diagnostic<<"]}";d.planningDiagnostics=diagnostic.str();
     d.planningDiagnostics.pop_back();std::ostringstream expansion;expansion<<std::setprecision(12)<<",\"layoutExpansion\":{\"reversingPair\":"<<(reversingPair?"true":"false")<<",\"organicRecoveryCount\":"<<organicRecoveryCount<<",\"hillProfileShape\":"<<hillProfileShape<<",\"loopProfileShape\":"<<loopProfileShape;
     if(reversingPair)expansion<<",\"height\":"<<reversalHeight<<",\"entrySpeedHint\":"<<reversalEntrySpeed
@@ -547,11 +489,9 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     for(size_t i=0;i<forceHills.size();++i){if(i)expansion<<',';const auto& hill=forceHills[i];expansion<<"{\"span\":"<<hill.span<<",\"height\":"<<hill.height<<",\"sourceSpeedMps\":"<<hill.authoring.speed<<",\"sourceReplayPassed\":"<<(hill.section.assessment.passed?"true":"false")<<",\"maxSourceNormalResidualG\":"<<hill.section.assessment.maxNormalResidualG<<'}';}
     expansion<<"],\"connectorPacing\":[";
     for(size_t i=0;i<pacingCrests.size();++i){if(i)expansion<<',';const auto& crest=pacingCrests[i];expansion<<"{\"start\":"<<at(crest.begin)<<",\"end\":"<<at(crest.end)<<",\"height\":"<<crest.height<<",\"designSpeed\":"<<crest.speed<<",\"count\":"<<crest.count<<'}';}
-    expansion<<"],\"terrainDriveSizing\":[";
-    for(size_t index=0;index<terrainDriveSizing.size();++index){if(index)expansion<<',';const auto& sizing=terrainDriveSizing[index];expansion<<"{\"module\":\""<<sizing.module<<"\",\"nominalSpeed\":"<<sizing.nominalSpeed<<",\"targetSpeed\":"<<sizing.targetSpeed<<",\"actualRise\":"<<sizing.actualRise<<",\"rawRise\":"<<sizing.rawRise<<'}';}
     expansion<<"]}}";d.planningDiagnostics+=expansion.str();return d;
     }
-    throw std::runtime_error(placementVariant?"No second distinct feasible station placement fits the actual boundary and footprint budget":"No terrain-ranked placement fits the actual station departure/return boundary and 16 m bay-height budget");
+    throw std::runtime_error(placementVariant?"No second distinct feasible station placement fits the actual boundary and footprint budget":"No station placement fits the actual station departure/return boundary and 16 m bay-height budget");
 }
 static void placeSupports(Design& d,Cancel cancel){buildSupportLayout(d,cancel);}
 static void improveBanking(Design& d,const std::vector<Frame>& frames){
@@ -594,9 +534,9 @@ void evaluateTargets(Design& d){
     if(d.simulation.completed&&movingRideSeconds(d)>180)d.report.warnings.push_back("Moving ride exceeds the 180-second pacing goal; physical acceptance is unchanged.");
 }
 ValidationReport validateRequest(const GenerationRequest& req){
-    ValidationReport r;if(!req.terrain.valid()){r.fail("TERRAIN_PROFILE","Terrain profile is outside its supported domain");return r;}const auto& t=req.targets;const auto& l=req.limits;
+    ValidationReport r;if(!req.terrain.valid()){r.fail("TERRAIN_PROFILE","Only flat ground is available in this build");return r;}const auto& t=req.targets;const auto& l=req.limits;
     for(double value:{t.height,t.speed,t.inversionHeight,t.launchSeconds,l.minVerticalG,l.maxVerticalG,l.maxLateralG,l.maxLongitudinalG,l.maxJerkGps,l.minClearance,req.simulationStep})if(!std::isfinite(value)){r.fail("REQUEST_RANGE","Request contains a nonfinite value");return r;}
-    if(req.maxCandidates<1||req.maxCandidates>64||t.height<0||t.height>350||t.speed<1||t.speed>110||t.inversionHeight<0||t.inversionHeight>140||t.launchSeconds<.8||t.launchSeconds>10||l.maxVerticalG<=l.minVerticalG||l.maxLateralG<=0||l.maxLongitudinalG<=0||l.maxJerkGps<=0||l.minClearance<0||req.simulationStep<1./2000||req.simulationStep>1./30||int(req.terrain.kind)<0||int(req.terrain.kind)>2)r.fail("REQUEST_RANGE","Request is outside the prototype's supported domain");
+    if(req.maxCandidates<1||req.maxCandidates>64||t.height<0||t.height>350||t.speed<1||t.speed>110||t.inversionHeight<0||t.inversionHeight>140||t.launchSeconds<.8||t.launchSeconds>10||l.maxVerticalG<=l.minVerticalG||l.maxLateralG<=0||l.maxLongitudinalG<=0||l.maxJerkGps<=0||l.minClearance<0||req.simulationStep<1./2000||req.simulationStep>1./30||!req.terrain.valid())r.fail("REQUEST_RANGE","Request is outside the prototype's supported domain");
     if(std::isinf(t.referenceExposure)||(std::isfinite(t.referenceExposure)&&t.referenceExposure<=0)||(!t.referenceId.empty()&&!std::isfinite(t.referenceExposure))||(std::isfinite(t.referenceExposure)&&t.referenceId.empty()))r.fail("REFERENCE_CONFIG","Configured reference needs a finite positive exposure and a nonempty ID");
     auto reference=validateReference(t);r.errors.insert(r.errors.end(),reference.errors.begin(),reference.errors.end());
     for(double rate:{l.maxLateralRateGps,l.maxLongitudinalRateGps})if(std::isinf(rate)||(std::isfinite(rate)&&rate<=0))r.fail("AXIS_RATE_CONFIG","Optional component rate gates must be finite positive values, or unset");
@@ -609,7 +549,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
     std::mutex cancellationMutex;
     const Cancel requestedCancel=std::move(cancel);
     if(requestedCancel)cancel=[&]{std::lock_guard lock(cancellationMutex);return requestedCancel();};
-    GenerationRequest req=input;if(req.terrain.isDefaultProfile())req.terrain=Terrain::seeded(req.terrain.kind,req.seed);
+    GenerationRequest req=input;
     Design last;last.request=req;
     last.report=validateRequest(req);if(!last.report.valid())return last;
     double fastestDeparture=plannedLaunchTime(req.limits.maxLongitudinalG*gravity-.02,req.train);
@@ -641,7 +581,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
     };
     for(int i=0;i<req.maxCandidates;++i){
         if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}
-        if(progress)progress(i,"Solving terrain corridor and circuit");
+        if(progress)progress(i,"Solving route corridors and circuit");
         try{
             AuthoringFeedback feedback;CandidatePorts ports;
             Design d=candidate(req,i,cancel,feedback,ports);
@@ -650,7 +590,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
             if(motion.cancelled){d.simulation.cancelled=true;d.report.fail("CANCELLED","Generation cancelled");return d;}
             if(motion.completed){
                 // One bounded correction uses measured finite-train entry energy.
-                // Rebuild the entire route, terrain placement and operation zones;
+                // Rebuild the entire route and operation zones;
                 // never stretch an FVD curve or substitute a prescribed speed.
                 for(size_t h=0;h<feedback.airtimeSpeed.size();++h)feedback.airtimeSpeed[h]=replayValueAt(motion.frames,ports.airtimeEntry[h]);
                 double exitSpeed=replayValueAt(motion.frames,ports.reversalExit);

@@ -120,8 +120,8 @@ void checkConnectorPacing(const Design& design){
     check(peak>8&&high-low>.5,"Connector has substantial actual height and measured force variation");
     check(longest<2,"Post-loop connector avoids a long ordinary1g hold");
 }
-Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
-    GenerationRequest request;request.seed=seed;request.terrain.kind=terrain;request.targets.requireIntensity=false;
+Design generateChecked(uint64_t seed){
+    GenerationRequest request;request.seed=seed;request.targets.requireIntensity=false;
     request.maxCandidates=1;
     auto design=generate(request);
     if(!design.accepted())for(const auto* report:{&design.report,&design.simulation.report})for(const auto& error:report->errors)std::cerr<<"seed "<<seed<<' '<<error.code<<": "<<error.message<<'\n';
@@ -134,11 +134,6 @@ Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
 bool same(Vec3 a,Vec3 b){return a.x==b.x&&a.y==b.y&&a.z==b.z;}
 }
 int main(){try{
-    // This terrain/S-crest combination previously demanded a rapid bank
-    // reversal whose rider-offset force reached -3.88 g despite positive
-    // centerline normal load. Exercise the actual generation/acceptance path.
-    auto hills=generateChecked(9,TerrainKind::Hills);checkFoldedGeometry(hills);classifyGeometry(hills);
-    auto canyon=generateChecked(24,TerrainKind::Canyon);checkFoldedGeometry(canyon);classifyGeometry(canyon);
     auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkBridgeDrive(first);checkConnectorPacing(first);
     auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkBridgeDrive(second);checkConnectorPacing(second);
     check(std::abs(first.track.length-second.track.length)>1,"Different seeds change the actual complete circuit geometry");

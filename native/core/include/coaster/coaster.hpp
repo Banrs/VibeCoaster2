@@ -29,19 +29,16 @@ inline bool finite(Vec3 a){return std::isfinite(a.x)&&std::isfinite(a.y)&&std::i
 inline Vec3 rotate(Vec3 v,Vec3 axis,double angle){return v*std::cos(angle)+cross(axis,v)*std::sin(angle)+axis*(dot(axis,v)*(1-std::cos(angle)));}
 inline double smooth(double u){u=std::clamp(u,0.,1.);return u*u*u*(10+u*(-15+6*u));}
 
-enum class TerrainKind { Flat, Hills, Canyon };
+enum class TerrainKind { Flat };
 struct Terrain {
     TerrainKind kind{TerrainKind::Flat};
-    // Explicit SI landscape profile. Defaults retain the original analytic fixtures.
-    double verticalScale{1},horizontalScale{1},offsetX{},offsetY{},headingRadians{};
-    double cliffHeight{},cliffWidth{600};
-    static Terrain seeded(TerrainKind,uint64_t seed);
-    bool isDefaultProfile() const;
-    bool valid() const;
-    double slopeBound() const; // Global bound on norm(gradient(height)).
-    double localSlopeBound(double x,double y,double radius) const; // Complete world-XY disk, including its interior.
-    double height(double x,double y) const;
-    std::string name() const;
+    bool valid() const { return kind==TerrainKind::Flat; }
+    double slopeBound() const { return valid()?0:std::numeric_limits<double>::infinity(); }
+    double localSlopeBound(double x,double y,double radius) const {
+        return valid()&&std::isfinite(x)&&std::isfinite(y)&&std::isfinite(radius)&&radius>=0?0:std::numeric_limits<double>::infinity();
+    }
+    double height(double,double) const { return 0; }
+    std::string name() const { return valid()?"flat":"unsupported"; }
 };
 enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };

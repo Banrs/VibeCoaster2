@@ -44,6 +44,12 @@ class CliArguments(unittest.TestCase):
             with self.subTest(text=text):
                 self.invalid("--seed", text)
 
+    def test_only_flat_terrain_is_available(self):
+        self.assertEqual(self.parsed("--terrain", "flat")["terrain"], "flat")
+        for terrain in ("hills", "canyon"):
+            with self.subTest(terrain=terrain):
+                self.invalid("--terrain", terrain)
+
     def test_seed_unsigned_boundaries(self):
         for text in ("0", "42", "00042", "18446744073709551615"):
             with self.subTest(text=text):

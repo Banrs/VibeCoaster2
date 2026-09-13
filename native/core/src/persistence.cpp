@@ -36,11 +36,8 @@ void vec(std::istream& i,Vec3& v){i>>v.x>>v.y>>v.z;}
 std::string extensionTail(const Design& d,Cancel cancel){
     const auto& r=d.request;
     std::vector<std::pair<std::string,std::string>> blocks;
-    {
-        const auto& terrain=r.terrain;std::ostringstream b;b.imbue(std::locale::classic());b<<std::setprecision(17);
-        b<<terrain.verticalScale<<' '<<terrain.horizontalScale<<' '<<terrain.offsetX<<' '<<terrain.offsetY<<' '<<terrain.headingRadians<<' '<<terrain.cliffHeight<<' '<<terrain.cliffWidth<<'\n';
-        blocks.push_back({"TERRAIN_PROFILE",b.str()});
-    }
+    // Preserve the fixed flat profile in existing COASTER5 saves.
+    blocks.push_back({"TERRAIN_PROFILE","1 1 0 0 0 0 600\n"});
     if(d.station.enabled)blocks.push_back({"STATION",stationPayload(d.station,cancel)});
     if(r.targets.reference.processed)blocks.push_back({"REFERENCE",serializeReference(r.targets.reference)});
     if(std::isfinite(r.limits.maxLateralRateGps)||std::isfinite(r.limits.maxLongitudinalRateGps)){
@@ -65,9 +62,9 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
             if(!b||!std::isfinite(a)||!std::isfinite(c)||(lat?a<=0:a!=0)||(lon?c<=0:c!=0)){error="Invalid axis rate extension";return false;}b>>std::ws;if(!b.eof()){error="Trailing axis rate extension";return false;}
             request.limits.maxLateralRateGps=lat?a:NAN;request.limits.maxLongitudinalRateGps=lon?c:NAN;
         }else if(name=="TERRAIN_PROFILE"){
-            auto terrain=request.terrain;std::istringstream b(bytes);b.imbue(std::locale::classic());
-            b>>terrain.verticalScale>>terrain.horizontalScale>>terrain.offsetX>>terrain.offsetY>>terrain.headingRadians>>terrain.cliffHeight>>terrain.cliffWidth;
-            if(!b||!terrain.valid()){error="Invalid terrain profile";return false;}b>>std::ws;if(!b.eof()){error="Trailing terrain profile data";return false;}request.terrain=terrain;
+            std::istringstream b(bytes);b.imbue(std::locale::classic());
+            for(double expected:{1.,1.,0.,0.,0.,0.,600.}){double value;if(!(b>>value)||value!=expected){error="Only the flat ground profile is supported";return false;}}
+            b>>std::ws;if(!b.eof()){error="Trailing terrain profile data";return false;}
         }else if(name=="STATION"){
             if(!parseStationPayload(bytes,result.station,error,cancel))return false;
         }else{error="Unknown extension: "+name;return false;}
@@ -110,7 +107,7 @@ std::string reportJson(const Design& d){
     bool convergenceComma=false;for(const auto& metric:c.metrics){if(convergenceComma)o<<',';convergenceComma=true;o<<"{\"name\":"<<quote(metric.name)<<",\"coarse\":";number(o,metric.coarse);o<<",\"fine\":";number(o,metric.fine);o<<",\"absoluteDifference\":";number(o,metric.absoluteDifference);o<<",\"tolerance\":";number(o,metric.tolerance);o<<'}';}o<<"]}";
     o<<",\"intensityComparison\":\"Maximum over physical front/middle/rear seats of the strongest ten-second integral of max(vertical_g,0); configured reference identity is external\"";
     auto object=[&](const char* name,const std::vector<std::pair<const char*,double>>& fields){o<<','<<quote(name)<<":{";bool first=true;for(auto [key,value]:fields){if(!first)o<<',';first=false;o<<quote(key)<<':';number(o,value);}o<<'}';};
-    const auto& terrain=d.request.terrain;object("terrainProfile",{{"verticalScale",terrain.verticalScale},{"horizontalScale",terrain.horizontalScale},{"offsetXMeters",terrain.offsetX},{"offsetYMeters",terrain.offsetY},{"headingRadians",terrain.headingRadians},{"cliffHeightMeters",terrain.cliffHeight},{"cliffWidthMeters",terrain.cliffWidth},{"globalSlopeBound",terrain.slopeBound()}});
+    object("terrainProfile",{{"verticalScale",1},{"horizontalScale",1},{"offsetXMeters",0},{"offsetYMeters",0},{"headingRadians",0},{"cliffHeightMeters",0},{"cliffWidthMeters",600},{"globalSlopeBound",d.request.terrain.slopeBound()}});
     const auto& l=d.request.limits;object("limits",{{"minVerticalG",l.minVerticalG},{"maxVerticalG",l.maxVerticalG},{"maxLateralG",l.maxLateralG},{"maxLongitudinalG",l.maxLongitudinalG},{"maxJerkGps",l.maxJerkGps},{"minClearance",l.minClearance},{"maxLateralRateGps",l.maxLateralRateGps},{"maxLongitudinalRateGps",l.maxLongitudinalRateGps}});
     const auto& t=d.request.train;object("train",{{"cars",double(t.cars)},{"carMass",t.carMass},{"spacing",t.spacing},{"seatHeight",t.seatHeight},{"dragCdA",t.dragCdA},{"rollingResistance",t.rollingResistance},{"airDensity",t.airDensity}});
     o<<",\"targets\":{\"heightMeters\":";number(o,d.request.targets.height);o<<",\"speedMps\":";number(o,d.request.targets.speed);o<<",\"inversionHeightMeters\":";number(o,d.request.targets.inversionHeight);o<<",\"launchSeconds\":";number(o,d.request.targets.launchSeconds);o<<",\"referenceExposure\":";number(o,d.request.targets.referenceExposure);o<<",\"referenceId\":"<<quote(d.request.targets.referenceId)<<"},\"metrics\":{";
@@ -205,7 +202,8 @@ bool loadDesign(const std::string& path,Design& out,std::string& error,Cancel ca
         std::string payload(bytes,'\0');f.read(payload.data(),std::streamsize(bytes));if(size_t(f.gcount())!=bytes||f.peek()!=EOF||checksum(payload)!=expected){error="Design checksum/length mismatch";return false;}
         Design d;std::istringstream p(payload);p.imbue(std::locale::classic());std::string version;int terrain=-1;auto& r=d.request;
         p>>std::quoted(version)>>r.seed>>terrain>>r.maxCandidates>>r.simulationStep;
-        if(!supportedVersion(version)||terrain<0||terrain>2){error="Unsupported generator version or terrain";return false;}r.terrain.kind=TerrainKind(terrain);d.generationVersion=version;
+        if(!supportedVersion(version)){error="Unsupported generator version";return false;}
+        if(terrain!=0){error="Only flat-ground saves are supported in this build";return false;}d.generationVersion=version;
         bool hasReference=false;p>>r.targets.height>>r.targets.speed>>r.targets.inversionHeight>>r.targets.launchSeconds>>r.targets.requireIntensity>>hasReference>>r.targets.referenceExposure>>std::quoted(r.targets.referenceId);if(!hasReference)r.targets.referenceExposure=std::numeric_limits<double>::quiet_NaN();
         auto& l=r.limits;p>>l.minVerticalG>>l.maxVerticalG>>l.maxLateralG>>l.maxLongitudinalG>>l.maxJerkGps>>l.minClearance;
         auto& t=r.train;p>>t.cars>>t.carMass>>t.spacing>>t.seatHeight>>t.dragCdA>>t.rollingResistance>>t.airDensity;

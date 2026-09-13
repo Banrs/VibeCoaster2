@@ -1,5 +1,4 @@
 #include "CoasterMesh.h"
-#include "CoasterTerrainBackdrop.h"
 #include "coaster/support_mesh.hpp"
 #include "Math/RotationMatrix.h"
 
@@ -203,52 +202,31 @@ bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel)
     for (size_t I = 0; I < D.station.boxes.size(); ++I)
         if (!AppendStationBoxInstances(Out, D.station.boxes[I], int32(I), StationMidline, Cancel)) return false;
 
-    // Fixed terrain query in SI. Sampling controls visual resolution only; it never
-    // changes terrain heights or clearance validation to accommodate track.
-    const auto Min = VibeCoordinates::CorePosition({Out.Bounds.Min.X, Out.Bounds.Max.Y, Out.Bounds.Min.Z});
-    const auto Max = VibeCoordinates::CorePosition({Out.Bounds.Max.X, Out.Bounds.Min.Y, Out.Bounds.Max.Z});
-    // Coarse cliff triangles can self-shadow against their smooth normals.
-    // Refine the near surface, preserving the actual heightfield and lighting.
-    const bool DetailedCliffs = D.request.terrain.kind == coaster::TerrainKind::Canyon && D.request.terrain.cliffHeight > 0;
-    const int32 Cells = DetailedCliffs ? TerrainBackdrop::CliffNearCells : TerrainBackdrop::DefaultNearCells;
-    constexpr double TileSize = 320;
-    const double Step = TileSize / Cells;
-    const double X0 = std::floor((Min.x - 250) / TileSize) * TileSize;
-    const double Y0 = std::floor((Min.y - 250) / TileSize) * TileSize;
-    const int32 NX = FMath::CeilToInt((Max.x + 250 - X0) / TileSize);
-    const int32 NY = FMath::CeilToInt((Max.y + 250 - Y0) / TileSize);
-    if (int64(NX) * NY + Out.Chunks.Num() > MaxChunks ||
-        Vertices + int64(NX) * NY * (Cells + 1) * (Cells + 1) > MaxVertices ||
+    return AppendGround(Out, Cancel);
+}
+bool AppendGround(FPreparedRide& Out, const coaster::Cancel& Cancel)
+{
+    if (Cancel && Cancel()) return false;
+    if (!Out.Bounds.IsValid || Out.Bounds.Min.ContainsNaN() || Out.Bounds.Max.ContainsNaN())
+    { Out.Error = TEXT("Ground requires finite ride bounds."); return false; }
+    int64 Vertices = 4;
+    for (const auto& Chunk : Out.Chunks) Vertices += Chunk.Vertices.Num();
+    if (Out.Chunks.Num() + 1 > MaxChunks || Vertices > MaxVertices ||
         Out.Ties.Num() + Out.Supports.Num() + Out.Station.Num() > MaxInstances)
-    { Out.Error = TEXT("Accepted geometry exceeds the prototype mesh budget; active ride retained."); return false; }
-    for (int32 TY = 0; TY < NY; ++TY) for (int32 TX = 0; TX < NX; ++TX)
+    { Out.Error = TEXT("Accepted geometry exceeds the mesh budget; active ride retained."); return false; }
+    // A single plane covers the ride and horizon; overview bounds stay ride-only.
+    constexpr double MarginCm = 5000000.;
+    const double X0 = Out.Bounds.Min.X - MarginCm, X1 = Out.Bounds.Max.X + MarginCm;
+    const double Y0 = Out.Bounds.Min.Y - MarginCm, Y1 = Out.Bounds.Max.Y + MarginCm;
+    FChunk Ground; Ground.Ground = true;
+    Ground.Vertices = {{X0,Y0,0},{X0,Y1,0},{X1,Y1,0},{X1,Y0,0}};
+    for (const FVector& Vertex : Ground.Vertices)
     {
-        if (Cancel()) return false;
-        FChunk Chunk; Chunk.Terrain = true;
-        for (int32 Y = 0; Y <= Cells; ++Y)
-        {
-            if (Cancel()) return false;
-            for (int32 X = 0; X <= Cells; ++X)
-            {
-                const double PX = X0 + TX * TileSize + X * Step, PY = Y0 + TY * TileSize + Y * Step;
-                const double Height = D.request.terrain.height(PX, PY);
-                const double DX = (D.request.terrain.height(PX + 1, PY) - D.request.terrain.height(PX - 1, PY)) * .5;
-                const double DY = (D.request.terrain.height(PX, PY + 1) - D.request.terrain.height(PX, PY - 1)) * .5;
-                Chunk.Vertices.Add(Position({PX, PY, Height}));
-                Chunk.Normals.Add(Direction(coaster::unit({-DX, -DY, 1})));
-                Chunk.UV.Add(FVector2D(PX / 80, PY / 80));
-                if (X < Cells && Y < Cells)
-                {
-                    const int32 A = Y * (Cells + 1) + X, B = A + 1, C = A + Cells + 1, E = C + 1;
-                    EngineTriangle(Chunk, A, B, C);
-                    EngineTriangle(Chunk, C, B, E);
-                }
-            }
-        }
-        Out.Chunks.Add(MoveTemp(Chunk));
+        Ground.Normals.Add(FVector::UpVector);
+        Ground.UV.Add(FVector2D(Vertex.X / 8000., -Vertex.Y / 8000.));
     }
-    return AppendTerrainBackdrop(Out, D.request.terrain, X0, Y0, NX, NY, Cancel);
+    EngineTriangle(Ground, 0, 1, 2); EngineTriangle(Ground, 0, 2, 3);
+    Out.Chunks.Add(MoveTemp(Ground));
+    return true;
 }
 }
-
-

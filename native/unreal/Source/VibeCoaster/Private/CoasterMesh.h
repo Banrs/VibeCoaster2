@@ -17,7 +17,7 @@ struct FChunk
     TArray<FVector> Vertices, Normals;
     TArray<int32> Indices;
     TArray<FVector2D> UV;
-    bool Terrain = false, Structure = false, Footing = false;
+    bool Ground = false, Structure = false, Footing = false;
 };
 enum class EStationInstanceKind : uint8 { CubeSteel, CubeConcrete, Platform, PlatformEnd, Roof, Post };
 struct FStationInstance
@@ -42,6 +42,7 @@ struct FPreparedRide
 bool AppendStationBoxInstances(FPreparedRide& Out, const coaster::StationBox& Box,
     int32 SourceBoxIndex, coaster::Vec3 StationMidline, const coaster::Cancel& Cancel);
 // Plain value buffers only. No UObject creation, lookup or mutation on workers.
+bool AppendGround(FPreparedRide& Out, const coaster::Cancel& Cancel);
 bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel);
 }
 

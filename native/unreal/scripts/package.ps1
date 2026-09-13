@@ -71,10 +71,10 @@ foreach ($Asset in @('Content/Maps/Ride.umap', 'Content/Materials/M_Rail.uasset'
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $Asset))) { throw "Generated asset missing: $Asset" }
 }
 if (-not $SkipAutomation) {
-    Write-Host 'Running Unreal coordinate, mesh and terrain contract automation...'
+    Write-Host 'Running Unreal coordinate, mesh and ground contract automation...'
     Invoke-HiddenEditor -Arguments @("`"$Project`"", '-unattended', '-nop4', '-NullRHI', '-nosplash', '-stdout', '-FullStdOutLogOutput', '-ExecCmds="Automation RunTests VibeCoaster"', '-TestExit="Automation Test Queue Empty"', "-ReportExportPath=`"$RunLogs/Automation`"") -LogName 'Automation'
     $AutomationLog = Get-Content -LiteralPath (Join-Path $RunLogs 'Automation.stdout.log') -Raw
-    if ($AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.CoordinateContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.MeshContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.TerrainBackdropContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.StationArtContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.ImportedArtContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.SeedInputContract\}' -or $AutomationLog -match 'Result=\{Fail') {
+    if ($AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.CoordinateContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.MeshContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.GroundContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.StationArtContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.ImportedArtContract\}' -or $AutomationLog -notmatch 'Result=\{Success\}[^\r\n]*Path=\{VibeCoaster\.SeedInputContract\}' -or $AutomationLog -match 'Result=\{Fail') {
         throw "Automation success was not confirmed. Inspect $RunLogs/Automation and $RunLogs/Automation.stdout.log."
     }
 }
