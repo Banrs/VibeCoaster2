@@ -11,14 +11,13 @@ ScalarJet operator-(ScalarJet a,ScalarJet b){return {a.value-b.value,a.first-b.f
 ScalarJet operator*(ScalarJet a,ScalarJet b){return {a.value*b.value,a.first*b.value+a.value*b.first,a.second*b.value+2*a.first*b.first+a.value*b.second};}
 ScalarJet inverse(ScalarJet a){double r=1/a.value;return {r,-a.first*r*r,2*a.first*a.first*r*r*r-a.second*r*r};}
 ScalarJet squareRoot(ScalarJet a){double r=std::sqrt(a.value);return {r,a.first/(2*r),a.second/(2*r)-a.first*a.first/(4*r*r*r)};}
-ScalarJet sine(ScalarJet a){double s=std::sin(a.value),c=std::cos(a.value);return {s,c*a.first,c*a.second-s*a.first*a.first};}
-ScalarJet cosine(ScalarJet a){double s=std::sin(a.value),c=std::cos(a.value);return {c,-s*a.first,-s*a.second-c*a.first*a.first};}
 VectorJet operator+(VectorJet a,VectorJet b){return {a.value+b.value,a.first+b.first,a.second+b.second};}
 VectorJet operator-(VectorJet a,VectorJet b){return {a.value-b.value,a.first-b.first,a.second-b.second};}
 VectorJet operator*(VectorJet a,ScalarJet b){return {a.value*b.value,a.first*b.value+a.value*b.first,a.second*b.value+a.first*(2*b.first)+a.value*b.second};}
 ScalarJet jetDot(VectorJet a,VectorJet b){return {dot(a.value,b.value),dot(a.first,b.value)+dot(a.value,b.first),dot(a.second,b.value)+2*dot(a.first,b.first)+dot(a.value,b.second)};}
 VectorJet jetCross(VectorJet a,VectorJet b){return {cross(a.value,b.value),cross(a.first,b.value)+cross(a.value,b.first),cross(a.second,b.value)+cross(a.first,b.first)*2+cross(a.value,b.second)};}
-VectorJet normalized(VectorJet a){auto n=jetDot(a,a);if(!std::isfinite(n.value)||n.value<1e-20)throw std::runtime_error("Degenerate canonical frame");return a*inverse(squareRoot(n));}
+ScalarJet magnitude(VectorJet a){auto n=jetDot(a,a);if(!std::isfinite(n.value)||n.value<1e-20)throw std::runtime_error("Degenerate canonical frame");return squareRoot(n);}
+VectorJet normalized(VectorJet a){return a*inverse(magnitude(a));}
 
 template<class T,size_t N>T value(const std::array<T,N>& c,double u){T p=c.back();for(size_t i=N-1;i-->0;)p=p*u+c[i];return p;}
 template<size_t N>VectorJet polynomialJet(const std::array<Vec3,N>& c,double u){VectorJet p{c.back(),{}, {}};for(size_t i=N-1;i-->0;){p.second=p.second*u+p.first*2;p.first=p.first*u+p.value;p.value=p.value*u+c[i];}return p;}
@@ -88,9 +87,11 @@ Vec3 Track::tangent(double distance,size_t& hint) const{
 std::array<double,6> Track::bankPolynomial(size_t i) const{if(i>=spans.size())throw std::runtime_error("Invalid canonical bank span");return spans[i].bank;}
 
 TrackKinematics sampleSpanKinematics(const Track& track,size_t i,double u){
-    checkParameter(track,i,u);const auto& span=track.spans[i];auto d=positionDerivative(span,u);auto q=squareRoot(jetDot(d,d));auto tangent=normalized(d);
+    checkParameter(track,i,u);const auto& span=track.spans[i];auto d=positionDerivative(span,u);auto q=magnitude(d);auto tangent=d*inverse(q);
     auto raw=polynomialJet(span.referenceUp,u);auto unbanked=normalized(raw-tangent*jetDot(raw,tangent));
-    auto bank=polynomialJet(span.bank,u),c=cosine(bank),s=sine(bank);
+    const auto bank=polynomialJet(span.bank,u);const double sinBank=std::sin(bank.value),cosBank=std::cos(bank.value);
+    const ScalarJet c{cosBank,-sinBank*bank.first,-sinBank*bank.second-cosBank*bank.first*bank.first};
+    const ScalarJet s{sinBank,cosBank*bank.first,cosBank*bank.second-sinBank*bank.first*bank.first};
     auto up=unbanked*c+jetCross(tangent,unbanked)*s+tangent*(jetDot(tangent,unbanked)*(ScalarJet{1,0,0}-c));
     const double q2=q.value*q.value,q3=q2*q.value;
     Vec3 upS=up.first/q.value,upSS=up.second/q2-up.first*(q.first/q3);

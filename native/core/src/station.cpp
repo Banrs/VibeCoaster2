@@ -197,9 +197,16 @@ ValidationReport validateStation(const Track& track,const Terrain& terrain,const
     const double riderBottom=.4,riderTop=std::max(2.4,train.seatHeight+.6);
     try {
         const auto sweep=buildClearanceSweep(track,train,cancel);size_t scan=0;
+        std::vector<double> obstacleRadii;obstacleRadii.reserve(station.boxes.size());
+        for(const auto& box:station.boxes)obstacleRadii.push_back(norm(box.half)+4.6);
+        std::vector<size_t> nearby;nearby.reserve(station.boxes.size());
         for(const auto& frame:sweep.frames()){
             if((scan++&127)==0&&cancel&&cancel()){out.fail("CANCELLED","Station validation cancelled");return out;}
             const auto& q=frame.sample;const double s=frame.distance;
+            nearby.clear();
+            for(size_t j=0;j<station.boxes.size();++j)
+                if(!(norm(q.position-station.boxes[j].center)>obstacleRadii[j]))nearby.push_back(j);
+            if(nearby.empty())continue;
             std::array<StationBox,3> trainBoxes{{
                 {q.position,q.tangent,q.right,q.up,{1.4,.95,.3},StationRole::Post},
                 {q.position+q.up*.35,q.tangent,q.right,q.up,{1.275,.85,.225},StationRole::Post},
@@ -217,9 +224,8 @@ ValidationReport validateStation(const Track& track,const Terrain& terrain,const
             }};
             for(auto& b:hardware)b=expanded(b,.06);
 
-            for(size_t j=0;j<station.boxes.size();++j){
+            for(size_t j:nearby){
                 const auto& obstacle=station.boxes[j];
-                if(norm(q.position-obstacle.center)>norm(obstacle.half)+4.6)continue;
                 for(const auto& part:hardware)if(stationBoxesOverlap(part,obstacle)){
                     out.fail("STATION_HARDWARE_CLEARANCE","Cannot certify canonical track hardware clearance from a station part",s,double(j),0);
                     if(out.errors.size()>=8)return out;break;

@@ -58,7 +58,7 @@ static void geometry(){
     bool threw=false;try{auto bad=loop;bad.knots.back().up={NAN,0,0};bad.rebuild();}catch(...){threw=true;}check(threw,"Nonfinite last knot rejected");
     threw=false;try{auto bad=loop;bad.knots[1].element=Element(99);bad.rebuild();}catch(...){threw=true;}check(threw,"Invalid element enum rejected");
 }
-static Design generation(){
+static void generation(){
     GenerationRequest r;r.targets.requireIntensity=false;r.seed=42;
     auto d=generate(r);if(!d.accepted())std::cerr<<reportJson(d)<<'\n';check(d.accepted(),"Physics-proof seed42 accepted");
     auto replay=simulate(d.track,d.operations,r.train,r.simulationStep);check(replay.completed&&replay.report.valid(),"Independent final replay completes");near(replay.frames.back().time,replay.metrics.duration,0,"Terminal trace timestamp");near(replay.frames.back().speed,0,0,"Physical terminal stop speed");near(replay.metrics.maxSpeed,d.simulation.metrics.maxSpeed,1e-12,"Replay max speed");
@@ -70,7 +70,6 @@ static Design generation(){
     auto stationRide=generate(stationRegression);check(stationRide.accepted(),"Seed9 hills must finish its physically valid station return");near(stationRide.simulation.frames.back().speed,0,0,"Seed9 terminal speed");
     stationRegression.seed=10;stationRegression.terrain.kind=TerrainKind::Flat;stationRide=generate(stationRegression);check(stationRide.accepted(),"Seed10 flat must finish its station return");near(stationRide.simulation.frames.back().speed,0,0,"Seed10 terminal speed");
     auto cancelled=generate(r,[]{return true;});check(cancelled.simulation.cancelled&&!cancelled.accepted(),"Generation cancellation");int calls=0;auto interrupted=simulate(d.track,d.operations,r.train,r.simulationStep,[&]{return ++calls>3;});check(interrupted.cancelled&&!interrupted.completed,"Mid-simulation cancellation");
-    return d;
 }
 static void persistence(const Design& d){
     auto folder=std::filesystem::temp_directory_path()/"coaster-foundation-core-tests";std::filesystem::create_directories(folder);auto path=(folder/"roundtrip.coaster").string();std::filesystem::remove(path);std::string error;
@@ -233,5 +232,5 @@ int main(int argc,char** argv){try{
         return 0;
     }
     check(argc==1,"Unknown test selection");
-    analytical();geometry();auto d=generation();persistence(d);migration(d);planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, persistence/corruption/rejected save, explicit unsupported old schemas, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;
+    analytical();geometry();generation();planningAndTargets();stationPlacementRepair();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}

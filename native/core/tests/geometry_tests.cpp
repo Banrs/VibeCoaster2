@@ -42,6 +42,11 @@ static void verifyJoins(const Track& t){
         const auto a=t.locate(s,hint),b=t.locate(s);
         check(a.span==b.span&&a.parameter==b.parameter,"Arbitrary backward jumps and seam wraps invalidate stale hints");
     }
+    if(t.closed)for(double s:{-t.length*2,-t.length,-.1,-0.,0.,std::nextafter(t.length,0.),t.length,std::nextafter(t.length,INFINITY),t.length*2}){
+        double wrapped=std::fmod(s,t.length);if(wrapped<0)wrapped+=t.length;
+        const auto a=t.locate(s),b=t.locate(wrapped);
+        check(a.span==b.span&&a.parameter==b.parameter,"In-range fast path preserves exact wrapping at lap boundaries");
+    }
     for(size_t i=0;i<t.spans.size();++i){for(int k=0;k<8;++k)close(t.spans[i].c[k],copy.spans[i].c[k],0,"Septic coefficient determinism");for(int k=0;k<6;++k){close(t.spans[i].referenceUp[k],copy.spans[i].referenceUp[k],0,"Reference frame cache determinism");check(t.spans[i].bank[k]==copy.spans[i].bank[k],"Bank cache determinism");}}
 }
 static void reportPrecision(){

@@ -65,6 +65,8 @@ int main(){try{
     for(const auto* result:{&coarse,&fine}){
         double rate=0;for(const auto& seat:result->metrics.seats)rate=std::max(rate,seat.axes[0].maxRateGps);
         near(rate,result->metrics.maxJerkGps,0,"Global and per-seat analytic vertical rates use one convention");
+        double exposure=0;for(const auto& seat:result->metrics.seats)exposure=std::max(exposure,seat.exposure10Seconds);
+        near(exposure,result->metrics.exposure10Seconds,0,"Global exposure is the maximum of the same per-seat measurements");
     }
     check(std::abs(coarse.metrics.maxJerkGps-fine.metrics.maxJerkGps)/std::max(1.,std::abs(fine.metrics.maxJerkGps))<.02,"Analytic vertical rate converges without differencing or smoothing");
     auto finest=simulate(track,ops,train,1./4000);check(finest.completed&&finest.report.valid(),"Minimum public requested step has a valid genuine half-step");

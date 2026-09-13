@@ -159,7 +159,7 @@ TrackLocation Track::locate(double distance) const {
 }
 TrackLocation Track::locate(double distance,size_t& hint) const {
     if(spans.empty()||!std::isfinite(distance)||!std::isfinite(length)||length<=0)throw std::runtime_error("Invalid track distance or empty track");
-    if(closed){distance=std::fmod(distance,length);if(distance<0)distance+=length;}else distance=std::clamp(distance,0.,length);
+    if(closed){if(distance<0||distance>=length){distance=std::fmod(distance,length);if(distance<0)distance+=length;}}else distance=std::clamp(distance,0.,length);
     auto contains=[&](size_t i){return i<spans.size()&&distance>=spans[i].start&&(i+1==spans.size()||distance<spans[i+1].start);};
     if(!contains(hint)){
         if(hint<spans.size()&&contains(hint+1))++hint;
@@ -278,14 +278,14 @@ ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Li
     }
     // Central-chord model for nonadjacent branches;12 m wrap adjacency denotes
     // the same local rail. It is not an exemption for supports or station parts.
-    constexpr double step=2,cell=16;std::vector<Vec3> p;std::vector<double> ds;std::vector<TrackSample> frames;
+    constexpr double step=2,cell=16;std::vector<Vec3> p;std::vector<double> ds;
     int count=int(std::ceil(t.length/step));
     auto chordReport=chord_validation::validate(t,*sweep,count,cancel);if(!chordReport.valid())return chordReport;
     // True arc per chord <=2.1 m and continuous curvature <=.2 imply deviation
     // <=.2*2.1^2/8=.11025 m from the straight chord. Against the unchanged6 m
     // test, body radius4.2 + hardware radius.9 + two deviations leave>.679 m.
-    p.reserve(count+1);
-    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=t.sample(s);p.push_back(q.position);ds.push_back(s);if(i<count)frames.push_back(q);
+    p.reserve(count+1);ds.reserve(count+1);
+    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=t.sample(s);p.push_back(q.position);ds.push_back(s);
         for(double side:{-1.5,1.5})for(double height:{-.8,2.4}){Vec3 e=q.position+q.right*side+q.up*height;double clear=e.z-terrain.height(e.x,e.y);if(clear<limits.minClearance+1.6&&r.errors.size()<10)r.fail("TERRAIN_CLEARANCE","Train envelope intersects terrain clearance",s,clear,limits.minClearance);}
     }
     struct Key {int x,y,z;bool operator==(const Key&) const=default;};struct Hash{size_t operator()(Key k)const{return uint64_t(k.x)*73856093ull^uint64_t(k.y)*19349663ull^uint64_t(k.z)*83492791ull;}};

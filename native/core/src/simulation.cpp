@@ -1,6 +1,5 @@
 #include "coaster/coaster.hpp"
 #include "simulation_internal.hpp"
-#include <deque>
 
 namespace coaster {
 double forceExposure(const std::vector<double>& values,double step,double window){
@@ -42,6 +41,7 @@ static SimulationResult simulateImpl(const Track& track,const std::vector<Operat
     constexpr double traceDt=1./60;double nextTrace=0;
     std::array<double,3> verticalRatePeaks{};std::array<std::vector<double>,3> exposures;std::array<std::array<std::vector<double>,2>,3> horizontalForces;
     auto wrappedDistance=[&](double cs){
+        if(cs>=0&&cs<track.length)return cs;
         double wrapped=std::fmod(cs,track.length);if(wrapped<0)wrapped+=track.length;
         return wrapped;
     };
@@ -136,8 +136,9 @@ static SimulationResult simulateImpl(const Track& track,const std::vector<Operat
         if(stalled>3&&t>3){out.report.fail("STALL","Train stopped before returning to its station",s);break;}
     }
     if(!out.frames.empty()&&t>out.frames.back().time){Frame terminal;terminal.time=t;terminal.distance=s;terminal.speed=v;if(forces){double a=acceleration(s,v,t);for(int seat=0;seat<3;++seat)terminal.seats[seat]=measureSeatForces(track,s+seatDistanceOffset(train,seat),v,a,train.seatHeight);}out.frames.push_back(terminal);}
-    out.metrics.duration=t;for(const auto& e:exposures)out.metrics.exposure10Seconds=std::max(out.metrics.exposure10Seconds,forceExposure(e,dt));
-    for(int seat=0;seat<3;++seat){auto& stats=out.metrics.seats[seat];const auto& vertical=exposures[seat];stats.axes[0]=summarizeAxis(vertical,dt);stats.axes[0].maxRateGps=verticalRatePeaks[seat];stats.axes[1]=summarizeAxis(horizontalForces[seat][0],dt);stats.axes[2]=summarizeAxis(horizontalForces[seat][1],dt);stats.exposure10Seconds=forceExposure(vertical,dt);
+    out.metrics.duration=t;
+    if(forces)for(int seat=0;seat<3;++seat){auto& stats=out.metrics.seats[seat];const auto& vertical=exposures[seat];stats.axes[0]=summarizeAxis(vertical,dt);stats.axes[0].maxRateGps=verticalRatePeaks[seat];stats.axes[1]=summarizeAxis(horizontalForces[seat][0],dt);stats.axes[2]=summarizeAxis(horizontalForces[seat][1],dt);stats.exposure10Seconds=forceExposure(vertical,dt);
+        out.metrics.exposure10Seconds=std::max(out.metrics.exposure10Seconds,stats.exposure10Seconds);
         std::array<double,4> current{};for(double f:vertical){bool exposureActive[]={f<0,f>2,f>3,f>4};double* total[]={&stats.airtimeBelowZeroSeconds,&stats.positiveAbove2Seconds,&stats.positiveAbove3Seconds,&stats.positiveAbove4Seconds};double* longest[]={&stats.longestAirtimeSeconds,&stats.longestAbove2Seconds,&stats.longestAbove3Seconds,&stats.longestAbove4Seconds};for(int i=0;i<4;++i){if(exposureActive[i]){*total[i]+=dt;current[i]+=dt;*longest[i]=std::max(*longest[i],current[i]);}else current[i]=0;}}}
     if(!out.completed&&out.report.valid())out.report.fail("TIMEOUT","Ride did not finish within 600 seconds",s);
     return out;
