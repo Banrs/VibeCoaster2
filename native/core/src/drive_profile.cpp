@@ -24,10 +24,8 @@ bool sameProfile(const Operation& a,const Operation& b){
 }
 }
 void coalesceDriveProfiles(std::vector<Operation>& operations){
-    // Authored-order maximal runs only. Never sort, merge overlapping regions,
-    // bridge even a one-ULP gap, reinterpret zero-length/wrapping intervals or
-    // combine distinct profiles. One physical continuous motor region then has
-    // one entry ramp, instead of restarting at a construction-module boundary.
+    // Only identical contiguous nonwrapping runs coalesce, preserving authored order.
+    // Each resulting motor region has one entry ramp.
     size_t output=0;
     for(size_t input=0;input<operations.size();++input){
         const auto& next=operations[input];

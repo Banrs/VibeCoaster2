@@ -16,8 +16,7 @@ inline double connectorCrestHeight(double length,double entrySpeed){
     return std::min(48.,(v2-std::sqrt(discriminant))/(4*gravity));
 }
 // Value and first three normalized-coordinate derivatives. Zero port jets
-// permit adjacent crests without a flat holding segment. Small monotone warp
-// changes proportions; actual geometry/forces must pass canonical full replay.
+// permit adjoining crests; a monotone warp varies their proportions.
 inline std::array<double,4> connectorProfileJet(double u,double shape){
     if(!std::isfinite(u)||u<0||u>1||!std::isfinite(shape)||std::abs(shape)>.1)throw std::invalid_argument("Connector profile lies outside its authored domain");
     if(u==0||u==1)return {};

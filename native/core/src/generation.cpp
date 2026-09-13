@@ -76,11 +76,7 @@ static std::vector<RoutePlan> planRoutes(int sides,const std::vector<double>& mi
         auto solved=closeFor(p.lengths[1]);p.lengths[2]=solved.first;p.lengths[3]=solved.second;
         bool valid=true;p.length=0;
         for(int side=0;side<sides;++side){if(p.lengths[side]<minimum[side]||p.lengths[side]>2800)valid=false;p.length+=p.lengths[side]+p.turns[side].length;}
-        // Major hills/inversion add approximately 400--650 m of 3-D rail to
-        // this horizontal budget. Do not build a huge fallback corridor.
-        // The exposure hold is an extra closed helix lap, not another long
-        // perimeter corridor. Keep its real track length in all reports and
-        // resource/clearance checks, but do not charge the same footprint twice.
+        // An extra closed helix lap increases rail length without increasing footprint.
         const double repeatedHelixLength=reversingPair&&holdCorner>=0?2*pi*radius:0;
         if(!valid||p.length<4700||p.length-repeatedHelixLength>9800)continue;
         Vec3 cursor{};h=0;
@@ -134,9 +130,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     std::vector<int> module(sides,2);module[hillSide]=0;module[loopSide]=1;
     if(sides==6){module[2]=3;module[5]=3;}
     rng.range(17,23); // Retain the independent route random sequence.
-    // A separate stream adds variation without consuming the legacy route
-    // random sequence. The paired reversal has an explicit net displacement;
-    // only six-corridor plans reserve its inward three-lane footprint.
+    // Independent detail stream preserves the route random sequence.
     Random detail{req.seed^0x8d2f41b79a5c630eull};
     const bool reversingPair=true;
     double reversalHeight=std::max(84.,req.targets.inversionHeight+detail.range(7,14));
@@ -194,10 +188,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     }
     int holdCorner=intensityDesign&&exposureGoal>18&&sides>2?(hillSide+1)%(sides-1):-1;
     auto plans=planRoutes(sides,minimum,radius,ramp,holdCorner,reversingPair,rng,cancel);if(plans.empty())throw std::runtime_error("No route fits exact closure and footprint budget");
-    // Visit ranked plans in order. Exact raw departure/return boundary
-    // and bay must fit the local budget before committing to a station site.
-    // The candidate list is bounded by 48 shapes x 36 placements; rejected
-    // station sites do not spend a geometry/physics attempt or alter its limits.
+    // Station fit filters ranked plans before geometry attempts are counted.
     int firstFeasiblePlacement=-1;
     for(auto& plan:plans){
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
@@ -240,10 +231,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
             record(drive(180,DriveKind::Boost,65),side,"airtime-entry-boost");used+=180;
             used+=forceHill(0,side);
         }else if(module[side]==4){
-            // Lead inward before reversing so the returning ground-level lane
-            // is laterally separated from both the lead and the elevated lane.
-            // The speed here is an energy-based estimate only: the same real
-            // finite-train brake and complete-circuit checks decide eligibility.
+            // The inward lead separates the low return from the incoming lane.
             double entrySpeed=reversalEntrySpeed;
             auto lead=piece(reversalLead+reversalLane,[=](double u){return Vec3{reversalLead*u,reversalLane*layoutSmooth(u),0};},Element::Turn);
             pending.push_back({lead.first,lead.second,DriveKind::Brake,entrySpeed});record(lead,side,"immelmann-inward-entry-brake");
@@ -287,18 +275,13 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     if(std::hypot(cursor.x-origin.x,cursor.y-origin.y)>.001)throw std::runtime_error("Solved route failed canonical XY closure");
     size_t unique=raw.size()-1;std::vector<double> distance(raw.size());for(size_t i=1;i<raw.size();++i)distance[i]=distance[i-1]+norm(raw[i].position-raw[i-1].position);
     if(forceHoldEnd){
-        // Keep the reversing pair and its flyover on the same raised datum.
-        // Settle the extra helix elevation on the final return before joins
-        // and crossing lifts are planned; a later warp would erase clearance.
+        // Remove the extra helix elevation on the final return before planning joins and crossings.
         auto returning=std::find_if(modules.begin(),modules.end(),[&](const ModuleRun& run){return run.corridor==sides-1;});
         const double begin=distance[returning->begin],remaining=distance.back()-begin;
         for(size_t i=returning->begin;i<raw.size();++i)raw[i].position.z-=55*layoutSmooth((distance[i]-begin)/remaining);
         for(size_t i=1;i<raw.size();++i)distance[i]=distance[i-1]+norm(raw[i].position-raw[i-1].position);
     }
-    // Full connecting crests occupy existing transit envelopes. Dimensions
-    // follow the gravity energy budget and v^2 curvature, not random telemetry.
-    // All existing operation indices survive and finite-train replay remains
-    // authoritative after ground placement and force-aligned banking.
+    // Connecting crests fit the transit envelopes using gravity and curvature sizing.
     struct PacingCrest {size_t begin,end;double height,speed;int count;};std::vector<PacingCrest> pacingCrests;
     Random pacing{req.seed^0x5fb6d99a781ec341ull};
     auto pace=[&](size_t first,size_t last,double speed,int count){
@@ -413,10 +396,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     plan.stationChecked=true;plan.stationBayMinimum=stationGroundMin;plan.stationBayMaximum=stationGroundMax;plan.stationRequiredDatum=stationDatum;
     plan.stationFeasible=stationDatum-stationGroundMin<=16;
     if(!plan.stationFeasible)continue;
-    // A failed ride deserves one different station placement at the same
-    // geometry scale before larger radii/ramps spend the footprint budget.
-    // Placement identifiers jointly encode heading and anchored site; merely
-    // selecting another shape at the same site is not this second alternative.
+    // Try a different anchored station placement before increasing geometry scale.
     if(placementVariant){
         if(firstFeasiblePlacement<0){firstFeasiblePlacement=plan.placement;continue;}
         if(plan.placement==firstFeasiblePlacement)continue;
@@ -424,10 +404,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     plan.stationSelectionEligible=true;
     for(int k=0;k<controls;++k){target[k]=weight[k]?target[k]/weight[k]:stationDatum;base[k]=std::max(target[k],lower[k]);fixed[k]=fixedStationBoundary(k*spacing);if(fixed[k]){if(lower[k]>stationDatum+1e-8)throw std::runtime_error("Local station datum cannot clear its fixed launch/boarding boundary");base[k]=stationDatum;}}
     auto wrap=[&](int k){return (k%controls+controls)%controls;};
-    // Minimize squared second and third spatial differences together. The
-    // third-difference term spreads curvature changes over roughly two 50 m
-    // control cells, while terrain lower bounds and the station datum remain
-    // hard constraints. This is shape planning, not a force-limit exemption.
+    // Minimize squared second/third spatial differences with fixed station height
+    // and ground-clearance lower bounds.
     std::vector<Vec3> baselineJets(controls);
     auto solveBaseline=[&]{for(int iteration=0;iteration<1500;++iteration){if((iteration&31)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");double maximumChange=0;for(int k=0;k<controls;++k)if(!fixed[k]){double next=std::max(lower[k],(64*(base[wrap(k-1)]+base[wrap(k+1)])-25*(base[wrap(k-2)]+base[wrap(k+2)])+4*(base[wrap(k-3)]+base[wrap(k+3)])+.001*target[k])/86.001);maximumChange=std::max(maximumChange,std::abs(next-base[k]));base[k]=next;}if(maximumChange<1e-6)break;}baselineJets=detail::minimumSnapJets(base,fixed,cancel);};
 
@@ -450,10 +428,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     double brakingStart=d.track.length-(65*65/(2*2.4)+60);
     for(auto& op:d.operations)if(op.kind==DriveKind::Boost)op.end=std::min(op.end,brakingStart);
     d.operations.erase(std::remove_if(d.operations.begin(),d.operations.end(),[](const Operation& op){return op.end<=op.start;}),d.operations.end());
-    // A real descent can exert more than the former 4 m/s^2 brake rating.
-    // Size the hardware against the canonical downhill grade plus the same
-    // requested stopping deceleration; the controller still applies bounded
-    // force/power through its ramp and the complete train is resimulated.
+    // Terminal brake sizing includes downhill gravity and the requested deceleration.
     double terminalDownhill=0;
     for(double s=brakingStart;s<d.track.length;s+=1)terminalDownhill=std::max(terminalDownhill,-d.track.sample(s).tangent.z);
     const double terminalBrakeAcceleration=std::max(4.,2.4+gravity*terminalDownhill+1);
@@ -508,9 +483,7 @@ static void improveBanking(Design& d,const std::vector<Frame>& frames){
     double edge=0;
     for(size_t i=0;i<count;++i){if(d.track.knots[i].element!=Element::Turn)edge=along[i]+d.track.spans[i].length;left[i]=std::max(0.,along[i]-edge);}
     edge=d.track.length;for(size_t i=count;i-->0;){if(d.track.knots[i].element!=Element::Turn)edge=along[i];right[i]=std::max(0.,edge-along[i]);}
-    // A 1.2-second authoring window on either side allows finite roll response
-    // through low-load S crests. This is not an ASTM limit; full-train replay
-    // still assesses the resulting canonical frame and rider-offset forces.
+    // Smooth banking over a 1.2-second travel window on each side.
     for(size_t i=0;i<count;++i){auto& k=d.track.knots[i];if(k.element!=Element::Turn)continue;double weighted=0,total=0,radius=std::max(1.,speed[i]*1.2);
         size_t first=i;while(first&&along[i]-along[first-1]<radius)--first;
         for(size_t j=first;j<count&&along[j]-along[i]<radius;++j){double u=(along[j]-along[i])/radius,w=std::pow(std::max(0.,1-u*u),4)*d.track.spans[j].length;weighted+=w*target[j];total+=w;}
@@ -589,9 +562,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
             auto motion=simulateMotion(d.track,d.operations,req.train,req.simulationStep,cancel);
             if(motion.cancelled){d.simulation.cancelled=true;d.report.fail("CANCELLED","Generation cancelled");return d;}
             if(motion.completed){
-                // One bounded correction uses measured finite-train entry energy.
-                // Rebuild the entire route and operation zones;
-                // never stretch an FVD curve or substitute a prescribed speed.
+                // Rebuild geometry and drive zones once using measured train entry energy.
                 for(size_t h=0;h<feedback.airtimeSpeed.size();++h)feedback.airtimeSpeed[h]=replayValueAt(motion.frames,ports.airtimeEntry[h]);
                 double exitSpeed=replayValueAt(motion.frames,ports.reversalExit);
                 feedback.reversalEnergyCorrection=ports.reversalSpeedHint*ports.reversalSpeedHint-exitSpeed*exitSpeed;

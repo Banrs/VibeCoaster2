@@ -34,8 +34,7 @@ void AVibeCoasterController::BeginPlay()
     Verification.Reset(FCoasterRuntimeVerification::Create().Release());
 #endif
     bShowMouseCursor = false; SetInputMode(FInputModeGameOnly());
-    // Optional user-supplied result of an independently processed, comparable
-    // reference trace. There is deliberately no fabricated shipping default.
+    // Optional user-supplied processed reference trace.
     FString ReferenceFile;
     if (GConfig->GetString(TEXT("CoasterReference"), TEXT("File"), ReferenceFile, GGameIni))
     {

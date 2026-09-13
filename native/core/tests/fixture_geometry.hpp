@@ -3,9 +3,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
-// TEST ONLY: read checksummed schema2/3 canonical knots and train/terrain fields.
-// This does not claim the ride/supports are globally accepted by the new runtime.
-// It isolates station checks when strengthened support validation rejects an old fixture.
+// Reads schema 2/3 geometry for isolated station tests.
 inline coaster::Design stationGeometryFixture(const std::string& path){
     using namespace coaster;std::ifstream f(path,std::ios::binary);std::string magic;int schema;size_t bytes;uint64_t expected;
     if(!(f>>magic>>schema>>bytes>>expected)||magic!="COASTER"||(schema!=2&&schema!=3)||bytes>64*1024*1024||f.get()!='\n')throw std::runtime_error("Invalid station fixture header");

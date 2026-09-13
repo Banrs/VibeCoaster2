@@ -162,10 +162,8 @@ void assess(FvdResult& result,const FvdRequest& r,const Cancel& cancel){
     const double initialEnergy=.5*r.speed*r.speed+gravity*r.position.z;
     for(const auto& q:result.samples)a.maxEnergyDrift=std::max(a.maxEnergyDrift,
         std::abs(.5*q.speed*q.speed+gravity*q.position.z+q.dissipatedWorkPerMass-initialEnergy));
-    // Independent forward replay on the canonical geometry, with twice the
-    // authoring time resolution. Speed comes from replay gravity and configured losses, not from the
-    // force controls or stored integration samples. No target force is reused
-    // as a measured force. This is a point replay, NOT simulate()/acceptance.
+    // Canonical point replay uses half the authoring timestep, with speed
+    // derived from gravity and losses independently of the force controls.
     double distance=0,speed=r.speed;
     const auto measure=[&](double time,double at,double velocity){
         require(at>=0&&at<=result.track.length,"FVD_REPLAY_DOMAIN","Canonical replay left the open section before its requested end");

@@ -3,9 +3,8 @@
 #include <array>
 #include <stdexcept>
 namespace coaster::detail {
-// Unique septic matching position and the first three arc-length derivatives
-// at both ports. Its parameter is normalized; the supplied length carries all
-// derivative units. Subsequent canonical compilation and replay remain required.
+// Septic matching position and three arc-length derivatives at both ports.
+// The parameter is normalized; length supplies the derivative units.
 inline std::array<Vec3,8> flowBridgePolynomial(const TrackKinematics& a,const TrackKinematics& b,double span){
     if(!std::isfinite(span)||span<=0)throw std::invalid_argument("Flow bridge requires a finite positive span");
     for(const auto* port:{&a,&b})if(!finite(port->sample.position)||!finite(port->sample.tangent)||!finite(port->sample.curvature)||!finite(port->curvatureS))throw std::invalid_argument("Flow bridge requires finite endpoint jets");

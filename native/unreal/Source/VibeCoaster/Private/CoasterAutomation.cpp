@@ -14,9 +14,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 namespace
 {
-// Independent pre-batching reference: each rail/spine independently samples
-// the accepted track. Deliberately do not use Tube(), its shared sample array,
-// or rendering coordinate helpers; test both attributes and tube/ring ordering.
+// Independent rail/spine reference samples the track without production
+// tube, shared-sample or coordinate helpers.
 bool RailChunkMatchesUnbatchedReference(const VibeMesh::FChunk& Chunk,
     const coaster::Track& Track, int32 RailChunkIndex)
 {
@@ -438,9 +437,7 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
         FBox VertexBounds(ForceInit);
         int64 VertexCount = 0, TriangleCount = 0;
         bool GeometryValid = true, TrainBodyFit = true, TieAssemblyFit = true;
-        // This editor-only test reads the already resident render buffers. The
-        // temporary flag only suppresses a cooked-access warning; restore it
-        // without dirtying/saving the asset or retaining runtime CPU buffers.
+        // The temporary flag permits reading resident buffers; the asset is not saved.
         const bool PreviousCPUAccess = Mesh->bAllowCPUAccess;
         Mesh->bAllowCPUAccess = true;
         for (int32 Section = 0; Section < Mesh->GetNumSections(0); ++Section)

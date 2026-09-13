@@ -329,9 +329,8 @@ void AVibeCoasterWorld::PollJob()
         else if (!Result.Message.IsEmpty())
         { Runtime->Message = Result.Message; UE_LOG(LogTemp, Display, TEXT("%s"), *Result.Message); }
     }
-    // Invalidating a request cannot undo an already committed disk transaction.
-    // Resolve an outstanding save cancellation truthfully even when its revision
-    // was superseded; a queued newer job keeps ownership of the visible status.
+    // A completed disk replacement survives cancellation. Newer jobs retain
+    // ownership of the visible status.
     if (Result.WasSave && (Result.Revision != Runtime->Revision || Runtime->JobState->Cancel.load()))
     {
         if (Result.SaveSucceeded) Result.Message += TEXT(" (commit completed before cancellation could stop it)");
@@ -457,9 +456,8 @@ void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
             // finite-train spacing and the exact sample used before batching.
             Runtime->CarTransforms.Emplace(VibeMesh::Rotation(P), VibeMesh::Position(P.position), FVector::OneVector);
         }
-        // UE 5.8's instance data manager marks changed instance transforms and
-        // updates bounds/GPU data at end of frame. Recreating the entire scene
-        // proxy with MarkRenderStateDirty each tick defeats that incremental path.
+        // UE updates changed instance bounds/GPU data at frame end.
+        // MarkRenderStateDirty would rebuild the entire scene proxy.
         Active->Cars->BatchUpdateInstancesTransforms(0, Runtime->CarTransforms, false, false, true);
         Runtime->TrainPoseDirty = false;
     }
@@ -474,8 +472,7 @@ void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
             const double Aspect = Width > 0 && Height > 0 ? double(Width) / Height : Lens->AspectRatio;
             const double HalfHorizontal = FMath::DegreesToRadians(Lens->FieldOfView * .5);
             const double HalfVertical = std::atan(std::tan(HalfHorizontal) / Aspect);
-            // Fit the ride's bounding sphere in both viewport dimensions,
-            // including after a resize. The previous fixed distance clipped it.
+            // Fit the bounding sphere in both viewport dimensions.
             const double Distance = 1.1 * Radius / std::sin(FMath::Min(HalfHorizontal, HalfVertical));
             const FVector Location = Centre + FVector(-.8, .6, .9).GetSafeNormal() * Distance;
             Camera->SetActorLocationAndRotation(Location, (Centre - Location).Rotation());

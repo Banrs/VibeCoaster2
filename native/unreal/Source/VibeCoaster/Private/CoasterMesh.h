@@ -36,9 +36,8 @@ struct FPreparedRide
     FString Error;
     uint64 Revision = 0;
 };
-// Imported assets are already centimetre-sized: authored modules use unit scale.
-// This value-only helper tiles contained details inside a canonical station box;
-// unsupported cross-sections/poses retain the original cube representation.
+// Tiles centimetre-sized assets at unit scale within station boxes.
+// Unsupported cross-sections and poses use cubes.
 bool AppendStationBoxInstances(FPreparedRide& Out, const coaster::StationBox& Box,
     int32 SourceBoxIndex, coaster::Vec3 StationMidline, const coaster::Cancel& Cancel);
 // Plain value buffers only. No UObject creation, lookup or mutation on workers.
