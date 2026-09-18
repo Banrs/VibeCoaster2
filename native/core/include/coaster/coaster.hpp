@@ -13,7 +13,7 @@
 namespace coaster {
 constexpr double pi=3.14159265358979323846, gravity=9.80665;
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
-constexpr const char* generatorVersion="0.8.0-immelmann.2";
+constexpr const char* generatorVersion="0.8.2-graded.1";
 struct Vec3 {
     double x{},y{},z{};
     Vec3 operator+(Vec3 b) const { return {x+b.x,y+b.y,z+b.z}; }
@@ -99,7 +99,11 @@ struct ReferenceBenchmark {
     std::vector<ReferenceRecording> recordings;
 };
 struct Targets {
-    double height{220},speed{75},inversionHeight{80},launchSeconds{1.4};
+    // Setpoints the generator lands on, in the units the player dials them:
+    // 300 km/h, and a 0-180 km/h launch that beats the Do-Dodonpa record of
+    // 1.56 s. That record is the reference the dial multiplies, not a ceiling --
+    // this ride is meant to exceed it. Removed was the random margin, not the speed.
+    double height{220},speed{300/3.6},inversionHeight{80},launchSeconds{1.4};
     bool requireIntensity{true};
     double referenceExposure{std::numeric_limits<double>::quiet_NaN()};
     std::string referenceId;

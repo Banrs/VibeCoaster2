@@ -68,9 +68,9 @@ void AVibeCoasterController::ChangeRow(int32 Direction)
     }
     case 1: Settings.targets.requireIntensity = !Settings.targets.requireIntensity; break;
     case 2: Settings.targets.height = FMath::Clamp(Settings.targets.height + Direction * 5, 220., 350.); break;
-    case 3: Settings.targets.speed = FMath::Clamp(Settings.targets.speed + Direction, 75., 110.); break;
+    case 3: Settings.targets.speed = FMath::Clamp(Settings.targets.speed + Direction * (10 / 3.6), 250 / 3.6, 390 / 3.6); break;
     case 4: Settings.targets.inversionHeight = FMath::Clamp(Settings.targets.inversionHeight + Direction * 5, 80., 140.); break;
-    case 5: Settings.targets.launchSeconds = FMath::Clamp(Settings.targets.launchSeconds + Direction * .05, .8, 1.4); break;
+    case 5: Settings.targets.launchSeconds = FMath::Clamp(Settings.targets.launchSeconds + Direction * .05, 1.1, 2.); break;
     case 6: Settings.maxCandidates = FMath::Clamp(Settings.maxCandidates + Direction, 1, 32); break;
     }
 }
@@ -145,9 +145,9 @@ FString AVibeCoasterController::RowText(int32 Row) const
         return std::isfinite(Settings.targets.referenceExposure) && !Settings.targets.referenceId.empty()
             ? TEXT("Mode: ALL RECORDS (configured reference)") : TEXT("Mode: ALL RECORDS — UNAVAILABLE: I305 benchmark missing");
     case 2: return FString::Printf(TEXT("Maximum track height above ground >= %.0f m"), Settings.targets.height);
-    case 3: return FString::Printf(TEXT("Maximum speed >= %.1f km/h"), Settings.targets.speed * 3.6);
+    case 3: return FString::Printf(TEXT("Top speed %.0f km/h"), Settings.targets.speed * 3.6);
     case 4: return FString::Printf(TEXT("Inversion height above ground >= %.0f m"), Settings.targets.inversionHeight);
-    case 5: return FString::Printf(TEXT("Launch 0-180 km/h <= %.2f s"), Settings.targets.launchSeconds);
+    case 5: return FString::Printf(TEXT("Launch 0-180 km/h in %.2f s   (%.2fx the Do-Dodonpa record of 1.56 s)"), Settings.targets.launchSeconds, 1.56 / Settings.targets.launchSeconds);
     case 6: return FString::Printf(TEXT("Candidate search budget: %d"), Settings.maxCandidates);
     default: return FString();
     }

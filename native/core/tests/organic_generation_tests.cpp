@@ -95,30 +95,85 @@ void checkFoldedGeometry(const Design& design){
     check(airtimePeaks>=4,"Complete circuit contains at least four actual ascending-descending force-authored crest shapes");
     std::cout<<"crossings="<<crossings<<" minimumCanonicalSeparation="<<minimumSeparation<<" straightFlatShare="<<straightFlat/design.track.length<<" gradeFlatShare="<<gradeFlat/design.track.length<<" airtimePeaks="<<airtimePeaks<<'\n';
 }
-void checkBridgeDrive(const Design& design){
-    const auto& text=design.planningDiagnostics;size_t object=text.find("\"returnFlowBridge\":{");
-    check(object!=std::string::npos,"Production flow bridge exposes its actual canonical interval");
-    const auto number=[&](const char* key){size_t field=text.find(key,object);check(field!=std::string::npos,"Flow bridge endpoint is present");return std::stod(text.substr(field+std::char_traits<char>::length(key)));};
-    const double begin=number("\"start\":"),end=number("\"end\":");
-    check(end>begin&&begin>0&&end<design.track.length,"Bridge remains inside the closed circuit");
-    bool retained=false;
-    for(const auto& operation:design.operations)if(operation.kind==DriveKind::Boost&&operation.start>begin&&operation.start<end&&operation.end>end){
-        retained=std::isfinite(operation.maxForce)&&operation.maxForce>0&&std::isfinite(operation.maxPower)&&operation.maxPower>0&&operation.rampSeconds>0&&operation.exitFadeMeters>0;
-        check(design.track.sample(operation.start+1).element==Element::Turn,"Original recovery boost now acts on genuinely curved production track");
+void checkPropulsionCorridors(const Design& design){
+    const double trainSpan=(design.request.train.cars-1)*design.request.train.spacing;
+    int motors=0,boosts=0;
+    for(const auto& operation:design.operations){
+        if(operation.kind!=DriveKind::Launch&&operation.kind!=DriveKind::Boost)continue;
+        ++motors;if(operation.kind==DriveKind::Boost)++boosts;
+        const auto first=design.track.sample(operation.start-trainSpan);
+        const double heading=std::atan2(first.tangent.y,first.tangent.x),pitch=std::asin(first.tangent.z);
+        double minimumPitch=pitch,maximumPitch=pitch;
+        auto observe=[&](double distance){
+            const auto k=sampleKinematics(design.track,distance);const auto& p=k.sample;
+            const Vec3 upright=unit(Vec3{0,0,1}-p.tangent*p.tangent.z);
+            check(std::abs(std::remainder(std::atan2(p.tangent.y,p.tangent.x)-heading,2*pi))<.001,"Every motor retains one fixed plan heading over its entire train envelope");
+            check(std::abs(cross(p.tangent,p.curvature).z)<1e-5&&std::abs(p.curvature.z)<1e-4,"Every powered car and the complete train remain on essentially linear geometry");
+            check(dot(p.up,upright)>.9998&&norm(k.upS)<.001,"No motor accelerates any car while another car occupies bank or roll");
+            minimumPitch=std::min(minimumPitch,std::asin(p.tangent.z));maximumPitch=std::max(maximumPitch,std::asin(p.tangent.z));
+        };
+        for(double distance=operation.start-trainSpan;distance<operation.end+trainSpan;distance+=.125)observe(distance);
+        observe(operation.end+trainSpan);
+        for(const auto& span:design.track.spans)if(span.start>=operation.start-trainSpan&&span.start<=operation.end+trainSpan)observe(span.start);
+        check(maximumPitch-minimumPitch<.005,"A locally gentle motor path also retains nearly constant grade over its full length");
+        // Datum fitting has a 0.1-degree allowance around the visual five-degree slope.
+        check(std::max(std::abs(minimumPitch),std::abs(maximumPitch))<=.05*pi/180||minimumPitch>=4.9*pi/180||maximumPitch<=-4.9*pi/180,"Every full-train motor footprint is genuinely level or visibly inclined");
+        if(operation.kind==DriveKind::Boost)check(operation.end-operation.start>=150,"Each section booster is a substantial contiguous physical run");
+        double actualWorkSeconds=0;
+        for(size_t i=1;i<design.simulation.frames.size();++i){const auto& f=design.simulation.frames[i];const auto& before=design.simulation.frames[i-1];
+            if(f.distance-trainSpan*.5<=operation.start||f.distance+trainSpan*.5>=operation.end||f.speed>=operation.targetSpeed-.1)continue;
+            const double acceleration=(f.speed-before.speed)/(f.time-before.time);
+            double grade=0;for(int car=0;car<design.request.train.cars;++car)grade+=design.track.sample(f.distance+trainSpan*.5-car*design.request.train.spacing).tangent.z/design.request.train.cars;
+            const double resistance=gravity*design.request.train.rollingResistance+.5*design.request.train.airDensity*design.request.train.dragCdA*f.speed*f.speed/(design.request.train.cars*design.request.train.carMass);
+            if(acceleration+gravity*grade+resistance>.1)actualWorkSeconds+=f.time-before.time;
+        }
+        check(actualWorkSeconds>1,"Each section booster performs sustained measured work below target speed");
     }
-    check(retained,"Original recovery motor keeps finite force/power ramps and continues through the following turn");
+    const bool heldHelix=design.request.targets.requireIntensity&&std::isfinite(design.request.targets.referenceExposure)&&design.request.targets.referenceExposure*1.1>18;
+    check(motors==(heldHelix?4:3)&&boosts==(heldHelix?3:2),"Ordinary rides have two mid-track boosters; only the held helix needs a third");
+    const auto& launch=design.operations.front();
+    check(launch.kind==DriveKind::Launch&&std::abs(launch.start-20)<1e-8&&std::abs(launch.end-200)<1e-8&&launch.rampSeconds==.08,"Original powered departure is preserved");
 }
-void checkConnectorPacing(const Design& design){
-    // Independently observe the post-loop recovery and boost between actual
-    // inversion and airtime geometry; labels do not establish activity.
-    const auto& loop=design.inversionDimensions.front();double begin=loop.endDistance,end=begin;
-    while(end<design.track.length&&design.track.sample(end).element!=Element::Airtime)end+=2;
-    check(end-begin>300,"Post-loop connector is measured over its complete recovery and boost");
-    double low=INFINITY,high=-INFINITY,peak=-INFINITY,quiet=0,longest=0;const double entry=design.track.sample(begin).position.z;
-    for(double s=begin;s<end;s+=2)peak=std::max(peak,design.track.sample(s).position.z-entry);
-    for(size_t i=1;i<design.simulation.frames.size();++i){const auto& frame=design.simulation.frames[i];if(frame.distance<begin||frame.distance>end)continue;low=std::min(low,frame.seats[0].vertical);high=std::max(high,frame.seats[0].vertical);if(std::abs(frame.seats[0].vertical-1)<.1)quiet+=frame.time-design.simulation.frames[i-1].time;else quiet=0;longest=std::max(longest,quiet);}
-    check(peak>8&&high-low>.5,"Connector has substantial actual height and measured force variation");
-    check(longest<2,"Post-loop connector avoids a long ordinary1g hold");
+void checkTerminalBrake(const Design& design){
+    const auto station=std::find_if(design.operations.begin(),design.operations.end(),[](const Operation& op){return op.kind==DriveKind::Station;});
+    check(station!=design.operations.end(),"The terminal brake remains an explicit physical operation");
+    const double trainSpan=(design.request.train.cars-1)*design.request.train.spacing;
+    const double turnExit=station->start-trainSpan,finish=design.track.length+trainSpan*.5+30;
+    const auto brakeEntry=design.track.sample(turnExit);
+    const double heading=std::atan2(brakeEntry.tangent.y,brakeEntry.tangent.x);
+    for(double distance=turnExit;distance<finish+trainSpan*.5;distance+=.25){const auto p=design.track.sample(distance);
+        const Vec3 upright=unit(Vec3{0,0,1}-p.tangent*p.tangent.z);
+        check(std::abs(std::remainder(std::atan2(p.tangent.y,p.tangent.x)-heading,2*pi))<.001&&std::abs(cross(p.tangent,p.curvature).z)<1e-5&&dot(p.up,upright)>.9998,"The full braking train is upright and plan-straight after clearing the final bank; a vertical grade is allowed");
+    }
+    for(double distance=design.track.length+design.station.boardingBegin;distance<=finish+trainSpan*.5;distance+=.25){const auto p=design.track.sample(distance);
+        check(std::abs(p.tangent.z)<.001&&p.up.z>.9999,"The actual station bay and whole-train stopping continuation remain level across the seam");
+    }
+    check(brakeEntry.position.z-design.track.sample(design.track.length).position.z>3,"The final brake spends useful height before the level station bay");
+    check(station->stopDeceleration==6&&station->maxForce==design.request.train.carMass*7&&station->rampSeconds==.5,"Graded braking retains the original net target, bounded actuator capacity and entry ramp");
+    auto timeAt=[&](double distance){auto right=std::lower_bound(design.simulation.frames.begin(),design.simulation.frames.end(),distance,[](const Frame& f,double s){return f.distance<s;});const auto& left=*(right-1);double u=(distance-left.distance)/(right->distance-left.distance);return left.time+u*(right->time-left.time);};
+    const double entryTime=timeAt(turnExit);
+    auto entry=std::lower_bound(design.simulation.frames.begin(),design.simulation.frames.end(),turnExit,[](const Frame& f,double s){return f.distance<s;});
+    check(entry->speed>40,"Terminal banked turn coasts at healthy ride speed until the straight brake approach");
+    check(design.simulation.frames.back().speed==0&&std::abs(design.simulation.frames.back().distance-finish)<.25,"Physical braking reaches actual zero speed at the unchanged station reference without a snap");
+    check(design.simulation.frames.back().time-entryTime<14,"Straight terminal stopping no longer spends the banked turn creeping toward a distant target");
+}
+void checkConnectingCrests(const Design& design,std::array<double,2> peaks,std::array<double,2> prominences){
+    // Physical extrema from the retained 0d2c994 baseline, independent of the
+    // generator's connector names or its own new donor-height calculation.
+    std::vector<TrackSample> points;for(double s=0;s<design.track.length;s+=.5)points.push_back(design.track.sample(s));
+    const double begin=design.inversionDimensions.front().endDistance,end=design.inversionDimensions.back().startDistance;
+    std::vector<std::pair<double,double>> observed;
+    for(size_t i=1;i+1<points.size();++i){if(i*.5<begin||i*.5>end||points[i-1].tangent.z<=0||points[i].tangent.z>0)continue;
+        const double peak=std::max(points[i-1].position.z,points[i].position.z);double left=peak,right=peak;
+        for(size_t j=i;j-->0;){if(points[j].position.z>peak)break;left=std::min(left,points[j].position.z);}
+        for(size_t j=i+1;j<points.size();++j){if(points[j].position.z>peak)break;right=std::min(right,points[j].position.z);}
+        const double prominence=peak-std::max(left,right);if(prominence>5)observed.push_back({peak,prominence});
+    }
+    check(observed.size()>=3,"The post-loop crest, first FVD hill and following connecting crest all remain real hills");
+    for(size_t j=0;j<2;++j){const auto& actual=observed[j*2];
+        check(std::abs(actual.first-peaks[j])<=std::max(5.,peaks[j]*.1),"Connecting crest peak stays within the bounded original-height regression tolerance");
+        check(actual.second>=prominences[j]*.85,"Connecting crest retains at least85percent of its original physical prominence");
+    }
 }
 Design generateChecked(uint64_t seed){
     GenerationRequest request;request.seed=seed;request.targets.requireIntensity=false;
@@ -126,6 +181,7 @@ Design generateChecked(uint64_t seed){
     auto design=generate(request);
     if(!design.accepted())for(const auto* report:{&design.report,&design.simulation.report})for(const auto& error:report->errors)std::cerr<<"seed "<<seed<<' '<<error.code<<": "<<error.message<<'\n';
     check(design.accepted(),"Entire generated circuit passes unmodified geometry, train forces, target and convergence gates");
+    check(design.simulation.metrics.duration<=200&&design.simulation.frames.back().speed==0,"Ordinary maintenance fixtures complete the physical stop within200seconds");
     check(design.convergence.coarseStep==1./960&&design.convergence.fineStep==1./1920,"Full ride uses required 960/1920 Hz simulation and verification");
     check(design.simulation.metrics.maxGroundHeight>=request.targets.height&&design.simulation.metrics.maxSpeed>=request.targets.speed,"Existing record hill and speed targets remain selected and satisfied");
     std::cout<<"seed="<<seed<<" accepted=true candidate="<<design.candidate<<" length="<<design.track.length<<" topology="<<design.topology<<'\n';
@@ -134,10 +190,28 @@ Design generateChecked(uint64_t seed){
 bool same(Vec3 a,Vec3 b){return a.x==b.x&&a.y==b.y&&a.z==b.z;}
 }
 int main(){try{
-    auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkBridgeDrive(first);checkConnectorPacing(first);
-    auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkBridgeDrive(second);checkConnectorPacing(second);
+    auto first=generateChecked(42);auto firstShapes=classifyGeometry(first);checkFoldedGeometry(first);checkPropulsionCorridors(first);checkTerminalBrake(first);checkConnectingCrests(first,{52.813,38.534},{46.075,31.625});
+    GenerationRequest defaultBudgetRequest;defaultBudgetRequest.seed=42;defaultBudgetRequest.targets.requireIntensity=false;int attempted=0;
+    auto defaultBudget=generate(defaultBudgetRequest,{},[&](int,const std::string& message){if(message=="Solving route corridors and circuit")++attempted;});
+    check(defaultBudgetRequest.maxCandidates==8&&defaultBudget.accepted()&&defaultBudget.candidate==0&&attempted==1,"The real default eight-candidate budget returns the first fully accepted ride inside the physical-stop budget");
+    check(movingRideSeconds(defaultBudget)>180&&defaultBudget.simulation.metrics.duration<=200&&defaultBudget.simulation.frames.back().speed==0,"Moving the Station start cannot trigger redundant searches for an already satisfactory physical stop");
+    check(defaultBudget.convergence.coarseStep==1./960&&defaultBudget.convergence.fineStep==1./1920&&defaultBudget.planningDiagnostics.find("accepted-within-final-stop-budget")!=std::string::npos,"The early pacing exit follows mandatory independent convergence and reports its actual selection reason");
+    auto second=generateChecked(5);auto secondShapes=classifyGeometry(second);checkFoldedGeometry(second);checkPropulsionCorridors(second);checkTerminalBrake(second);
     check(std::abs(first.track.length-second.track.length)>1,"Different seeds change the actual complete circuit geometry");
     check(std::abs(firstShapes.immelmannRise-secondShapes.immelmannRise)>.1&&std::abs(firstShapes.immelmannForwardExtent-secondShapes.immelmannForwardExtent)>.1,"Seeded Immelmann variation changes physical height and proportions");
+    auto seventeen=generateChecked(17);checkPropulsionCorridors(seventeen);checkTerminalBrake(seventeen);checkConnectingCrests(seventeen,{53.996,17.070},{47.261,10.247});
+    auto thirtyEight=generateChecked(38);checkPropulsionCorridors(thirtyEight);checkTerminalBrake(thirtyEight);checkConnectingCrests(thirtyEight,{66.344,25.631},{59.627,18.529});
+    for(const auto& menu:std::array<std::pair<double,double>,2>{{{180,65},{240,80}}}){
+        GenerationRequest request;request.seed=42;request.targets.requireIntensity=false;request.targets.height=menu.first;request.targets.speed=menu.second;request.maxCandidates=1;
+        auto design=generate(request);check(design.accepted(),"Lower and higher menu fixtures retain all native acceptance gates");
+        check(design.simulation.metrics.duration<=200&&design.simulation.frames.back().speed==0,"The lower/higher maintenance matrix reaches a physical stop within200seconds");
+        checkPropulsionCorridors(design);checkTerminalBrake(design);
+    }
+    GenerationRequest heldRequest;heldRequest.seed=1;heldRequest.targets.requireIntensity=true;heldRequest.targets.referenceExposure=20;heldRequest.targets.referenceId="TEST_ONLY_SYNTHETIC_NOT_I305";
+    auto held=generate(heldRequest);check(held.accepted(),"The section architecture retains the existing held-helix intensity case through its normal candidate search");checkPropulsionCorridors(held);checkTerminalBrake(held);checkConnectingCrests(held,{68.443,28.264},{61.712,21.030});
+    heldRequest.targets.referenceExposure=30;auto heldThirty=generate(heldRequest);check(heldThirty.accepted(),"The stronger held-helix case retains its physical gates");checkPropulsionCorridors(heldThirty);checkTerminalBrake(heldThirty);checkConnectingCrests(heldThirty,{68.430,26.635},{61.699,19.405});
+    heldRequest.seed=17;heldRequest.targets.referenceExposure=20;heldRequest.maxCandidates=1;auto shallowDonor=generate(heldRequest);
+    check(!shallowDonor.accepted()&&std::any_of(shallowDonor.report.errors.begin(),shallowDonor.report.errors.end(),[](const auto& issue){return issue.message.find("donor crest beyond the bounded preservation allowance")!=std::string::npos;}),"A shallow held donor is rejected instead of growing a new hill to fit the motor");
     auto repeated=generateChecked(42);
     check(first.topology==repeated.topology&&first.candidate==repeated.candidate&&first.track.knots.size()==repeated.track.knots.size(),"Repeated seed reproduces the selected circuit and knot count");
     bool identical=true;

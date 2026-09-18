@@ -12,7 +12,14 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
     auto minimum=[&](const char* code,double value,double target){
         if(!std::isfinite(value)||value+1e-6<target)report.fail(code,"Measured result misses requested target",0,value,target);
     };
-    minimum("SPEED_TARGET",m.maxSpeed,targets.speed);
+    // The speed dial is a setpoint the ride must land on, not a floor to clear:
+    // a layout that runs 12% fast missed the dial as surely as one that runs slow.
+    // The band is the dial's stated tolerance; a hill too tall to crest at the
+    // dialled speed is the one honest overshoot, so only shortfall fails below it.
+    if(!std::isfinite(m.maxSpeed)||m.maxSpeed<targets.speed*.99)
+        report.fail("SPEED_TARGET","Measured top speed misses the requested speed",0,m.maxSpeed,targets.speed);
+    else if(m.maxSpeed>targets.speed*1.01+std::sqrt(2*gravity*std::max(0.,m.heightAboveStation-targets.height)))
+        report.fail("SPEED_TARGET","Measured top speed exceeds the requested speed beyond its tolerance",0,m.maxSpeed,targets.speed);
     if(!std::isfinite(m.launchTo180)||m.launchTo180>targets.launchSeconds)
         report.fail("LAUNCH_TARGET","Measured 0-180 km/h launch exceeds target",0,m.launchTo180,targets.launchSeconds);
     if(targets.requireIntensity){

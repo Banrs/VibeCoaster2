@@ -1,0 +1,42 @@
+{
+  "fixture": "native/core/tests/fixtures/legacy-v091-adaptive-seed38.coaster",
+  "sha256": "9944aab47228226d3211f297a92929d5cb109950766e19362ab896a177c9c300",
+  "bytes": 3527144,
+  "archive": "D:\\Coding\\Codex\\vibecoasterlegacy\\handoff-20260915\\evidence.zip",
+  "entry": "native/.audit-build/geometry-compatibility/old-adaptive.coaster",
+  "schema": "COASTER 5",
+  "generationVersion": "0.9.1-adaptive.1",
+  "seed": 38,
+  "purpose": "Immutable exact historical save; no regeneration or migration",
+  "retainedUtc": "2026-09-16T08:20:47.280449+00:00",
+  "baselineReplay": {
+    "byteIdentical": true,
+    "accepted": true,
+    "generatorVersion": "0.9.1-adaptive.1",
+    "runtimeVersion": "0.11.0-flow.1",
+    "lengthMeters": 7372.894905361837,
+    "topology": "adaptive-three-section/immelmann/inverted-top-hat/loop",
+    "metrics": {
+      "maxSpeed": 83.5701294773796,
+      "heightAboveStation": 236.9999649170072,
+      "maxGroundHeight": 243.4999649170072,
+      "verticalRelief": 236.99996561766304,
+      "inversionGroundHeight": 108.49861533994795,
+      "launchTo180": 1.1953128048795905,
+      "exposure10Seconds": 24.95328177934879,
+      "minVerticalG": -1.3227118849176,
+      "maxVerticalG": 4.921578151509469,
+      "maxLateralG": 0.44146599953928095,
+      "maxLongitudinalG": 5.0362482240813735,
+      "maxJerkGps": 15.795834831088127,
+      "maxJerkDistance": 3250.043938311024,
+      "duration": 177.71770833387052,
+      "minGroundClearance": 4.948009556512027
+    },
+    "convergencePassed": true
+  },
+  "baselineBinary": {
+    "path": "C:\\Users\\danie\\AppData\\Local\\Temp\\vibecoaster-plan-audit-5b7476abefd4498c810296e56fc903e5\\build\\coaster_cli.exe",
+    "sha256": "ceb941463f1960f98666b68678f18ba57c300aafe1ff2e4696d9be6082f980e4"
+  }
+}

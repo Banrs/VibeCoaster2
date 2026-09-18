@@ -27,7 +27,9 @@
 namespace coaster {
 namespace {
 std::filesystem::path utf8path(const std::string& s){return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()),s.size()));}
-bool supportedVersion(const std::string& version){return version==generatorVersion;}
+// Compatible rides retain their authored operations and provenance; every
+// version passes the same geometry, structure and independent replay checks.
+bool supportedVersion(const std::string& version){return version==generatorVersion||version=="0.8.0-immelmann.2"||version=="0.8.1-linear.1";}
 uint64_t checksum(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
 std::string quote(const std::string& s){std::ostringstream o;o<<'"';for(unsigned char c:s){switch(c){case '"':o<<"\\\"";break;case '\\':o<<"\\\\";break;case '\n':o<<"\\n";break;case '\r':o<<"\\r";break;case '\t':o<<"\\t";break;default:if(c<32)o<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<int(c)<<std::dec;else o<<c;}}o<<'"';return o.str();}
 void number(std::ostream& o,double x){if(std::isfinite(x))o<<x;else o<<"null";}

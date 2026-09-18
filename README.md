@@ -2,7 +2,9 @@
 
 A roller-coaster prototype with a C++20 generation and simulation core and an Unreal Engine viewer. The current build generates rides on flat ground.
 
-Current numerical save version: `0.8.0-immelmann.2 / COASTER5`. Saves require a matching numerical version; hills and canyon saves are unsupported.
+Current source save version: `0.8.2-graded.1 / COASTER5`. Earlier `0.8.1-linear.1` and original `0.8.0-immelmann.2` saves retain their authored geometry, operations and provenance and pass the same validation when loaded. Other numerical versions and hills/canyon saves are unsupported.
+
+The bounded maintenance pass covers unnecessary flats, section boosters on straight constant-grade track, and physical braking after the final bank. [HANDOFF.md](HANDOFF.md) records release status, preserved inputs, validation and the next-turn TODO for non-signature element variety.
 
 ## Source
 
@@ -34,6 +36,8 @@ The [Unreal project](native/unreal/VibeCoaster.uproject) uses UE 5.8. Windows pa
 Packages are written under `native/unreal/Packaged`; `-OutputDirectory <path>` selects another location. The [macOS packaging script](native/unreal/scripts/package_macos.sh) runs on a Mac with Unreal Engine and Xcode.
 
 ## Play
+
+Open **Play VibeCoaster.lnk** in this folder for the verified `0.8.1-linear.1` packaged game, without opening the Unreal Editor or Epic launcher. Generate a fresh ride to see the changes; loading an original `0.8.0-immelmann.2` ride preserves its original behavior. The old package remains under `D:/Coding/Codex/vibecoasterlegacy/current-game` as a fallback.
 
 In a Windows package, open `VibeCoaster/Binaries/Win64/VibeCoaster.exe` directly. Keep the complete package folder together.
 

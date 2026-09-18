@@ -231,7 +231,10 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             double ApexTime = 0, ApexHeight = -1e30, HighestTime = 0, HighestGround = -1e30;
             double LowPassTime = 0, LowPassHeight = 1e30;
             TArray<double> InversionPassages;
+            TArray<double> AirtimeValleys;
             bool WasInverted = false;
+            bool WasAirtime = false;
+            double PreviousPitch = 0;
             for (const auto& F : D.simulation.frames)
             {
                 const auto K = D.track.sample(F.distance + coaster::seatDistanceOffset(D.request.train, S.Seat));
@@ -243,12 +246,23 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                 const bool Inverted = K.up.z < -.5;
                 if (Inverted && !WasInverted) InversionPassages.Add(F.time);
                 WasInverted = Inverted;
+                const bool Airtime = K.element == coaster::Element::Airtime;
+                if (Airtime && WasAirtime && F.distance > D.track.length * .6 && PreviousPitch < 0 && K.tangent.z >= 0)
+                    AirtimeValleys.Add(F.time);
+                WasAirtime = Airtime; PreviousPitch = K.tangent.z;
             }
             if (ApexHeight == -1e30) { S.Fail(TEXT("Accepted trace lacks an observable inverted-apex passage")); break; }
             S.ShotTimes = { HighestTime, S.Duration * .15, S.Duration * .35, S.Duration * .55, S.Duration * .75, FMath::Max(0., ApexTime - .4), ApexTime };
             S.Event(TEXT("pov-landmarks"), TEXT(",\"highest_ground_time_s\":") + N(HighestTime) + TEXT(",\"highest_ground_m\":") + N(HighestGround) + TEXT(",\"inverted_apex_time_s\":") + N(ApexTime) + TEXT(",\"inverted_apex_ground_m\":") + N(ApexHeight));
             // Inspect each actual inverted passage during full playback.
             for (double Time : InversionPassages) { S.ShotTimes.Add(FMath::Max(0., Time - 1)); S.ShotTimes.Add(Time + .5); }
+            // Inspect both sides of the late hill joins, where a continuous
+            // curve can still have a visible pitch hesitation.
+            for (double Time : AirtimeValleys)
+            {
+                for (double Offset : {-1., 0., 1.}) S.ShotTimes.Add(FMath::Clamp(Time + Offset, 0., S.Duration));
+                S.Event(TEXT("airtime-valley-landmark"), TEXT(",\"time_s\":") + N(Time));
+            }
             if (LowPassHeight < 1e30)
             {
                 for (double Offset : {-1., 0., 1.}) S.ShotTimes.Add(FMath::Clamp(LowPassTime + Offset, 0., S.Duration));

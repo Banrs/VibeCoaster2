@@ -22,7 +22,7 @@ template<class T,size_t N>inline T flowValue(const std::array<T,N>& c,double u){
 // Replace a permitted transition window while retaining the surrounding
 // derivative stencil. Reference up and bank remain separate, so later banking
 // correction still operates on the same physical representation.
-inline void blendAuthoredJoin(std::vector<AuthoredPoint>& points,size_t first,size_t last,Cancel cancel={}){
+inline void blendAuthoredJoin(std::vector<AuthoredPoint>& points,size_t first,size_t last,Cancel cancel={},bool verticalOnly=false){
     if(first<4||last+5>=points.size()||last<=first)throw std::invalid_argument("Flow join requires four authored guards at each end");
     std::vector<AuthoredPoint> local(points.begin()+first-4,points.begin()+last+5);
     Track source=compile(local,false);const size_t right=last-first+4;
@@ -39,7 +39,8 @@ inline void blendAuthoredJoin(std::vector<AuthoredPoint>& points,size_t first,si
     for(size_t i=first;i<=last;++i){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
         double u=(source.spans[i-first+4].start-begin)/span;
-        points[i].position=flowValue(position,u);points[i].upHint=flowValue(up,u);points[i].bank=flowValue(bank,u);
+        if(verticalOnly)points[i].position.z=flowValue(position,u).z;
+        else {points[i].position=flowValue(position,u);points[i].upHint=flowValue(up,u);points[i].bank=flowValue(bank,u);}
         if(!finite(points[i].position)||!finite(points[i].upHint)||!std::isfinite(points[i].bank)||norm(points[i].upHint)<.5)
             throw std::runtime_error("Flow join left its finite reference-frame domain");
     }

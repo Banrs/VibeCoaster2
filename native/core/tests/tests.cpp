@@ -96,6 +96,36 @@ static std::vector<std::string> tokens(const std::string& line){
 static uint64_t fixtureChecksum(const std::string& bytes){
     uint64_t h=14695981039346656037ull;for(unsigned char c:bytes){h^=c;h*=1099511628211ull;}return h;
 }
+static void provenance(const Design& current){
+    const auto folder=std::filesystem::temp_directory_path()/"coaster-provenance-tests";std::filesystem::create_directories(folder);
+    const auto newPath=folder/"current.coaster",oldPath=folder/"original.coaster",resavedPath=folder/"resaved.coaster",badPath=folder/"unsupported.coaster";
+    std::string error;check(current.generationVersion==generatorVersion,"New generation has the current provenance");
+    check(saveDesign(current,newPath.string(),error),"Save new provenance: "+error);const auto currentBytes=readBytes(newPath);
+    auto writeVersion=[&](const std::filesystem::path& path,const std::string& version){
+        auto payload=currentBytes.substr(currentBytes.find('\n')+1);const auto end=payload.find('"',1);check(end!=std::string::npos,"Canonical provenance field exists");payload.replace(1,end-1,version);
+        std::ofstream file(path,std::ios::binary);file<<"COASTER 5 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;check(bool(file),"Write checksummed provenance fixture");
+    };
+    // Reuse accepted geometry to test the version gate without storing a bulky
+    // fixture. Historical geometry is loaded as authored, never regenerated.
+    for(const std::string version:{"0.8.0-immelmann.2","0.8.1-linear.1"}){
+        writeVersion(oldPath,version);const auto originalBytes=readBytes(oldPath);Design loaded;
+        check(loadDesign(oldPath.string(),loaded,error),"Original provenance independently validates: "+error);
+        check(loaded.generationVersion==version&&loaded.accepted()&&loaded.convergence.passed,"Original provenance survives full replay validation");
+        auto expected=current;expected.generationVersion=version;check(reportJson(loaded)==reportJson(expected),"Legacy provenance retains exact independently measured physics");
+        check(saveDesign(loaded,resavedPath.string(),error),"Resave original provenance: "+error);Design reloaded;
+        check(loadDesign(resavedPath.string(),reloaded,error),"Reload resaved original provenance: "+error);
+        check(reportJson(reloaded)==reportJson(expected)&&readBytes(resavedPath)==originalBytes,"Original provenance and complete authored payload survive resave");
+        check(readBytes(oldPath)==originalBytes,"Loading and resaving leaves the original file untouched");
+        auto invalid=loaded;for(auto& knot:invalid.track.knots)knot.position.z-=1000;
+        check(!saveDesign(invalid,resavedPath.string(),error),"Original provenance cannot bypass canonical geometry validation");check(readBytes(resavedPath)==originalBytes,"Rejected legacy save leaves prior bytes intact");
+    }
+    for(const std::string version:{"0.8.0-immelmann.1","0.8.1-linear.2","0.8.2-graded.2","unsupported"}){
+        writeVersion(badPath,version);auto unchanged=current;
+        check(!loadDesign(badPath.string(),unchanged,error)&&error.find("Unsupported generator version")!=std::string::npos,"Unrecognized provenance is explicitly rejected");
+        check(reportJson(unchanged)==reportJson(current),"Unsupported provenance preserves the accepted design");
+    }
+    for(const auto& path:{newPath,oldPath,resavedPath,badPath})std::filesystem::remove(path);
+}
 static void writeBadProfile(const std::filesystem::path& out,const std::string& good,size_t knotCount,const std::string& decel,const std::string& offset,const std::string& fade=""){
     auto lines=payloadLines(good);auto values=tokens(lines.at(5+knotCount));check(values.size()==10,"Schema5 work2 operation has ten explicit fields");
     values[7]=decel;values[8]=offset;if(!fade.empty())values[9]=fade;std::string replacement;
@@ -133,7 +163,7 @@ static void migration(const Design& current){
         near(replay.operations[i].stopOffset,current.operations[i].stopOffset,0,"Explicit offset roundtrip");
         near(replay.operations[i].exitFadeMeters,current.operations[i].exitFadeMeters,0,"Explicit exit fade roundtrip");
         near(current.operations[i].exitFadeMeters,std::max(1.,current.operations[i].targetSpeed*current.operations[i].rampSeconds),0,"Generator authors a speed-scaled exit fade");
-        if(current.operations[i].kind==DriveKind::Station){station=true;near(replay.operations[i].stopDeceleration,2.4,0,"Packed station preferred deceleration");near(replay.operations[i].stopOffset,.2,0,"Packed station stop offset");near(replay.operations[i].exitFadeMeters,1,0,"Station physical endpoint fade remains beyond its stopped train");}
+        if(current.operations[i].kind==DriveKind::Station){station=true;near(replay.operations[i].stopDeceleration,6,0,"Packed station preferred deceleration");near(replay.operations[i].stopOffset,1.5,0,"Packed station stop offset");near(replay.operations[i].exitFadeMeters,1,0,"Station physical endpoint fade remains beyond its stopped train");}
     }
     check(station,"Current design has an explicit station operation");
     for(const auto& fields:std::vector<std::pair<std::string,std::string>>{{"0","0.2"},{"-1","0.2"},{"21","0.2"},{"nan","0.2"},{"1e309","0.2"},{"2.4","-1"},{"2.4","6"},{"2.4","nan"},{"2.4","1e309"}}){
@@ -202,7 +232,7 @@ int main(int argc,char** argv){try{
     if(argc==2&&std::string(argv[1])=="--persistence"){
         GenerationRequest request;request.targets.requireIntensity=false;
         auto d=generate(request);check(d.accepted(),"Persistence fixture accepted");
-        persistence(d);migration(d);
+        persistence(d);provenance(d);migration(d);
         std::cout<<"PASS "<<checks<<" canonical persistence and invalid-input checks\n";
         return 0;
     }

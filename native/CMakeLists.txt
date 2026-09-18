@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ExtremeCoaster VERSION 0.8.0 LANGUAGES CXX)
+project(ExtremeCoaster VERSION 0.8.2 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(coaster_core core/src/track.cpp core/src/frame.cpp core/src/drive_profile.cpp core/src/simulation.cpp core/src/convergence.cpp core/src/generation.cpp core/src/fvd.cpp core/src/persistence.cpp core/src/reference.cpp core/src/supports.cpp core/src/clearance.cpp core/src/dimensions.cpp core/src/station.cpp core/src/structures.cpp)

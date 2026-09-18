@@ -20,6 +20,12 @@ int main(){try{
     auto bad=d;bad.station={};check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"New provenance cannot omit station");
     bad=d;bad.supports[0].members.clear();check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"New provenance cannot omit member geometry");
     bad=d;bad.generationVersion="unknown";check(code(validateDesignStructures(bad),"GENERATOR_VERSION"),"Unknown provenance never gains legacy exemption");
+    auto compatible=d;compatible.generationVersion="0.8.0-immelmann.2";check(validateDesignStructures(compatible).valid(),"Original 0.8.0 provenance passes the same structure checks");
+    bad=compatible;bad.station={};check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.0 provenance cannot omit station");
+    bad=compatible;bad.supports.front().members.clear();check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.0 provenance cannot omit support members");
+    compatible.generationVersion="0.8.1-linear.1";check(validateDesignStructures(compatible).valid(),"Original 0.8.1 provenance passes the same structure checks");
+    bad=compatible;bad.station={};check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.1 provenance cannot omit station");
+    bad=compatible;bad.supports.front().members.clear();check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.1 provenance cannot omit support members");
     for(const auto* identity:{"0.2.1","0.3.0-pacing.2","0.4.0-foundation.1","0.4.0-foundation.2-work"}){
         auto old=d;old.generationVersion=identity;check(code(validateDesignStructures(old),"GENERATOR_VERSION"),"Old geometry semantics are never reinterpreted under new runtime");
         old.station={};old.supports.front().members.clear();check(code(validateDesignStructures(old),"GENERATOR_VERSION"),"Old identity cannot gain absence exemptions");
@@ -46,6 +52,8 @@ int main(){try{
     bad=d;const auto q=bad.track.sample(5);bad.station.boxes.push_back({q.position-q.up*.66,q.tangent,q.right,q.up,{1.,1.5,.03},StationRole::Post});
     check(validateStationDefinition(bad.station).valid(),"Adverse spine crossbar is connected canonical station geometry");
     check(code(validateDesignStructures(bad),"STATION_HARDWARE_CLEARANCE"),"Direct station/spine obstruction rejected");
+    bad.generationVersion="0.8.0-immelmann.2";check(code(validateDesignStructures(bad),"STATION_HARDWARE_CLEARANCE"),"Original 0.8.0 provenance cannot bypass station/spine clearance");bad.generationVersion=d.generationVersion;
+    bad.generationVersion="0.8.1-linear.1";check(code(validateDesignStructures(bad),"STATION_HARDWARE_CLEARANCE"),"Original 0.8.1 provenance cannot bypass station/spine clearance");bad.generationVersion=d.generationVersion;
     check(!saveDesign(bad,good.string(),error),"Station/spine overlap cannot overwrite accepted save");check(bytes(good)==saved,"Rejected crossbar save preserves exact bytes");
     const std::string adverse=stationPayload(bad.station);write(malformed,payload.substr(0,ext)+"EXTENSIONS 2\n"+terrainBlock+"STATION 1 "+std::to_string(adverse.size())+"\n"+adverse);
     Design retained=d;check(!loadDesign(malformed.string(),retained,error),"Checksummed station/spine overlap cannot load");check(error.find("STATION_HARDWARE_CLEARANCE")!=std::string::npos,"Load reports exact station hardware certification gap");check(reportJson(retained)==reportJson(d),"Crossbar load preserves last accepted ride");
