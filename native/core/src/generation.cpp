@@ -594,7 +594,17 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
             // ends: a sin^2 envelope reached a seventh of its height by the first
             // crest and left 350 m of the return doing nothing. layoutSmooth ends
             // with zero slope and zero curvature, so the hops still start silently.
-            hop=hopHeight*layoutSmooth(std::min(along,1-along)/.06)*std::pow(std::sin(pi*along*hopCount),2);
+            const double envelope=layoutSmooth(std::min(along,1-along)/.06),phase=along*hopCount;
+            hop=hopHeight*envelope*std::pow(std::sin(pi*phase),2);
+            // The first hop is an outward-banked hill: its crest leans away from the
+            // turn ahead, so the rider is thrown to the outside over the top instead
+            // of simply floating. The lean lives only on the crest and returns to
+            // level with it. Authored on a non-Turn knot, so force-aligned banking
+            // leaves it alone.
+            if(phase<1)raw[i].bank=std::copysign(26*pi/180,-plan.angles[sides-1])*std::pow(std::sin(pi*phase),2)*envelope;
+            // The last hop is a double-down: one crest, then a drop that pauses and
+            // drops again. Pitch only -- no roll anywhere in it.
+            if(phase>hopCount-1)hop-=hopHeight*.45*envelope*std::pow(std::sin(pi*(phase-hopCount+1)),2)*smooth(phase-hopCount+1);
         }
         raw[i].position.z+=flyoverLift*std::min(rise,fall)-(forceHoldEnd?55*(1-fall):0)+terminalExitRise*spend*fall+hop;
     }
