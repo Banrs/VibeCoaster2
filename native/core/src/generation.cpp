@@ -568,7 +568,15 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     // The speed-hill run sits clear of both ends of the return: it starts once the
     // last airtime hill has handed over to the descent and stops before the turn.
     const double hopBegin=distance[crestEnd]+40,hopEnd=distance[terminalTurnEnd]-50;
-    const double hopCount=std::max(1.,std::floor((hopEnd-hopBegin)/210)),hopHeight=hopEnd-hopBegin>400?6.:0.;
+    // Rounded to the nearest whole hop rather than floored: over an 800 m return
+    // the floor dropped the count to three, stretching the wavelength to 267 m.
+    // A sin^2 hop of height h and wavelength L crests at radius L^2/(2*h*pi^2),
+    // so that is a 600 m crest, and at the 50 m/s the train is doing there it
+    // lifts only 0.4 g off the rider - a float, not airtime. At 200 m the crest
+    // radius is 338 m and the same hop gives the 0.75 g that actually leaves the
+    // seat. Height is the wrong lever here: the radius goes as the square of the
+    // wavelength and only linearly with height.
+    const double hopCount=std::max(1.,std::round((hopEnd-hopBegin)/190)),hopHeight=hopEnd-hopBegin>400?6.:0.;
     const double exitBegin=distance[crestEnd]-forceFlank.back();
     const size_t exitFirst=size_t(std::lower_bound(distance.begin(),distance.end(),exitBegin)-distance.begin());
     const double exitHeight=raw[exitFirst].position.z,exitDrop=exitHeight-raw[crestEnd].position.z;
