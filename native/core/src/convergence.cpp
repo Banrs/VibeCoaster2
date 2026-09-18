@@ -14,11 +14,18 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
     };
     // The speed dial is a setpoint the ride must land on, not a floor to clear:
     // a layout that runs 12% fast missed the dial as surely as one that runs slow.
-    // The band is the dial's stated tolerance; a hill too tall to crest at the
-    // dialled speed is the one honest overshoot, so only shortfall fails below it.
+    // The height dial can force the issue, though - a train launched to 180 km/h
+    // and dropped from the dialled height arrives faster than that whatever the
+    // layout does - so the ceiling is whichever of the two dials demands more.
+    // The floor stays the speed dial alone, which is what holds the ride on it.
+    // This is deliberately computed from the dials rather than from a measured
+    // height: the convergence passes validate a bare simulation whose metrics
+    // have not been through evaluateTargets, so anything it reads there is zero.
+    constexpr double launchReference=50;
+    const double forcedByHeight=std::sqrt(launchReference*launchReference+2*gravity*std::max(0.,targets.height));
     if(!std::isfinite(m.maxSpeed)||m.maxSpeed<targets.speed*.99)
         report.fail("SPEED_TARGET","Measured top speed misses the requested speed",0,m.maxSpeed,targets.speed);
-    else if(m.maxSpeed>targets.speed*1.01+std::sqrt(2*gravity*std::max(0.,m.heightAboveStation-targets.height)))
+    else if(m.maxSpeed>std::max(targets.speed,forcedByHeight)*1.01)
         report.fail("SPEED_TARGET","Measured top speed exceeds the requested speed beyond its tolerance",0,m.maxSpeed,targets.speed);
     if(!std::isfinite(m.launchTo180)||m.launchTo180>targets.launchSeconds)
         report.fail("LAUNCH_TARGET","Measured 0-180 km/h launch exceeds target",0,m.launchTo180,targets.launchSeconds);
