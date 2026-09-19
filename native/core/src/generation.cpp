@@ -112,6 +112,10 @@ static std::vector<RoutePlan> planRoutes(int sides,const std::vector<double>& mi
 }
 struct AuthoringFeedback {
     std::array<double,4> airtimeSpeed{52,65,65,65};
+    // What the train actually arrives at the first hill doing. Its shape cannot be
+    // resized to match - grown to fit, it tilts the booster corridor ahead of it off
+    // level and no candidate fits - so the crest is flattened to compensate instead.
+    double firstHillArrival{52};
     double flyoverLift{INFINITY},reversalEnergyCorrection{},recoveryEntrySpeed{42},terminalEntrySpeed{50},helixEntrySpeed{45},postLoopEntrySpeed{42},loopExitSpeed{46};
     // Measured shortfall of the first pass against the speed dial: drag and the
     // motor fade cost the launch its last fraction, so the graded pass asks for
@@ -139,14 +143,24 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     Design d;d.request=req;d.candidate=attempt;Random rng{req.seed};rng.next();int sides=4;bool helix=false;
     rng.next();int order=0;
     bool intensityDesign=req.targets.requireIntensity&&std::isfinite(req.targets.referenceExposure);double exposureGoal=intensityDesign?req.targets.referenceExposure*1.1:0;
+    // The speed the layout is SHAPED for. Turn radius, turn bank and the rise over
+    // each turn were all authored against a hardcoded 65 m/s while the dial moved
+    // independently of them, so raising the speed did not widen the geometry - it
+    // just bent the same corners harder until the bank solver hit its clamp. Tied
+    // to the dial, a faster ride gets a bigger layout at the same angles. At the
+    // default 300 km/h this is exactly 65, so the shipped ride does not move.
+    const double sectionSpeed=std::max(62.,req.targets.speed*.78);
+    // Turn load and bank angle are the same number: a force-aligned turn at G banks
+    // atan(sqrt(G*G-1)), so this range is 73-79 degrees before any clamp. Widening
+    // the corners to Falcon's Flight's 2 G turnaround was tried and reverted - at
+    // that radius no route fits the footprint, and the longer arcs pushed the train
+    // into the first airtime hill 24 m/s over its design speed. The bank ceiling in
+    // improveBanking holds the angle instead, and what it stops cancelling shows up
+    // as lateral force, which the envelope polices.
     double designNormalG=rng.range(3.2,3.6);if(intensityDesign)designNormalG=std::min(req.limits.maxVerticalG-.5,std::max(designNormalG,exposureGoal/10+.35+geometryAttempt*.10));
-    designNormalG=std::max(1.2,designNormalG);double radius=65*65/(gravity*std::sqrt(designNormalG*designNormalG-1))+(intensityDesign?0:geometryAttempt*12),ramp=160+geometryAttempt*15;
+    designNormalG=std::max(1.2,designNormalG);double radius=sectionSpeed*sectionSpeed/(gravity*std::sqrt(designNormalG*designNormalG-1))+(intensityDesign?0:geometryAttempt*12),ramp=160+geometryAttempt*15;
     double elevation=req.targets.height+rng.range(8,30),loopHeight=req.targets.inversionHeight+rng.range(8,18);
     double hillWidth=rng.range(1020,1120)+geometryAttempt*20,loopDrift=rng.range(330,380)+geometryAttempt*10;
-    // Section boosters keep their authored power; only their target speed is
-    // tied to the ride's design speed, so a faster dial feeds the elements that
-    // follow them proportionally instead of a fixed 65 m/s.
-    const double sectionSpeed=std::max(62.,req.targets.speed*.78);
     // The loop is entered through a trim brake whose target was a flat 46 m/s
     // regardless of the dial. That left the apex at 15 m/s: over the loop's own
     // radius the rider gets v^2/(gR)-1 there, so they HUNG in the restraints at
@@ -202,6 +216,16 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     std::vector<double> turnRiseScale(sides),turnRiseShape(sides);for(int side=0;side<sides;++side){turnRiseScale[side]=detail.range(.8,1.15);turnRiseShape[side]=detail.range(-.08,.08);}
     std::vector<FvdAirtimeResult> forceHills;std::array<double,4> forceFlank{};
     for(int hill=0;hill<4;++hill){FvdAirtimeRequest force;force.speed=feedback.airtimeSpeed[hill];force.pushG=detail.range(2.08,2.4);force.crestG=detail.range(-.22,-.08);
+        // A crest relieves the rider by v^2/R, so one shaped for 52 m/s and taken at
+        // 72 delivers the SQUARE of that ratio - nearly twice the intended relief.
+        // The first hill is the only one whose shape is not resized to the measured
+        // speed, and it was pulling -1.74 g on its own while every other hill sat
+        // near -0.1. Flatten its authored crest by the same square so what the rider
+        // actually gets is the airtime that was asked for.
+        if(hill==0&&feedback.firstHillArrival>force.speed){
+            const double ratio=feedback.firstHillArrival/force.speed;
+            force.crestG=std::clamp(1-(1-force.crestG)/(ratio*ratio),-.22,-.05);
+        }
         auto authored=designFvdAirtime(force,cancel);
         if(!authored.section.integrated||!authored.section.canonicalBuilt||!authored.section.report.valid()||!authored.section.assessment.passed){
             if(authored.section.cancelled)throw std::runtime_error("CANCELLED");
@@ -319,8 +343,8 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
         // spent the train's last speed on height right before the brakes, and the
         // turn was then taken at 24 m/s -- deader than the flat track it replaced.
         // The return's speed hills carry that stretch instead, and the turn keeps pace.
-        const double bankedRise=graded&&side==sides-1?0:std::min(26.,.65*gravity*turn.length*turn.length/(4*pi*pi*65*65))*turnRiseScale[side];
-        for(size_t i=1;i<turn.points.size();++i){double along=turn.length*i/(turn.points.size()-1),curvature=smooth(std::min(along,turn.length-along)/turn.ramp)/radius;cursor=base+inFrame(turn.points[i],heading);cursor.z=base.z+dz*smooth(along/turn.length)+bankedRise*std::pow(std::sin(pi*layoutWarp(along/turn.length,turnRiseShape[side])),4);append(cursor,-std::copysign(std::atan(65*65*curvature/gravity),turn.angle),Element::Turn);}
+        const double bankedRise=graded&&side==sides-1?0:std::min(26.,.65*gravity*turn.length*turn.length/(4*pi*pi*sectionSpeed*sectionSpeed))*turnRiseScale[side];
+        for(size_t i=1;i<turn.points.size();++i){double along=turn.length*i/(turn.points.size()-1),curvature=smooth(std::min(along,turn.length-along)/turn.ramp)/radius;cursor=base+inFrame(turn.points[i],heading);cursor.z=base.z+dz*smooth(along/turn.length)+bankedRise*std::pow(std::sin(pi*layoutWarp(along/turn.length,turnRiseShape[side])),4);append(cursor,-std::copysign(std::atan(sectionSpeed*sectionSpeed*curvature/gravity),turn.angle),Element::Turn);}
         modules.push_back({turnStart,raw.size()-1,side,helix||side==holdCorner?"sustained-helix":"banked-camelback-turn"});if(side==holdCorner)forceHoldEnd=raw.size()-1;
         heading+=plan.angles[side];
     }
@@ -793,6 +817,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
 static void placeSupports(Design& d,Cancel cancel){buildSupportLayout(d,cancel);}
 static void improveBanking(Design& d,const std::vector<Frame>& frames){
     if(frames.empty())return;
+    constexpr double bankCeiling=65*pi/180;
     const size_t count=d.track.spans.size();std::vector<double> authored(count),target(count),along(count),left(count),right(count),speed(count);
     for(size_t i=0;i<count;++i){const auto& k=d.track.knots[i];authored[i]=target[i]=k.bank;along[i]=d.track.spans[i].start;
         speed[i]=replayValueAt(frames,along[i]);if(k.element!=Element::Turn)continue;
@@ -800,7 +825,15 @@ static void improveBanking(Design& d,const std::vector<Frame>& frames){
         // Select within the bounded turn-bank interval before smoothing. A
         // force-vector winding cannot carry the bank target into another lap.
         double angle=k.bank;if(std::hypot(normal,lateral)>1e-5)angle=std::atan2(lateral,normal);
-        target[i]=std::clamp(angle,-1.5,1.5);
+        // Cap the bank well short of the old 1.5 rad limit. Aligning exactly with the
+        // force vector means a turn pulling 3.5 G is banked 73 degrees, because that
+        // is simply what atan(sqrt(G*G-1)) comes to, and these corners were saturating
+        // against the clamp at 84. Real coasters under-bank: the rider is meant to be
+        // pushed to the outside of a corner, not sealed into it. What the bank no
+        // longer cancels appears as lateral force, which the envelope already polices,
+        // so a turn needing more than this is rejected rather than quietly rolled
+        // past vertical.
+        target[i]=std::clamp(angle,-bankCeiling,bankCeiling);
     }
     double edge=0;
     for(size_t i=0;i<count;++i){if(d.track.knots[i].element!=Element::Turn)edge=along[i]+d.track.spans[i].length;left[i]=std::max(0.,along[i]-edge);}
@@ -885,8 +918,17 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
             if(motion.cancelled){d.simulation.cancelled=true;d.report.fail("CANCELLED","Generation cancelled");return d;}
             if(motion.completed){
                 // Rebuild geometry and drive zones once using measured train entry energy.
-                // Keep the first FVD source shape; section entry speed is certified by the full replay.
+                // Hills are sized by the speed the train actually arrives at, because a
+                // crest shaped for one speed and taken at another delivers relief by the
+                // SQUARE of the ratio. The first hill kept an authored 52 m/s shape while
+                // the train reached it at 72 and pulled -1.74 g on its own, so it is
+                // measured too - but capped at the section speed the layout is designed
+                // around. Sized for the full 72 it grows enough to tilt the booster
+                // corridor ahead of it off level, and no candidate in the budget fits.
+                // Keep the first FVD source shape, but record the speed it is actually
+                // taken at so its crest can be compensated for the mismatch.
                 for(size_t h=1;h<feedback.airtimeSpeed.size();++h)feedback.airtimeSpeed[h]=replayValueAt(motion.frames,ports.airtimeEntry[h]);
+                feedback.firstHillArrival=replayValueAt(motion.frames,ports.airtimeEntry[0]);
                 feedback.postLoopEntrySpeed=replayValueAt(motion.frames,ports.postLoopEntry);
                 feedback.loopExitSpeed=replayValueAt(motion.frames,ports.loopExit);
                 feedback.flyoverLift=ports.flyoverLift;
