@@ -59,7 +59,10 @@ bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
     TestEqual(TEXT("Missing-reference guard remains explicit"), Controller->InputError,
         FString(TEXT("ALL RECORDS unavailable: the measured I305/Pantherian force benchmark is missing.\nThis is not a failed seed search. PHYSICS-PROOF can test the other selected targets.")));
     TestTrue(TEXT("Input validation never created a ride"), Controller->Ride == nullptr);
-    const TCHAR* Prefixes[]={TEXT("Seed:"),TEXT("Mode:"),TEXT("Maximum track height"),TEXT("Maximum speed"),TEXT("Inversion height"),TEXT("Launch 0-180"),TEXT("Candidate search budget")};
+    // Row 3 reads "Top speed", not "Maximum speed": the dial stopped being a floor
+    // the ride could exceed by whatever margin it liked and became a setpoint it
+    // lands on, so calling it a maximum in the menu would now be a lie.
+    const TCHAR* Prefixes[]={TEXT("Seed:"),TEXT("Mode:"),TEXT("Maximum track height"),TEXT("Top speed"),TEXT("Inversion height"),TEXT("Launch 0-180"),TEXT("Candidate search budget")};
     for (int32 Row=0; Row<7; ++Row)
         TestTrue(TEXT("Flat-only menu retains the correct row mapping"),Controller->RowText(Row).StartsWith(Prefixes[Row]));
     Controller->SelectedRow=1;Controller->Settings.targets.requireIntensity=true;Controller->ChangeRow(1);
