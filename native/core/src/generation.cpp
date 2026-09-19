@@ -117,6 +117,15 @@ struct AuthoringFeedback {
     // level and no candidate fits - so the crest is flattened to compensate instead.
     double firstHillArrival{52};
     double flyoverLift{INFINITY},reversalEnergyCorrection{},recoveryEntrySpeed{42},terminalEntrySpeed{50},helixEntrySpeed{45},postLoopEntrySpeed{42},loopExitSpeed{46};
+    // The speed each connecting crest is actually taken at. connectorCrestHeight
+    // sizes a crest to relieve the rider by a fixed fraction of a g, and that
+    // sizing is entirely a function of the entry speed: get the speed wrong and
+    // the crest is the wrong size twice over, because the relief a crest delivers
+    // goes as the square of the speed it is ridden at. These three were authored
+    // against 60/52/46 m/s and the train arrives at 50/34/37, so every one of
+    // them was shaped for a train that never showed up. Defaults keep the first
+    // ungraded pass exactly as it was; the graded pass gets the measured value.
+    std::array<double,3> connectorSpeed{60,52,46};
     // Measured shortfall of the first pass against the speed dial: drag and the
     // motor fade cost the launch its last fraction, so the graded pass asks for
     // that much more and lands on the dial instead of near it.
@@ -125,6 +134,7 @@ struct AuthoringFeedback {
 struct CandidatePorts {
     std::array<double,4> airtimeEntry{};
     double flyoverLift{},reversalExit{},reversalSpeedHint{},recoveryEntry{},terminalEntry{},helixEntry{},postLoopEntry{},loopExit{};
+    std::array<double,3> connectorEntry{};
 };
 static double replayValueAt(const std::vector<Frame>& frames,double distance,bool time=false){
     if(frames.empty())throw std::runtime_error("Authoring feedback requires an actual replay");
@@ -149,7 +159,15 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     // just bent the same corners harder until the bank solver hit its clamp. Tied
     // to the dial, a faster ride gets a bigger layout at the same angles. At the
     // default 300 km/h this is exactly 65, so the shipped ride does not move.
-    const double sectionSpeed=std::max(62.,req.targets.speed*.78);
+    // The floor is 65, not 62. Every piece of layout geometry that scales off this
+    // number - turn radius, the rise over a turn, the held section's powered descent
+    // - was authored at 65 m/s, so that is the smallest scale they are known to fit
+    // at, not a round number below it. Cutting the default dial to 290 km/h dropped
+    // this to 62.8 and took 7% off every turn radius, which is what stopped the held
+    // helix finding any candidate at all: its descent could no longer keep a 5 degree
+    // grade inside a corridor that had quietly shrunk around it. The floor holds the
+    // layout at its authored scale and the dial still grows it above 300 km/h.
+    const double sectionSpeed=std::max(65.,req.targets.speed*.78);
     // Turn load and bank angle are the same number: a force-aligned turn at G banks
     // atan(sqrt(G*G-1)), so this range is 73-79 degrees before any clamp. Widening
     // the corners to Falcon's Flight's 2 G turnaround was tried and reverted - at
@@ -166,9 +184,17 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     // radius the rider gets v^2/(gR)-1 there, so they HUNG in the restraints at
     // -0.2 g instead of being pressed into the seat, which is what a real
     // vertical loop does. Clearing a stall was never the test. Tied to the dial
-    // at .6 of it, the apex carries positive force and the loop bottom stays
+    // at .63 of it, the apex carries positive force and the loop bottom stays
     // well inside its ceiling.
-    const double loopEntrySpeed=std::max(46.,req.targets.speed*.6);
+    //
+    // .6 was still too slow, and not only for the loop. At that entry the apex came
+    // out at 18 m/s and the train left with so little left that the connector behind
+    // it - a 55 m climb it has to coast over - was crested at 24.9 m/s and measured
+    // 1% event density across 400 m, the deadest stretch in the ride. The ceiling on
+    // this is the ride's worst positive load, and that is not the loop: it is the
+    // high Immelmann at 4.46 G, so the loop has most of the envelope spare and the
+    // dial is what should be spending it.
+    const double loopEntrySpeed=std::max(46.,req.targets.speed*.63);
     // The speed dial is a setpoint, not a floor: the launch is the ride's fastest
     // point, so it targets the dialled speed exactly. A hill too tall to crest at
     // that speed raises it -- reported as the dial's error, never randomised.
@@ -188,7 +214,18 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     const double reversalLengthPreference=detail.range(930,1010)/970;
     const double scale=std::sqrt(reversalHeight/88.);
     FvdImmelmannRequest inversion;
-    inversion.entrySpeed=std::sqrt(53*53*scale*scale+feedback.reversalEnergyCorrection);
+    // The correction is the gap between the exit speed the Immelmann was designed
+    // for and the one the replay measured, and it is added to the ENTRY - which is
+    // also the target of the brake ahead of it, so it does not nudge a number, it
+    // drives the train into the inversion harder. Allowed to run positive it chases
+    // drag: raise the rolling resistance to a real polyurethane wheel and the exit
+    // comes up short, so the entry is raised, so the inversion is entered faster,
+    // and the ride's worst positive load lives inside that inversion. That is how a
+    // more realistic train ended up pulling MORE g than an unrealistically slippery
+    // one - 5.76 against a 5.5 ceiling - and failing outright. Losing speed to drag
+    // is the drag being right. The correction keeps its useful direction, calming an
+    // inversion that came out hot, and is not allowed to answer friction with force.
+    inversion.entrySpeed=std::sqrt(53*53*scale*scale+std::min(0.,feedback.reversalEnergyCorrection));
     inversion.height=95*scale*scale;inversion.exitHeight=10*scale*scale;
     inversion.rampSeconds=1.2*scale;inversion.hand=reversalHand;
     inversion.rollingAcceleration=gravity*req.train.rollingResistance;
@@ -355,22 +392,45 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     // Connecting crests fit the transit envelopes using gravity and curvature sizing.
     struct PacingCrest {size_t begin,end;double height,speed;int count;};std::vector<PacingCrest> pacingCrests;
     Random pacing{req.seed^0x5fb6d99a781ec341ull};
-    auto pace=[&](size_t first,size_t last,double speed,int count){
+    // `nominal` is the speed the crest was originally authored against; `speed` is
+    // what the train is measured to arrive at. Whether the measured speed asks for
+    // a larger or a smaller crest depends on whether the sizing's relief target has
+    // saturated at that length, so the choice is made on the answer rather than on
+    // the input: take whichever of the two gives the shorter crest. A connector is
+    // dead because the train is short of energy there, and a bigger hill to climb
+    // is not the cure for that - it costs time, costs height, and sharpens the
+    // crest enough to matter to the jerk envelope.
+    auto pace=[&](size_t first,size_t last,double speed,int count,double nominal=0){
         const double total=distance[last]-distance[first],length=total/count;
-        const double height=detail::connectorCrestHeight(length,speed);
+        double height=detail::connectorCrestHeight(length,speed);
+        if(nominal>0)height=std::min(height,detail::connectorCrestHeight(length,nominal));
         const double warp=pacing.range(-.04,.04);
         for(size_t i=first;i<=last;++i){if((i&255)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");double cell=(distance[i]-distance[first])*count/total;double u=i==last?1:cell-std::floor(cell);double rise=height*detail::connectorProfileJet(u,warp)[0];raw[i].position.z+=rise;raw[i].upHint={0,0,1};}
         pacingCrests.push_back({first,last,height,speed,count});
     };
+    // Where each connecting crest begins, so the next pass can report the speed
+    // the train reaches it at. Ordered as AuthoringFeedback::connectorSpeed.
+    std::array<size_t,3> connectorBegin{};
+    // Re-size a connecting crest down to the speed the train actually has, never up.
+    // connectorCrestHeight solves for a fixed fraction of a g of relief, and at a
+    // lower speed that needs a tighter crest, which over a fixed connector length
+    // means a taller one: feeding the post-loop connector its measured 42.7 m/s
+    // asked for 25.7 m where the nominal 52 asked for 14.2. That is the formula
+    // being right about the wrong question. The section is dead because the train
+    // is short of energy there, and answering that with a bigger hill to climb
+    // costs time, costs height and sharpens the crest enough to push the jerk
+    // envelope. So the measured speed may only shrink a crest.
+    const std::array<double,3> connectorNominal{60,52,46};
+    auto connectorEntrySpeed=[&](int slot){return std::clamp(feedback.connectorSpeed[slot],20.,90.);};
     for(size_t m=0;m<modules.size();++m){const auto& run=modules[m];
-        if(run.identity=="inversion-entry-brake")pace(run.begin,run.end,60,1);
-        if(run.identity=="inversion-recovery"&&m+1<modules.size()&&modules[m+1].identity=="airtime-entry-boost")pace(run.begin,modules[m+1].end,52,1);
+        if(run.identity=="inversion-entry-brake"){connectorBegin[0]=run.begin;pace(run.begin,run.end,connectorEntrySpeed(0),1,connectorNominal[0]);}
+        if(run.identity=="inversion-recovery"&&m+1<modules.size()&&modules[m+1].identity=="airtime-entry-boost"){connectorBegin[1]=run.begin;pace(run.begin,modules[m+1].end,connectorEntrySpeed(1),1,connectorNominal[1]);}
         // The complete Immelmann returns over this entry at its low exit datum.
         // Keep it level while retaining the other crests' seeded variation.
         if(run.identity=="immelmann-inward-entry-brake"){pacing.next();continue;}
         // A single broad crest flies over the low Immelmann entry footprint;
         // two crests put their shared valley directly at this crossing.
-        if(run.identity=="interior-low-return")pace(run.begin,run.end,46,1);
+        if(run.identity=="interior-low-return"){connectorBegin[2]=run.begin;pace(run.begin,run.end,connectorEntrySpeed(2),1,connectorNominal[2]);}
     }
     const auto ungraded=raw;
     if(graded){
@@ -565,6 +625,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     // Keep the calibrated shared datum when a fairer valley or a graded donor
     // changes the crossing below it. Full track/train/structure gates still
     // certify this actual geometry; the 42 m layout allowance is not a limit.
+    //
     if(graded)flyoverLift=std::min(flyoverLift,feedback.flyoverLift);
     const double riseSpan=flyoverRiseEnd-distance[flyoverBegin];
     double riseFinish=0;
@@ -725,6 +786,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     auto at=[&](size_t index){return index>=d.track.spans.size()?d.track.length:d.track.spans[index].start;};
     for(size_t i=0;i<forceEntryIndices.size();++i)ports.airtimeEntry[i]=at(forceEntryIndices[i]);
     ports.reversalExit=at(reversalExitIndex);ports.reversalSpeedHint=immelmann.exit.speed;ports.terminalEntry=at(terminalTurnEnd);
+    for(size_t i=0;i<connectorBegin.size();++i)ports.connectorEntry[i]=at(connectorBegin[i]);
     for(auto p:pending){
         bool hard=p.kind==DriveKind::Launch;double acc=hard?launchAcceleration:3.5;
         d.operations.push_back({at(p.begin),at(p.end),p.kind,p.speed,req.train.carMass*acc,req.train.carMass*acc*100,hard?.08:.5});
@@ -829,11 +891,26 @@ static void improveBanking(Design& d,const std::vector<Frame>& frames){
         // force vector means a turn pulling 3.5 G is banked 73 degrees, because that
         // is simply what atan(sqrt(G*G-1)) comes to, and these corners were saturating
         // against the clamp at 84. Real coasters under-bank: the rider is meant to be
-        // pushed to the outside of a corner, not sealed into it. What the bank no
-        // longer cancels appears as lateral force, which the envelope already polices,
-        // so a turn needing more than this is rejected rather than quietly rolled
-        // past vertical.
-        target[i]=std::clamp(angle,-bankCeiling,bankCeiling);
+        // pushed to the outside of a corner, not sealed into it.
+        //
+        // What the bank does not cancel is thrown at the rider sideways: under-bank a
+        // corner carrying load L by an angle d and the lateral force is L*sin(d). So
+        // 65 degrees is a preference, and the lateral envelope is a boundary, and the
+        // preference does not get to break the boundary. On the ordinary camelback
+        // corners this never binds - they carry 3.2-3.6 G and 65 degrees leaves 1.18
+        // of the 1.5 available. The sustained helix of a held-exposure ride carries
+        // far more, and capping it flat at 65 threw 1.58 at the rider and failed the
+        // design outright. Here the cap yields exactly as far as the envelope demands
+        // and no further, so the helix banks only as much as it must.
+        //
+        // The allowance is taken against four fifths of the limit because the bank
+        // that is applied is not this target: it is smoothed over a 1.2 second window
+        // and faded out towards the ends of the turn, both of which give back some of
+        // the alignment this solves for.
+        const double load=norm(required);
+        const double concession=load>1e-5?std::asin(std::clamp(d.request.limits.maxLateralG*gravity*.8/load,0.,1.)):pi/2;
+        const double ceiling=std::max(bankCeiling,std::abs(angle)-concession);
+        target[i]=std::clamp(angle,-ceiling,ceiling);
     }
     double edge=0;
     for(size_t i=0;i<count;++i){if(d.track.knots[i].element!=Element::Turn)edge=along[i]+d.track.spans[i].length;left[i]=std::max(0.,along[i]-edge);}
@@ -929,6 +1006,8 @@ Design generate(const GenerationRequest& input,Cancel cancel,std::function<void(
                 // taken at so its crest can be compensated for the mismatch.
                 for(size_t h=1;h<feedback.airtimeSpeed.size();++h)feedback.airtimeSpeed[h]=replayValueAt(motion.frames,ports.airtimeEntry[h]);
                 feedback.firstHillArrival=replayValueAt(motion.frames,ports.airtimeEntry[0]);
+                for(size_t i=0;i<feedback.connectorSpeed.size();++i)
+                    if(ports.connectorEntry[i]>0)feedback.connectorSpeed[i]=replayValueAt(motion.frames,ports.connectorEntry[i]);
                 feedback.postLoopEntrySpeed=replayValueAt(motion.frames,ports.postLoopEntry);
                 feedback.loopExitSpeed=replayValueAt(motion.frames,ports.loopExit);
                 feedback.flyoverLift=ports.flyoverLift;
