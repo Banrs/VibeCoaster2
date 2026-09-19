@@ -147,6 +147,14 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
     // tied to the ride's design speed, so a faster dial feeds the elements that
     // follow them proportionally instead of a fixed 65 m/s.
     const double sectionSpeed=std::max(62.,req.targets.speed*.78);
+    // The loop is entered through a trim brake whose target was a flat 46 m/s
+    // regardless of the dial. That left the apex at 15 m/s: over the loop's own
+    // radius the rider gets v^2/(gR)-1 there, so they HUNG in the restraints at
+    // -0.2 g instead of being pressed into the seat, which is what a real
+    // vertical loop does. Clearing a stall was never the test. Tied to the dial
+    // at .6 of it, the apex carries positive force and the loop bottom stays
+    // well inside its ceiling.
+    const double loopEntrySpeed=std::max(46.,req.targets.speed*.6);
     // The speed dial is a setpoint, not a floor: the launch is the ride's fastest
     // point, so it targets the dialled speed exactly. A hill too tall to crest at
     // that speed raises it -- reported as the dial's error, never randomised.
@@ -267,7 +275,7 @@ static Design candidate(const GenerationRequest& req,int attempt,Cancel cancel,c
             if(side){record(drive(500,DriveKind::Boost,topSpeed),side,"record-hill-relaunch");used+=500;}
             record(piece(hillWidth,[=](double u){return Vec3{hillWidth*u,0,elevation*std::pow(std::sin(pi*layoutWarp(u,hillProfileShape)),4)};},Element::Hill),side,"record-hill");used+=hillWidth;
         }else if(module[side]==1){
-            double brakeLength=side?380:300;record(drive(brakeLength,DriveKind::Brake,46+geometryAttempt*.3),side,"inversion-entry-brake");used+=brakeLength;
+            double brakeLength=side?380:300;record(drive(brakeLength,DriveKind::Brake,loopEntrySpeed+geometryAttempt*.3),side,"inversion-entry-brake");used+=brakeLength;
             double amplitude=(loopDrift+std::sqrt(4*pi*pi*loopHeight*25))/(2*pi),offset=36;
             record(piece(900,[=](double u){return Vec3{loopDrift*u+amplitude*std::sin(2*pi*u),offset*smooth(u),loopHeight*std::pow(std::sin(pi*layoutWarp(u,loopProfileShape)),4)};},Element::Inversion),side,"record-inversion");used+=loopDrift;
             record(piece(220,[=](double u){return Vec3{220*u,-offset*smooth(u),0};},Element::Return),side,"inversion-recovery");used+=220;
