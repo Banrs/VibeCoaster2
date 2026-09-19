@@ -2,7 +2,6 @@
 #include <iostream>
 #include <random>
 #include <stdexcept>
-#include <chrono>
 // Internal validation kernel; no additional public or renderer geometry API.
 namespace coaster::terrain_validation {double lowerBound(const TrackSample&,const Terrain&,double,double);}
 namespace coaster::chord_validation {std::vector<double> arcBounds(const Track&,const ClearanceSweep&,int,Cancel);ValidationReport validate(const Track&,const ClearanceSweep&,int,Cancel);}
@@ -27,12 +26,12 @@ int main(){try{
     old=1e100;for(double side:{-1.5,1.5})for(double up:{-.8,2.4})old=std::min(old,clear(pose.position+pose.right*side+pose.up*up,flat));
     auto front=pose.position+pose.tangent*1.275-pose.up*.8;check(old>0&&front.z<0,"Longitudinal chassis can penetrate beneath clear cross-section points");check(terrain_validation::lowerBound(pose,flat,2.4,0)<=front.z+1e-12,"Longitudinal dimension included");
     std::mt19937 rng(91827);std::uniform_real_distribution<double> angle(-pi,pi),place(-2000,2000),unitValue(-1,1),fraction(0,1);
-    for(auto terrain:{Terrain{}})for(int n=0;n<80;++n){
+    for(int n=0;n<80;++n){
         Vec3 axis=unit(Vec3{unitValue(rng),unitValue(rng),unitValue(rng)});double theta=angle(rng),top=2.4+1.2*fraction(rng);
         pose={{place(rng),place(rng),100},{},{}, {},{},Element::Return};pose.tangent=rotate({1,0,0},axis,theta);pose.up=rotate({0,0,1},axis,theta);pose.right=cross(pose.tangent,pose.up);
-        double bound=terrain_validation::lowerBound(pose,terrain,top,.2);
+        double bound=terrain_validation::lowerBound(pose,flat,top,.2);
         for(int k=0;k<100;++k){Vec3 p=pose.position+pose.tangent*(unitValue(rng)*1.275)+pose.right*(unitValue(rng)*1.5)+pose.up*(-.8+(top+.8)*fraction(rng));
-            Vec3 motion=unit(Vec3{unitValue(rng),unitValue(rng),unitValue(rng)})*(.2*fraction(rng));check(bound<=clear(p+motion,terrain)+1e-9,"Full interior body plus Euclidean motion stays above certified lower bound");}
+            Vec3 motion=unit(Vec3{unitValue(rng),unitValue(rng),unitValue(rng)})*(.2*fraction(rng));check(bound<=clear(p+motion,flat)+1e-9,"Full interior body plus Euclidean motion stays above certified lower bound");}
     }
     // Canonical interval endpoints on simultaneous up/bank rotation share the
     // same checked sweep; evaluate every body corner across the actual u cell.

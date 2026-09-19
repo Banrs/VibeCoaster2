@@ -44,6 +44,8 @@ int main(){try{
         near(norm(a.upS-b.upS),0,2e-8,"Reference frame first derivative has no impulse at a knot");
         near(norm(a.upSS-b.upSS),0,2e-7,"Reference frame second derivative is continuous in true arc");
         near(norm(a.curvatureS-b.curvatureS),0,2e-7,"Position supplies continuous curvature derivative");
+        near(norm(a.upSSS-b.upSSS),0,2e-7,"Rider frame third derivative is continuous at every knot");
+        near(norm(a.curvatureSS-b.curvatureSS),0,2e-7,"Tangent third derivative is continuous at every knot");
     }
     for(size_t i=0;i<curved.spans.size();i+=3)for(double u:{0.,.23,.61,1.}){
         auto k=sampleSpanKinematics(curved,i,u);auto p=curved.sampleSpan(i,u);
@@ -52,7 +54,17 @@ int main(){try{
         near(dot(k.sample.up,k.upSS)+dot(k.upS,k.upS),0,2e-11,"Unit-up second derivative identity");
         near(dot(k.sample.tangent,k.upS)+dot(k.sample.curvature,k.sample.up),0,2e-11,"Frame remains orthogonal while differentiating");
         near(dot(k.curvatureS,k.sample.up)+2*dot(k.sample.curvature,k.upS)+dot(k.sample.tangent,k.upSS),0,2e-10,"Second orthogonality derivative identity");
+        near(dot(k.sample.up,k.upSSS)+3*dot(k.upS,k.upSS),0,2e-10,"Unit-up third derivative identity");
+        near(dot(k.curvatureSS,k.sample.up)+3*dot(k.curvatureS,k.upS)+3*dot(k.sample.curvature,k.upSS)+dot(k.sample.tangent,k.upSSS),0,2e-10,"Third orthogonality derivative identity");
     }
+    for(double s=.25;s<159.75;s+=.37){
+        double b=bank(s),first=.003+.00006*s+3e-7*s*s-8e-10*s*s*s,second=.00006+6e-7*s-24e-10*s*s,third=6e-7-48e-10*s;
+        Vec3 u{0,-std::sin(b),std::cos(b)},r=cross({1,0,0},u);
+        near(norm(sampleKinematics(quartic,s).upSSS-(r*(third-first*first*first)-u*(3*first*second))),0,1e-10,"Quartic-bank closed-form third derivative on unequal spans");
+    }
+    auto legacy=curved;legacy.legacyInterpolation=true;legacy.rebuild();double oldJump=0;
+    for(size_t i=1;i<legacy.spans.size();++i)oldJump=std::max(oldJump,norm(sampleSpanKinematics(legacy,i-1,1).upSSS-sampleSpanKinematics(legacy,i,0).upSSS));
+    check(oldJump>1e-7,"Regression fixture exposes the former C2 frame's third-derivative jump");
     auto track=straight(.003,0);TrainConfig train;train.cars=1;
     std::vector<Operation> ops{{0,track.length,DriveKind::Launch,20,4000,1000000,.2}};
     auto coarse=simulate(track,ops,train,1./240),fine=simulate(track,ops,train,1./480);
@@ -95,5 +107,5 @@ int main(){try{
     check(normal.completed&&wrapped.completed,"Wrapping and nonwrapping drive fixtures complete");
     size_t common=0;for(size_t i=0;i<std::min(normal.frames.size(),wrapped.frames.size())&&normal.frames[i].distance<80;++i){near(normal.frames[i].speed,wrapped.frames[i].speed,1e-12,"Wrapped forward-exit distance matches the equivalent active interval");near(normal.frames[i].seats[0].longitudinal,wrapped.frames[i].seats[0].longitudinal,1e-12,"Wrapped interval preserves the actual force multiplier");++common;}
     check(common>30&&wrapped.frames.back().speed>normal.frames.back().speed,"Wrapped second active interval is not incorrectly faded to zero");
-    std::cout<<"PASS "<<checks<<" frame/force checks: true-arc C2 joins, analytic offset force, renderer parity, finite train and actual half-step rates\n";return 0;
+    std::cout<<"PASS "<<checks<<" frame/force checks: true-arc C3 joins, analytic offset force, renderer parity, finite train and actual half-step rates\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

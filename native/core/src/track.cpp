@@ -6,7 +6,7 @@
 
 namespace coaster {
 static Vec3 transport(Vec3 up,Vec3 a,Vec3 b){Vec3 c=cross(a,b);double s=norm(c);if(s>1e-10)up=rotate(up,c/s,std::atan2(s,dot(a,b)));return unit(up-b*dot(up,b));}
-static Vec3 der(const Span& sp,double u){Vec3 v=sp.c[7]*7;for(int i=6;i>=1;--i)v=v*u+sp.c[i]*i;return v;}
+static Vec3 der(const Span& sp,double u){Vec3 v=sp.c.back()*double(sp.c.size()-1);for(int i=int(sp.c.size())-2;i>=1;--i)v=v*u+sp.c[i]*i;return v;}
 static double arc(const Span& sp,double u){return detail::spanArcLength(sp,u);}
 static double binomial(int n,int k){double result=1;for(int i=1;i<=k;++i)result=result*(n-i+1)/i;return result;}
 void Track::rebuild(){
@@ -15,7 +15,7 @@ void Track::rebuild(){
     const size_t count=knots.size(),unique=count-(closed?1:0);
     const auto equal=[](Vec3 a,Vec3 b){return a.x==b.x&&a.y==b.y&&a.z==b.z;};
     if(closed&&(!equal(knots.front().position,knots.back().position)||!equal(knots.front().tangent,knots.back().tangent)||!equal(knots.front().curvature,knots.back().curvature)||!equal(knots.front().up,knots.back().up)||knots.front().bank!=knots.back().bank))throw std::runtime_error("Canonical closed seam has inconsistent knot values");
-    std::vector<Vec3> tangent(count),curvature(count),jerk(count);
+    std::vector<Vec3> tangent(count),curvature(count),jerk(count),snap(count);
     std::vector<double> metric(count-1);
     for(size_t i=0;i<count;++i){tangent[i]=unit(knots[i].tangent);curvature[i]=knots[i].curvature-tangent[i]*dot(tangent[i],knots[i].curvature);}
     for(size_t i=0;i+1<count;++i){double h=norm(knots[i+1].position-knots[i].position);if(!std::isfinite(h)||h<1e-5||h>100)throw std::runtime_error("Invalid track knot or spacing");metric[i]=h*(1+(dot(curvature[i],curvature[i])+dot(curvature[i+1],curvature[i+1]))*h*h/48);}
@@ -30,6 +30,19 @@ void Track::rebuild(){
         if(!finite(jerk[i]))throw std::runtime_error("Invalid derived curvature derivative");
     }
     if(closed)jerk.back()=jerk.front();
+    if(!legacyInterpolation){
+        // A C3 rider frame needs a C3 tangent, hence a C4 centreline. Keep the
+        // original position/tangent/curvature/jerk ports and share the next jet.
+        for(size_t i=0;i<unique;++i){
+            Vec3 change;
+            if(!closed&&i==0)change=(jerk[1]-jerk[0])/metric[0];
+            else if(!closed&&i+1==unique)change=(jerk[i]-jerk[i-1])/metric[i-1];
+            else{size_t lo=i?i-1:unique-1,hi=(i+1)%unique;double dl=metric[lo],dr=metric[i];change=((jerk[i]-jerk[lo])*(dr/dl)+(jerk[hi]-jerk[i])*(dl/dr))/(dl+dr);}
+            snap[i]=change-tangent[i]*(dot(change,tangent[i])+3*dot(curvature[i],jerk[i]));
+            if(!finite(snap[i]))throw std::runtime_error("Invalid derived fourth position derivative");
+        }
+        if(closed)snap.back()=snap.front();
+    }
     spans.clear();spans.reserve(count-1);length=0;
     for(size_t i=0;i+1<count;++i){
         const double h=metric[i],h2=h*h,h3=h2*h;
@@ -40,11 +53,20 @@ void Track::rebuild(){
         const Vec3 j=jerk[i+1]*h3-sp.c[3]*6;
         sp.c[4]=p*35-v*15+a*2.5-j/6;sp.c[5]=p*(-84)+v*39-a*7+j*.5;
         sp.c[6]=p*70-v*34+a*6.5-j*.5;sp.c[7]=p*(-20)+v*10-a*2+j/6;
-        // Degree-six derivative Bernstein controls enclose the entire span.
-        std::array<Vec3,7> derivative{};Vec3 forward=unit(knots[i+1].position-knots[i].position);double minimumSpeed=1e100,secondBound=0;
-        for(int b=0;b<7;++b){for(int k=0;k<=b;++k)derivative[b]=derivative[b]+sp.c[k+1]*((k+1)*binomial(b,k)/binomial(6,k));double speed=dot(derivative[b],forward);
+        if(!legacyInterpolation){
+            Vec3 endFourth{};for(int k=4;k<=7;++k)endFourth=endFourth+sp.c[k]*double(k*(k-1)*(k-2)*(k-3));
+            const Vec3 left=(snap[i]*(h2*h2)-sp.c[4]*24)/24;
+            const Vec3 slope=(snap[i+1]*(h2*h2)-endFourth)/24-left;
+            // u^4(1-u)^4(left+slope*u) changes only the fourth endpoint jets.
+            sp.c[4]=sp.c[4]+left;sp.c[5]=sp.c[5]+slope-left*4;
+            sp.c[6]=sp.c[6]+left*6-slope*4;sp.c[7]=sp.c[7]-left*4+slope*6;
+            sp.c[8]=left-slope*4;sp.c[9]=slope;
+        }
+        // Bernstein derivative controls enclose the entire canonical span.
+        std::array<Vec3,9> derivative{};Vec3 forward=unit(knots[i+1].position-knots[i].position);double minimumSpeed=1e100,secondBound=0;
+        for(int b=0;b<9;++b){for(int k=0;k<=b;++k)derivative[b]=derivative[b]+sp.c[k+1]*((k+1)*binomial(b,k)/binomial(8,k));double speed=dot(derivative[b],forward);
             if(!finite(derivative[b])||speed<h*.5||speed<norm(derivative[b])*.95)throw std::runtime_error("Canonical span is outside the supported tangent cone");minimumSpeed=std::min(minimumSpeed,speed);}
-        for(int b=0;b<6;++b)secondBound=std::max(secondBound,6*norm(derivative[b+1]-derivative[b]));
+        for(int b=0;b<8;++b)secondBound=std::max(secondBound,8*norm(derivative[b+1]-derivative[b]));
         if(secondBound/(minimumSpeed*minimumSpeed)>.2)throw std::runtime_error("Canonical span exceeds the interval curvature bound");
         sp.length=arc(sp,1);if(!std::isfinite(sp.length)||sp.length<1e-5||sp.length>200)throw std::runtime_error("Invalid canonical span length");length+=sp.length;spans.push_back(sp);
     }

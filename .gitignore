@@ -1,4 +1,5 @@
 .codex/
+.swarm/
 build/
 build-cmake/
 __pycache__/

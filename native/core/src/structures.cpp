@@ -33,8 +33,8 @@ bool supportStationCollision(const Support& support,const StationGeometry& stati
 ValidationReport validateDesignStructures(const Design& d,Cancel cancel){
     ValidationReport out;
     if(cancel&&cancel()){out.fail("CANCELLED","Structure validation cancelled");return out;}
-    // Original 0.8.0 and 0.8.1 saves share the same canonical physics/structure semantics.
-    if(d.generationVersion!=generatorVersion&&d.generationVersion!="0.8.0-immelmann.2"&&d.generationVersion!="0.8.1-linear.1"){out.fail("GENERATOR_VERSION","Unsupported generation provenance for canonical geometry schema5");return out;}
+    // Earlier saves retain their original canonical interpolation on load.
+    if(d.generationVersion!=generatorVersion&&d.generationVersion!="0.8.3-flow.1"&&d.generationVersion!="0.8.0-immelmann.2"&&d.generationVersion!="0.8.1-linear.1"&&d.generationVersion!="0.8.2-graded.1"){out.fail("GENERATOR_VERSION","Unsupported generation provenance for canonical geometry schema5");return out;}
     if(!d.station.enabled||d.supports.empty()||std::any_of(d.supports.begin(),d.supports.end(),[](const Support& s){return s.members.empty();})){
         out.fail("REQUIRED_STRUCTURE","New geometry designs require canonical station and explicit support members");return out;
     }

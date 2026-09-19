@@ -209,7 +209,7 @@ void buildSupportLayout(Design& d,Cancel cancel){
             }
             if(placed)break;
         }
-        if(!placed)throw std::runtime_error("No validated connected tower placement at distance "+std::to_string(distance));
+        if(!placed)throw std::runtime_error("No validated connected tower placement at distance "+std::to_string(distance)+", rail height "+std::to_string(q.position.z-d.request.terrain.height(q.position.x,q.position.y))+", up.z "+std::to_string(q.up.z));
         // Curvature and frame-rate look-ahead set support spacing, capped at 40 m.
         double curvature=0,frameRate=0;
         for(double ahead:{0.,10.,20.,30.,40.}){

@@ -23,14 +23,16 @@ int main(int argc,char** argv){try{
     if(argc<2){std::cerr<<"Usage: coaster_cli generate [--seed N --terrain flat --preset all-records|physics-proof --height METRES --speed-kmh KMH --inversion-height METRES --candidates N --step SECONDS --json PATH --trace PATH --plan PATH --out PATH]\n       coaster_cli validate FILE [--json PATH]\n";return 1;}
     std::string command=argv[1],jsonPath,tracePath,outPath,planPath;GenerationRequest r;int begin=2;Design d;std::string error;
     auto started=std::chrono::steady_clock::now();
-    if(command=="validate"){if(argc<3)throw std::runtime_error("validate requires FILE");begin=3;if(!loadDesign(argv[2],d,error)){std::cerr<<error<<'\n';return 2;}}
+    if(command=="validate"){if(argc<3)throw std::runtime_error("validate requires FILE");begin=3;}
     else if(command!="generate")throw std::runtime_error("Unknown command");
     for(int i=begin;i<argc;++i){std::string key=argv[i];if(i+1>=argc)throw std::runtime_error("Missing option value");std::string value=argv[++i];
+        if(command=="validate"&&key!="--json"&&key!="--trace"&&key!="--out"&&key!="--plan")throw std::runtime_error(key+" is only valid for generate");
         if(key=="--seed")r.seed=seedNumber(value);else if(key=="--candidates")r.maxCandidates=integerNumber(value);else if(key=="--step")r.simulationStep=realNumber(value);else if(key=="--launch-seconds")r.targets.launchSeconds=realNumber(value);else if(key=="--height")r.targets.height=realNumber(value);else if(key=="--speed-kmh")r.targets.speed=realNumber(value)/3.6;else if(key=="--inversion-height")r.targets.inversionHeight=realNumber(value);else if(key=="--reference-exposure"){r.targets.referenceExposure=realNumber(value);if(!std::isfinite(r.targets.referenceExposure)||r.targets.referenceExposure<=0)throw std::runtime_error("Reference exposure must be finite and positive");}else if(key=="--reference-id")r.targets.referenceId=value;else if(key=="--reference-file"){if(!loadReference(value,r.targets,error))throw std::runtime_error(error);}else if(key=="--lateral-rate-limit"||key=="--longitudinal-rate-limit"){double limit=realNumber(value);if(!std::isfinite(limit)||limit<=0)throw std::runtime_error("Explicit rate limit must be finite and positive");if(key=="--lateral-rate-limit")r.limits.maxLateralRateGps=limit;else r.limits.maxLongitudinalRateGps=limit;}else if(key=="--json")jsonPath=value;else if(key=="--trace")tracePath=value;else if(key=="--out")outPath=value;else if(key=="--plan")planPath=value;
         else if(key=="--terrain"){if(value!="flat")throw std::runtime_error("Only flat ground is available in this build");}
         else if(key=="--preset"){if(value=="physics-proof")r.targets.requireIntensity=false;else if(value=="all-records")r.targets.requireIntensity=true;else throw std::runtime_error("Unknown preset");}
         else throw std::runtime_error("Unknown option: "+key);
     }
+    if(command=="validate"&&!loadDesign(argv[2],d,error)){std::cerr<<error<<'\n';return 2;}
     if(command=="generate")d=generate(r,{},[started](int candidate,const std::string& message){std::cerr<<"candidate="<<candidate<<" elapsedSeconds="<<std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()<<' '<<message<<'\n';});
     std::string json=reportJson(d);double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();json.pop_back();json+=",\"generationSeconds\":"+std::to_string(seconds)+"}";
     if(!jsonPath.empty())write(jsonPath,json+"\n");if(!tracePath.empty()&&!d.track.spans.empty())trace(d,tracePath);

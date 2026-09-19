@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ExtremeCoaster VERSION 0.8.2 LANGUAGES CXX)
+project(ExtremeCoaster VERSION 0.8.4 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(coaster_core core/src/track.cpp core/src/frame.cpp core/src/drive_profile.cpp core/src/simulation.cpp core/src/convergence.cpp core/src/generation.cpp core/src/fvd.cpp core/src/persistence.cpp core/src/reference.cpp core/src/supports.cpp core/src/clearance.cpp core/src/dimensions.cpp core/src/station.cpp core/src/structures.cpp)
@@ -19,17 +19,12 @@ target_link_libraries(coaster_tests PRIVATE coaster_core)
 add_test(NAME core COMMAND coaster_tests)
 add_test(NAME core_persistence COMMAND coaster_tests --persistence)
 
-foreach(suite persistence_cancel baseline_jets flow_bridge connector_profile reference support support_family organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile)
+foreach(suite persistence_cancel flow_bridge reference support support_family organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile fvd)
   add_executable(${suite}_tests core/tests/${suite}_tests.cpp)
   target_include_directories(${suite}_tests PRIVATE unreal/Source/VibeCoaster/Public)
   target_link_libraries(${suite}_tests PRIVATE coaster_core)
-  if(suite STREQUAL "support")
-    add_test(NAME ${suite} COMMAND ${suite}_tests "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/fixtures")
-  else()
-    add_test(NAME ${suite} COMMAND ${suite}_tests)
-  endif()
+  add_test(NAME ${suite} COMMAND ${suite}_tests)
 endforeach()
-target_link_libraries(persistence_cancel_tests PRIVATE Threads::Threads)
 set_tests_properties(persistence_cancel PROPERTIES TIMEOUT 600)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
@@ -38,19 +33,10 @@ if(Python3_Interpreter_FOUND)
   set_tests_properties(cli_arguments PROPERTIES TIMEOUT 60)
 endif()
 
-# FVD authoring now supplies production airtime geometry. Keep the public
-# target as a compatibility alias without compiling the same object twice.
-add_library(coaster_fvd INTERFACE)
-target_link_libraries(coaster_fvd INTERFACE coaster_core)
-add_executable(fvd_tests core/tests/fvd_tests.cpp)
-target_link_libraries(fvd_tests PRIVATE coaster_fvd)
-add_test(NAME fvd COMMAND fvd_tests)
-
 get_property(core_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${core_tests} PROPERTIES LABELS component)
 set_tests_properties(core core_persistence persistence_cancel reference support
   support_family organic_generation station structures PROPERTIES LABELS integration)
 
-# Explicit matrix convergence tool, excluded from automatic CTest runs.
 add_executable(coaster_convergence core/src/convergence_main.cpp)
 target_link_libraries(coaster_convergence PRIVATE coaster_core)

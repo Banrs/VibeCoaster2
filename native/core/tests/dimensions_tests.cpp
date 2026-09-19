@@ -1,4 +1,4 @@
-#include "dimensions.hpp"
+#include "coaster/coaster.hpp"
 #include <iostream>
 #include <random>
 #include <stdexcept>

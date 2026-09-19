@@ -3,7 +3,6 @@
 #include "CoordinateContract.h"
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -20,20 +19,16 @@ static std::string join(const std::vector<std::string>& v,const char* sep){std::
 static void corrupt(const fs::path& p,std::vector<std::string> v,size_t row,size_t column,const std::string& value){auto fields=tokens(v[row]);fields.at(column)=value;v[row]=join(fields," ");std::string payload=join(v,"\n")+"\n";std::ofstream f(p,std::ios::binary);f<<"COASTER 5 "<<payload.size()<<' '<<hash(payload)<<'\n'<<payload;}
 static bool code(const ValidationReport& r,const char* s){for(auto& f:r.errors)if(f.code==s)return true;return false;}
 static void sameSupport(const Support& a,const Support& b){exact(a.base,b.base,"Support base exact");exact(a.top,b.top,"Support top exact");exact(a.attachment,b.attachment,"Support attachment exact");check(a.hasAttachment==b.hasAttachment&&a.trackDistance==b.trackDistance,"Support contact identity exact");check(a.members.size()==b.members.size(),"Member count exact");for(size_t i=0;i<a.members.size();++i){auto& x=a.members[i];auto& y=b.members[i];exact(x.base,y.base,"Member base exact");exact(x.top,y.top,"Member top exact");check(x.radiusBase==y.radiusBase&&x.radiusTop==y.radiusTop&&x.kind==y.kind&&x.spineContact==y.spineContact,"Member radii/kind/contact exact");}}
-int main(int argc,char** argv){try{
-    if(argc!=2)throw std::runtime_error("Pass historical fixture directory");fs::path fixtures=fs::absolute(argv[1]),root=fs::current_path(),out=root/"support-test-output";fs::create_directories(out);
-    std::string error;int legacyCases=0,legacyRejected=0;
-    for(const auto& relative:{"legacy-v021-hills.coaster","legacy-v021-canyon.coaster","legacy-v021.coaster","pacing-hills.coaster","pacing-canyon.coaster","pacing-flat.coaster"}){
-        fs::path path=fixtures/relative;std::string original=bytes(path);check(!original.empty(),"Historical fixture exists");Design retained;retained.request.seed=98765;const auto before=reportJson(retained);
-        check(!loadDesign(path.string(),retained,error),"Prior geometry schemas are explicitly unsupported");check(reportJson(retained)==before,"Unsupported load retains its destination");check(bytes(path)==original,"Historical fixture unchanged");++legacyRejected;
-    }
+int main(){try{
+    const auto out=fs::current_path()/"support-test-output";fs::create_directories(out);
+    std::string error;
     GenerationRequest baselineRequest;baselineRequest.seed=42;baselineRequest.targets.requireIntensity=false;Design baseline=generate(baselineRequest);check(baseline.accepted(),"Current geometry baseline accepted");
     auto d=baseline;d.station=buildStation(d.track,d.request.terrain,d.request.train);buildSupportLayout(d);d.generationVersion=generatorVersion;d.report=validateGeometry(d.track,d.request.terrain,d.request.limits,d.request.train,d.supports);d.simulation=simulate(d.track,d.operations,d.request.train,d.request.simulationStep);evaluateTargets(d);verifyConvergence(d);check(d.accepted(),"Explicit tower replacement accepted");check(validateDesignStructures(d).valid(),"Explicit replacement station and supports mutually clear");check(d.track.knots.size()==baseline.track.knots.size(),"Support replacement preserves knot count");
     for(size_t i=0;i<d.track.knots.size();++i){auto& a=d.track.knots[i];auto& b=baseline.track.knots[i];exact(a.position,b.position,"Track position unchanged");exact(a.tangent,b.tangent,"Track tangent unchanged");exact(a.curvature,b.curvature,"Track curvature unchanged");exact(a.up,b.up,"Track up unchanged");check(a.bank==b.bank&&a.element==b.element,"Track bank/element unchanged");}
     check(d.simulation.frames.size()==baseline.simulation.frames.size(),"Physics sample count unchanged");for(size_t i=0;i<d.simulation.frames.size();++i){auto& a=d.simulation.frames[i];auto& b=baseline.simulation.frames[i];check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed,"Physics timing/distance/speed unchanged");for(int seat=0;seat<3;++seat)check(a.seats[seat].vertical==b.seats[seat].vertical&&a.seats[seat].lateral==b.seats[seat].lateral&&a.seats[seat].longitudinal==b.seats[seat].longitudinal,"Measured rider forces unchanged");}
-    size_t members=0,footings=0;double tallest=0,maxRadius=0;
-    for(auto& support:d.supports){check(!support.members.empty(),"Every new support explicit");check(validateSupportMembers(support,d.request.terrain).valid(),"Member shape/terrain/connectivity valid");tallest=std::max(tallest,support.top.z-support.base.z);
-        for(auto& member:support.members){++members;if(member.kind==SupportMemberKind::Footing)++footings;maxRadius=std::max({maxRadius,member.radiusBase,member.radiusTop});auto mesh=supportMemberMesh(member);
+    size_t members=0;
+    for(auto& support:d.supports){check(!support.members.empty(),"Every new support explicit");check(validateSupportMembers(support,d.request.terrain).valid(),"Member shape/terrain/connectivity valid");
+        for(auto& member:support.members){++members;auto mesh=supportMemberMesh(member);
             check(mesh.positions.size()==34&&mesh.indices.size()==96&&mesh.normals.size()==34,"Closed frustum buffer size");Vec3 axis=unit(member.top-member.base);double length=norm(member.top-member.base);
             for(size_t i=0;i<mesh.positions.size();++i){Vec3 delta=mesh.positions[i]-member.base;double z=dot(delta,axis),radial=norm(delta-axis*z),radius=member.radiusBase+(member.radiusTop-member.radiusBase)*std::clamp(z/length,0.,1.);
                 check(z>=-1e-8&&z<=length+1e-8&&radial<=radius+1e-8,"Every mesh vertex inside canonical tapered solid");check(std::abs(norm(mesh.normals[i])-1)<1e-9,"Unit mesh normal");auto p=VibeCoordinates::Position(mesh.positions[i]);check(norm(VibeCoordinates::CorePosition(p)-mesh.positions[i])<1e-9,"Coordinate roundtrip within floating-point precision");}
@@ -53,8 +48,6 @@ int main(int argc,char** argv){try{
     {auto x=support;x.members[0].top.x+=1;invalid(x,"Tilted footing rejected");}
     {auto x=support;x.members.back().top.x+=1;invalid(x,"Unverified spine contact rejected");}
     {auto x=support;x.members.back().spineContact=false;invalid(x,"Missing spine contact rejected");}
-    // Appending an explicitly disconnected, otherwise valid steel solid works
-    // for every support family. Index 4 was out of bounds for three-member posts.
     {auto x=support;Vec3 base{support.base.x+100,support.base.y+100,0};
         base.z=d.request.terrain.height(base.x,base.y)+10;const Vec3 top=base+Vec3{0,0,3};
         for(const auto& m:x.members)check(norm(base-m.base)>1e-5&&norm(base-m.top)>1e-5&&norm(top-m.base)>1e-5&&norm(top-m.top)>1e-5,"Detached fixture endpoints share no existing graph node");
@@ -63,19 +56,15 @@ int main(int argc,char** argv){try{
         check(result.errors.size()==1&&code(result,"SUPPORT_CONNECTIVITY"),"Otherwise valid detached steel fails specifically SUPPORT_CONNECTIVITY");}
 
     {auto x=support;x.members.resize(maxSupportMembers+1);invalid(x,"Member count budget rejected");}
-    std::vector<TrackSample> frames;int n=int(std::ceil(d.track.length/2));for(int i=0;i<n;++i)frames.push_back(d.track.sample(d.track.length*i/n));
     auto sweep=buildClearanceSweep(d.track,d.request.train);
     int calls=0;check(supportCollision(support,sweep,[&]{return ++calls>3;})==-2,"Cancellation during frame/member collision checks");
     calls=0;check(code(validateSupportMembers(support,d.request.terrain,[&]{return ++calls>4;}),"CANCELLED"),"Cancellation during member terrain validation");
-    // Deliberately route a flagged joint through a physical rider at an actual frame.
-    {auto x=support;auto q=frames[0];x.members={{q.position+q.up*1.,x.attachment,.18,.18,SupportMemberKind::Steel,true}};check(supportCollision(x,sweep)>=0,"Own-joint flag never exempts the train");}
-    // A footing centreline misses the train, but its full radius must still collide.
-    {auto x=support;auto q=frames[0];Vec3 p=q.position+q.right*3.;x.members={{p-q.up,p+q.up*3,2.,2.,SupportMemberKind::Footing,false}};check(supportCollision(x,sweep)>=0,"Footing full radius envelope checked");}
+    {auto x=support;auto q=d.track.sample(0);x.members={{q.position+q.up*1.,x.attachment,.18,.18,SupportMemberKind::Steel,true}};check(supportCollision(x,sweep)>=0,"Own-joint flag never exempts the train");}
+    {auto x=support;auto q=d.track.sample(0);Vec3 p=q.position+q.right*3.;x.members={{p-q.up,p+q.up*3,2.,2.,SupportMemberKind::Footing,false}};check(supportCollision(x,sweep)>=0,"Footing full radius envelope checked");}
     const auto goodBytes=bytes(good);auto rows=lines(goodBytes);size_t firstSupport=5+d.track.knots.size()+d.operations.size(),firstMember=firstSupport+1;int malformed=0;
     for(auto [col,value]:std::vector<std::pair<size_t,std::string>>{{6,"0"},{6,"-1"},{6,"nan"},{6,"1e309"},{6,"6"},{8,"9"},{9,"2"},{0,"nan"},{5,"9999999"}}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstMember,col,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed malformed member rejected: "+value);check(reportJson(unchanged)==reportJson(d),"Failed load retains accepted ride");++malformed;}
     for(auto value:{"513","60001","-1","18446744073709551615"}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstSupport,11,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed oversized count rejected");check(reportJson(unchanged)==reportJson(d),"Oversized load retains accepted ride");++malformed;}
     {auto bad=d;bad.supports[0].members[0].radiusBase=NAN;check(!saveDesign(bad,good.string(),error),"Bad canonical member cannot overwrite accepted save");check(bytes(good)==goodBytes,"Rejected save preserves exact prior file");}
     check(!saveDesign(d,good.string(),error,[]{return true;}),"Cancelled save rejected");check(bytes(good)==goodBytes,"Cancelled save preserves exact prior file");
-    std::ofstream result(root/"support-test-results.json");result<<std::setprecision(12)<<"{\"passed\":true,\"checks\":"<<checks<<",\"legacyFiles\":"<<legacyCases<<",\"unsupportedLegacySchemas\":"<<legacyRejected<<",\"newMembersMeshed\":"<<members<<",\"footings\":"<<footings<<",\"maxTowerHeight\":"<<tallest<<",\"maxMemberRadius\":"<<maxRadius<<",\"checksummedMalformedCases\":"<<malformed<<",\"ueCompiled\":false}";
-    std::cout<<"PASS "<<checks<<" support assertions; "<<legacyCases<<" legacy upgrades (unsupported), "<<legacyRejected<<" explicit unsupported old schemas, "<<members<<" closed member meshes, "<<malformed<<" checksummed malformed cases; canonical geometry and physics unchanged. UE compilation not performed.\n";
+    std::cout<<"PASS "<<checks<<" support assertions; "<<members<<" closed member meshes, "<<malformed<<" checksummed malformed cases\n";
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

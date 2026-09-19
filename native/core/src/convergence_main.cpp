@@ -1,6 +1,5 @@
 #include "coaster/coaster.hpp"
 #include <chrono>
-#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -8,28 +7,8 @@
 using namespace coaster;
 std::string quote(const std::string& s){std::ostringstream o;o<<'"';for(unsigned char c:s){if(c=='"'||c=='\\')o<<'\\'<<c;else if(c<32)o<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<int(c)<<std::dec;else o<<c;}return o.str()+'"';}
 
-template<class MetricsType,class RequestType,class Metric> bool compareSeats(const MetricsType& a,const MetricsType& b,const RequestType& request,Metric metric){
-    if constexpr(!requires{a.seats;})return false;
-    else{
-        bool lateralRate=false,longitudinalRate=false;
-        if constexpr(requires{request.limits.maxLateralRateGps;}){lateralRate=std::isfinite(request.limits.maxLateralRateGps);longitudinalRate=std::isfinite(request.limits.maxLongitudinalRateGps);}
-        const char* seats[]={"front","middle","rear"};const char* axes[]={"vertical","lateral","longitudinal"};
-        for(int seat=0;seat<3;++seat){std::string prefix=std::string(seats[seat])+".";
-            metric((prefix+"exposure10Seconds").c_str(),a.seats[seat].exposure10Seconds,b.seats[seat].exposure10Seconds,1,.02);
-            for(int axis=0;axis<3;++axis){const auto& x=a.seats[seat].axes[axis];const auto& y=b.seats[seat].axes[axis];std::string key=prefix+axes[axis]+".";
-                auto pair=[&](const char* name,double coarse,double fine){metric((key+name).c_str(),coarse,fine,1,.02);};
-                pair("minG",x.minG,y.minG);pair("maxG",x.maxG,y.maxG);pair("meanG",x.meanG,y.meanG);
-                pair("mean1sMin",x.mean1sMin,y.mean1sMin);pair("mean1sMax",x.mean1sMax,y.mean1sMax);
-                pair("mean10sMin",x.mean10sMin,y.mean10sMin);pair("mean10sMax",x.mean10sMax,y.mean10sMax);
-                if(axis==0||(axis==1&&lateralRate)||(axis==2&&longitudinalRate))pair("maxRateGps",x.maxRateGps,y.maxRateGps);
-            }
-        }
-        return true;
-    }
-}
-
 int main(int argc,char**argv){
-    if(argc!=3){std::cerr<<"usage: convergence_audit save-list.txt output.jsonl\n";return 1;}
+    if(argc!=3){std::cerr<<"usage: coaster_convergence save-list.txt output.jsonl\n";return 1;}
     std::ifstream list(argv[1]);std::ofstream out(argv[2]);if(!list||!out)return 1;out<<std::setprecision(17);
     int count=0,failed=0;std::string path;
     while(std::getline(list,path)){if(!path.empty()&&path.back()=='\r')path.pop_back();if(path.empty())continue;++count;
@@ -52,9 +31,20 @@ int main(int argc,char**argv){
         metric("maxLongitudinalG",a.maxLongitudinalG,b.maxLongitudinalG,1,.02);
         metric("exposure10Seconds",a.exposure10Seconds,b.exposure10Seconds,1,.02);
         metric("maxVerticalRateGps",a.maxJerkGps,b.maxJerkGps,1,.02);
-        bool hasSeatStatistics=compareSeats(a,b,d.request,metric);
+        const bool lateralRate=std::isfinite(d.request.limits.maxLateralRateGps),longitudinalRate=std::isfinite(d.request.limits.maxLongitudinalRateGps);
+        const char* seats[]={"front","middle","rear"};const char* axes[]={"vertical","lateral","longitudinal"};
+        for(int seat=0;seat<3;++seat){std::string prefix=std::string(seats[seat])+".";
+            metric((prefix+"exposure10Seconds").c_str(),a.seats[seat].exposure10Seconds,b.seats[seat].exposure10Seconds,1,.02);
+            for(int axis=0;axis<3;++axis){const auto& x=a.seats[seat].axes[axis];const auto& y=b.seats[seat].axes[axis];std::string key=prefix+axes[axis]+".";
+                auto pair=[&](const char* name,double coarse,double fine){metric((key+name).c_str(),coarse,fine,1,.02);};
+                pair("minG",x.minG,y.minG);pair("maxG",x.maxG,y.maxG);pair("meanG",x.meanG,y.meanG);
+                pair("mean1sMin",x.mean1sMin,y.mean1sMin);pair("mean1sMax",x.mean1sMax,y.mean1sMax);
+                pair("mean10sMin",x.mean10sMin,y.mean10sMin);pair("mean10sMax",x.mean10sMax,y.mean10sMax);
+                if(axis==0||(axis==1&&lateralRate)||(axis==2&&longitudinalRate))pair("maxRateGps",x.maxRateGps,y.maxRateGps);
+            }
+        }
         double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-begin).count();
-        out<<"},\"hasSeatStatistics\":"<<(hasSeatStatistics?"true":"false")<<",\"durationCoarse\":"<<a.duration<<",\"durationFine\":"<<b.duration<<",\"elapsedSeconds\":"<<elapsed<<",\"passed\":"<<(passed?"true":"false")<<"}\n";out.flush();if(!passed)++failed;
+        out<<"},\"hasSeatStatistics\":true,\"durationCoarse\":"<<a.duration<<",\"durationFine\":"<<b.duration<<",\"elapsedSeconds\":"<<elapsed<<",\"passed\":"<<(passed?"true":"false")<<"}\n";out.flush();if(!passed)++failed;
     }
     std::cout<<"Convergence cases="<<count<<" passed="<<(count-failed)<<" failed="<<failed<<"\n";return count>0&&failed==0?0:2;
 }

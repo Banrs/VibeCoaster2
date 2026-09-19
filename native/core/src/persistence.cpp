@@ -29,7 +29,7 @@ namespace {
 std::filesystem::path utf8path(const std::string& s){return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()),s.size()));}
 // Compatible rides retain their authored operations and provenance; every
 // version passes the same geometry, structure and independent replay checks.
-bool supportedVersion(const std::string& version){return version==generatorVersion||version=="0.8.0-immelmann.2"||version=="0.8.1-linear.1";}
+bool supportedVersion(const std::string& version){return version==generatorVersion||version=="0.8.3-flow.1"||version=="0.8.0-immelmann.2"||version=="0.8.1-linear.1"||version=="0.8.2-graded.1";}
 uint64_t checksum(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
 std::string quote(const std::string& s){std::ostringstream o;o<<'"';for(unsigned char c:s){switch(c){case '"':o<<"\\\"";break;case '\\':o<<"\\\\";break;case '\n':o<<"\\n";break;case '\r':o<<"\\r";break;case '\t':o<<"\\t";break;default:if(c<32)o<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<int(c)<<std::dec;else o<<c;}}o<<'"';return o.str();}
 void number(std::ostream& o,double x){if(std::isfinite(x))o<<x;else o<<"null";}
@@ -81,6 +81,7 @@ bool recheck(Design& d,Cancel cancel){
     if(!supportedVersion(d.generationVersion)){d.report.fail("GENERATOR_VERSION","Unsupported generation provenance");return false;}
     d.report=validateRequest(d.request);if(!d.report.valid())return false;
     for(const auto& op:d.operations)if(!validDriveParameters(op)){d.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return false;}
+    d.track.legacyInterpolation=d.generationVersion!="0.8.3-flow.1"&&d.generationVersion!=generatorVersion;
     d.track.rebuild();d.inversionDimensions=measureInversionDimensions(d.track,cancel);
     d.report=validateGeometry(d.track,d.request.terrain,d.request.limits,d.request.train,d.supports,cancel);
     auto structures=validateDesignStructures(d,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());

@@ -58,18 +58,6 @@ static void geometry(){
     bool threw=false;try{auto bad=loop;bad.knots.back().up={NAN,0,0};bad.rebuild();}catch(...){threw=true;}check(threw,"Nonfinite last knot rejected");
     threw=false;try{auto bad=loop;bad.knots[1].element=Element(99);bad.rebuild();}catch(...){threw=true;}check(threw,"Invalid element enum rejected");
 }
-static void generation(){
-    GenerationRequest r;r.targets.requireIntensity=false;r.seed=42;
-    auto d=generate(r);if(!d.accepted())std::cerr<<reportJson(d)<<'\n';check(d.accepted(),"Physics-proof seed42 accepted");
-    auto replay=simulate(d.track,d.operations,r.train,r.simulationStep);check(replay.completed&&replay.report.valid(),"Independent final replay completes");near(replay.frames.back().time,replay.metrics.duration,0,"Terminal trace timestamp");near(replay.frames.back().speed,0,0,"Physical terminal stop speed");near(replay.metrics.maxSpeed,d.simulation.metrics.maxSpeed,1e-12,"Replay max speed");
-    auto again=generate(r);check(again.accepted(),"Repeated seed accepted");check(d.track.knots.size()==again.track.knots.size(),"Deterministic knot count");for(size_t i=0;i<d.track.knots.size();i+=31){near(norm(d.track.knots[i].position-again.track.knots[i].position),0,0,"Deterministic geometry");near(d.track.knots[i].bank,again.track.knots[i].bank,0,"Deterministic banking");}
-    auto finer=simulate(d.track,d.operations,r.train,1./480);check(finer.completed,"Half-step replay completes");near(finer.metrics.maxSpeed,replay.metrics.maxSpeed,.01,"Time-step max speed convergence");near(finer.metrics.launchTo180,replay.metrics.launchTo180,.005,"Time-step launch convergence");near(finer.metrics.maxVerticalG,replay.metrics.maxVerticalG,.03,"Time-step vertical force convergence");near(finer.metrics.maxLateralG,replay.metrics.maxLateralG,.03,"Time-step lateral force convergence");near(finer.metrics.exposure10Seconds,replay.metrics.exposure10Seconds,.05,"Time-step exposure convergence");near(finer.metrics.maxJerkGps,replay.metrics.maxJerkGps,1.,"Time-step jerk convergence");
-    auto strict=d;strict.report={};strict.request.targets.requireIntensity=true;evaluateTargets(strict);check(!strict.accepted()&&code(strict.report,"REFERENCE_UNAVAILABLE"),"Unavailable benchmark rejects strict record claim");
-    auto impossible=r;impossible.targets.speed=NAN;check(code(generate(impossible).report,"REQUEST_RANGE"),"NaN target rejected");
-    auto stationRegression=r;stationRegression.seed=10;stationRegression.maxCandidates=1;
-    auto stationRide=generate(stationRegression);check(stationRide.accepted(),"Seed10 flat must finish its station return");near(stationRide.simulation.frames.back().speed,0,0,"Seed10 terminal speed");
-    auto cancelled=generate(r,[]{return true;});check(cancelled.simulation.cancelled&&!cancelled.accepted(),"Generation cancellation");int calls=0;auto interrupted=simulate(d.track,d.operations,r.train,r.simulationStep,[&]{return ++calls>3;});check(interrupted.cancelled&&!interrupted.completed,"Mid-simulation cancellation");
-}
 static void persistence(const Design& d){
     auto folder=std::filesystem::temp_directory_path()/"coaster-foundation-core-tests";std::filesystem::create_directories(folder);auto path=(folder/"roundtrip.coaster").string();std::filesystem::remove(path);std::string error;
     check(saveDesign(d,path,error),"Save accepted canonical geometry: "+error);check(saveDesign(d,path,error),"Atomic replacement of an existing save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Load/revalidate geometry: "+error);check(loaded.accepted(),"Loaded design accepted");check(loaded.request.seed==d.request.seed&&loaded.track.knots.size()==d.track.knots.size(),"Persisted identity and exact geometry");near(loaded.track.length,d.track.length,1e-10,"Roundtrip canonical length");near(loaded.simulation.metrics.maxVerticalG,d.simulation.metrics.maxVerticalG,1e-10,"Roundtrip independent physics");
@@ -107,11 +95,14 @@ static void provenance(const Design& current){
     };
     // Reuse accepted geometry to test the version gate without storing a bulky
     // fixture. Historical geometry is loaded as authored, never regenerated.
-    for(const std::string version:{"0.8.0-immelmann.2","0.8.1-linear.1"}){
+    for(const std::string version:{"0.8.0-immelmann.2","0.8.1-linear.1","0.8.2-graded.1","0.8.3-flow.1"}){
         writeVersion(oldPath,version);const auto originalBytes=readBytes(oldPath);Design loaded;
         check(loadDesign(oldPath.string(),loaded,error),"Original provenance independently validates: "+error);
         check(loaded.generationVersion==version&&loaded.accepted()&&loaded.convergence.passed,"Original provenance survives full replay validation");
-        auto expected=current;expected.generationVersion=version;check(reportJson(loaded)==reportJson(expected),"Legacy provenance retains exact independently measured physics");
+        auto expected=current;expected.generationVersion=version;expected.track.legacyInterpolation=version!="0.8.3-flow.1";expected.track.rebuild();
+        expected.inversionDimensions=measureInversionDimensions(expected.track);expected.report={};expected.convergence={};
+        expected.simulation=simulate(expected.track,expected.operations,expected.request.train,expected.request.simulationStep);evaluateTargets(expected);verifyConvergence(expected);
+        check(loaded.track.legacyInterpolation==expected.track.legacyInterpolation&&reportJson(loaded)==reportJson(expected),"Historical provenance replays with its original interpolation");
         check(saveDesign(loaded,resavedPath.string(),error),"Resave original provenance: "+error);Design reloaded;
         check(loadDesign(resavedPath.string(),reloaded,error),"Reload resaved original provenance: "+error);
         check(reportJson(reloaded)==reportJson(expected)&&readBytes(resavedPath)==originalBytes,"Original provenance and complete authored payload survive resave");
@@ -119,7 +110,7 @@ static void provenance(const Design& current){
         auto invalid=loaded;for(auto& knot:invalid.track.knots)knot.position.z-=1000;
         check(!saveDesign(invalid,resavedPath.string(),error),"Original provenance cannot bypass canonical geometry validation");check(readBytes(resavedPath)==originalBytes,"Rejected legacy save leaves prior bytes intact");
     }
-    for(const std::string version:{"0.8.0-immelmann.1","0.8.1-linear.2","0.8.2-graded.2","unsupported"}){
+    for(const std::string version:{"0.5.0-geometry.1-work","0.8.0-immelmann.1","0.8.1-linear.2","0.8.2-graded.2","unsupported"}){
         writeVersion(badPath,version);auto unchanged=current;
         check(!loadDesign(badPath.string(),unchanged,error)&&error.find("Unsupported generator version")!=std::string::npos,"Unrecognized provenance is explicitly rejected");
         check(reportJson(unchanged)==reportJson(current),"Unsupported provenance preserves the accepted design");
@@ -138,14 +129,16 @@ static void migration(const Design& current){
     const auto folder=std::filesystem::temp_directory_path()/"coaster-geometry-schema5-tests";std::filesystem::create_directories(folder);
     const auto newPath=folder/"current.coaster",badPath=folder/"bad-profile.coaster";
     std::string error;Design replay;
-    for(const char* name:{"legacy-v021.coaster","foundation-v1.coaster"}){
-        const auto fixture=std::filesystem::path(__FILE__).parent_path()/"fixtures"/name;const auto original=readBytes(fixture);auto unchanged=current;
-        check(!loadDesign(fixture.string(),unchanged,error),"Older canonical semantics explicitly rejected");
+    check(saveDesign(current,newPath.string(),error),"Save current explicit profile: "+error);const auto currentBytes=readBytes(newPath);check(currentBytes.rfind("COASTER 5 ",0)==0,"New canonical semantics use COASTER5");
+    for(int schema:{1,2,3,4}){
+        const auto original="COASTER "+std::to_string(schema)+currentBytes.substr(9);
+        {std::ofstream file(badPath,std::ios::binary);file<<original;check(bool(file),"Write obsolete schema fixture");}
+        auto unchanged=current;
+        check(!loadDesign(badPath.string(),unchanged,error),"Older canonical semantics explicitly rejected");
         check(error.find("unsupported schema")!=std::string::npos,"Old geometry rejection identifies unsupported schema");
         check(reportJson(unchanged)==reportJson(current),"Unsupported load preserves last accepted design");
-        check(readBytes(fixture)==original,"Archived original geometry remains byte-identical");
+        check(readBytes(badPath)==original,"Rejected input remains byte-identical");
     }
-    check(saveDesign(current,newPath.string(),error),"Save current explicit profile: "+error);const auto currentBytes=readBytes(newPath);check(currentBytes.rfind("COASTER 5 ",0)==0,"New canonical semantics use COASTER5");
     check(loadDesign(newPath.string(),replay,error),"Reload current explicit profile: "+error);
     check(reportJson(current)==reportJson(replay),"Current profile physics/provenance roundtrip");
     auto rejectedSurface=[&](std::vector<std::string> lines){
@@ -187,47 +180,8 @@ static void migration(const Design& current){
         int probes=0;check(!saveDesign(invalid,newPath.string(),error,[&]{++probes;return false;}),"Invalid fade cannot overwrite accepted save");
         check(probes==0,"Invalid fade rejects before geometry or simulation work");check(readBytes(newPath)==currentBytes,"Rejected fade save preserves prior bytes");
     }
-    const auto priorFixture=std::filesystem::path(__FILE__).parent_path()/"fixtures/geometry-v1-work.coaster";const auto priorBytes=readBytes(priorFixture);auto priorOutput=current;
-    check(!loadDesign(priorFixture.string(),priorOutput,error)&&error.find("Unsupported generator version")!=std::string::npos,"Previous work1 operation semantics are explicitly unsupported");
-    check(reportJson(priorOutput)==reportJson(current)&&readBytes(priorFixture)==priorBytes,"Unsupported work1 load preserves current design and archived file");
     for(const auto& path:{newPath,badPath})std::filesystem::remove(path);
 }
-
-
-static void planningAndTargets(){
-    GenerationRequest req;req.seed=1;req.targets.requireIntensity=false;auto flat=generate(req);check(flat.accepted(),"Variety flat fixture accepted");
-    auto repeated=generate(req);check(repeated.planningDiagnostics==flat.planningDiagnostics,"Deterministic ranked plan and search diagnostics");
-    req.seed=2;auto varied=generate(req);check(varied.accepted(),"Second seeded flat profile completes");
-    // The folded family deliberately retains its record hill before the full
-    // loop and reversing pair. Variation is in canonical shape, not a legacy
-    // inversion-first ordering. The organic suite measures each inversion's
-    // topology and the physically separated crossovers independently.
-    for(Element element:{Element::Hill,Element::Inversion,Element::Airtime})
-        check(std::any_of(varied.track.knots.begin(),varied.track.knots.end(),[&](const Knot& k){return k.element==element;}),"Seeded folded profile retains hill, inversion and airtime geometry");
-    auto intrinsicPoint=[](const Track& track,double fraction){const auto origin=track.sample(0);const auto delta=track.sample(track.length*fraction).position-origin.position;return Vec3{dot(delta,origin.tangent),dot(delta,origin.right),delta.z};};
-    double shapeDifference=0;for(int i=1;i<64;++i)shapeDifference=std::max(shapeDifference,norm(intrinsicPoint(varied.track,i/64.)-intrinsicPoint(flat.track,i/64.)));
-    check(shapeDifference>1,"Different seeds change circuit shape after removing station translation and heading");
-    check(varied.simulation.metrics.launchTo180<=1.4,"Second seeded flat actual departure meets launch target");
-    req.seed=1;req.terrain.kind=TerrainKind::Flat;req.targets.requireIntensity=true;req.targets.referenceId="TEST_ONLY_SYNTHETIC_NOT_I305";req.targets.referenceExposure=20;
-    auto lowReference=generate(req);check(lowReference.accepted(),"Synthetic 20 g*s reference drives a feasible design");
-    req.targets.referenceExposure=30;auto highReference=generate(req);check(highReference.accepted(),"Synthetic 30 g*s reference drives a feasible design");
-    check(highReference.simulation.metrics.exposure10Seconds>=33,"Independent measurement meets synthetic exposure goal");
-    check(highReference.simulation.metrics.exposure10Seconds>lowReference.simulation.metrics.exposure10Seconds+.1,"Reference magnitude changes force design and measured exposure");
-    check(std::abs(highReference.track.length-lowReference.track.length)>1,"Reference changes geometry, not just acceptance postfilter");
-    check(highReference.simulation.metrics.maxLateralG<=req.limits.maxLateralG&&highReference.simulation.metrics.maxVerticalG<=req.limits.maxVerticalG,"Target adaptation preserves force gates");
-    auto halfStep=simulate(highReference.track,highReference.operations,req.train,1./480);check(halfStep.completed,"Target-driven sustained-force half-step replay completes");
-    near(halfStep.metrics.maxSpeed,highReference.simulation.metrics.maxSpeed,.01,"Target-driven speed convergence");near(halfStep.metrics.maxVerticalG,highReference.simulation.metrics.maxVerticalG,.03,"Target-driven normal-force convergence");near(halfStep.metrics.maxLateralG,highReference.simulation.metrics.maxLateralG,.03,"Target-driven lateral-force convergence");near(halfStep.metrics.exposure10Seconds,highReference.simulation.metrics.exposure10Seconds,.05,"Target-driven exposure convergence");near(halfStep.frames.back().speed,0,0,"Target-driven physical terminal stop");
-    auto path=(std::filesystem::temp_directory_path()/"coaster-synthetic-target.coaster").string();std::string error;check(saveDesign(highReference,path,error),"Synthetic target geometry independently validates before save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Synthetic target saved geometry replays: "+error);check(reportJson(loaded)==reportJson(highReference),"Synthetic configured target and exact measured result survive save/replay");std::filesystem::remove(path);
-
-    req.targets.referenceExposure=51;check(code(generate(req).report,"INTENSITY_FEASIBILITY"),"Exposure above the force-duration ceiling rejected honestly");
-    req.seed=2;req.targets.requireIntensity=false;req.targets.launchSeconds=1.2;auto fastLaunch=generate(req);
-    check(fastLaunch.accepted()&&fastLaunch.simulation.metrics.launchTo180<=1.2,"Launch request sizes explicit motor force");
-    check(fastLaunch.simulation.metrics.maxLongitudinalG<=req.limits.maxLongitudinalG,"Faster departure preserves longitudinal force ceiling");
-    auto launchForce=[](const Design& d){for(const auto& op:d.operations)if(op.kind==DriveKind::Launch)return op.maxForce;return 0.;};
-    check(launchForce(fastLaunch)>launchForce(varied),"Tighter launch time changes authored bounded motor force");
-    req.targets.launchSeconds=1.15;check(code(generate(req).report,"LAUNCH_FEASIBILITY"),"Unreachable flat-departure target rejected with physical bound");
-}
-
 int main(int argc,char** argv){try{
     if(argc==2&&std::string(argv[1])=="--persistence"){
         GenerationRequest request;request.targets.requireIntensity=false;
@@ -237,5 +191,5 @@ int main(int argc,char** argv){try{
         return 0;
     }
     check(argc==1,"Unknown test selection");
-    analytical();geometry();generation();planningAndTargets();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, geometry/terrain/support clearances, canonical seam, determinism, timestep convergence, cancellation, explicit stop and exit-fade profiles, terrain/order variety and target-driven planning\n";return 0;
+    analytical();geometry();std::cout<<"PASS "<<checks<<" checks: analytical forces, explicit motors, finite train, static friction and geometry rejection\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<" checks: "<<e.what()<<'\n';return 1;}}

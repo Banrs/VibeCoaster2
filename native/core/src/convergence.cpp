@@ -12,20 +12,8 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
     auto minimum=[&](const char* code,double value,double target){
         if(!std::isfinite(value)||value+1e-6<target)report.fail(code,"Measured result misses requested target",0,value,target);
     };
-    // The speed dial is a setpoint the ride must land on, not a floor to clear:
-    // a layout that runs 12% fast missed the dial as surely as one that runs slow.
-    // The height dial can force the issue, though - a train launched to 180 km/h
-    // and dropped from the dialled height arrives faster than that whatever the
-    // layout does - so the ceiling is whichever of the two dials demands more.
-    // The floor stays the speed dial alone, which is what holds the ride on it.
-    // The height that forces it is whichever is greater: the dial, or the hill the
-    // ride actually built. An intensity design has to build above the dial to reach
-    // its exposure target - the held-helix fixtures raise a 244 m hill against a
-    // 220 m dial - and a train dropped from 244 m arrives at 310 km/h no matter what
-    // the layout does. Judging that ride against a ceiling derived from 220 m fails
-    // it for obeying physics. The measured terms are zero in the bare convergence
-    // passes, whose metrics have not been through evaluateTargets, and the max then
-    // falls back to the dial exactly as before.
+    // Allow speed forced by the requested or measured hill height, including
+    // taller hills needed for intensity. The requested speed remains the floor.
     constexpr double launchReference=50;
     const double liftedHeight=std::max({0.,targets.height,m.heightAboveStation,m.maxGroundHeight});
     const double forcedByHeight=std::sqrt(launchReference*launchReference+2*gravity*liftedHeight);
@@ -122,14 +110,7 @@ void verifyConvergenceWith(Design& design,const std::function<SimulationResult()
                 design.report.fail("CONVERGENCE_FINE_"+error.code,error.message,error.distance,error.actual,error.limit);
         }
         if(fine.completed&&fine.report.valid()){
-            // The fine replay is a bare simulation: it carries forces and speeds but
-            // never went through evaluateTargets, so its height fields are zero. They
-            // describe the track, not the replay, and it is the same track the design
-            // already measured - so hand them over before judging the speed setpoint,
-            // whose ceiling is set by the hill the ride actually built. Without this
-            // an intensity design that must raise a 244 m hill to reach its exposure
-            // target is passed by the design report and then failed here for the same
-            // speed, against a ceiling derived from a 220 m dial it never claimed.
+            // Bare simulation omits geometry metrics; both replays use the same hill.
             fine.metrics.heightAboveStation=design.simulation.metrics.heightAboveStation;
             fine.metrics.maxGroundHeight=design.simulation.metrics.maxGroundHeight;
             auto targets=validateSimulationTargets(fine,design.request.targets,design.request.limits);

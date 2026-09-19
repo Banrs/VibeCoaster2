@@ -5,11 +5,11 @@ using namespace coaster;
 static int checks;
 static void check(bool ok,const char* what){++checks;if(!ok)throw std::runtime_error(what);}
 static void close(Vec3 a,Vec3 b,double eps,const char* what){check(norm(a-b)<=eps,what);}
-static Vec3 derivative(const Span& sp,double u,int order){Vec3 sum{};for(int k=7;k>=order;--k){double f=1;for(int j=0;j<order;++j)f*=k-j;sum=sum*u+sp.c[k]*f;}return sum;}
+static Vec3 derivative(const Span& sp,double u,int order){Vec3 sum{};for(int k=int(sp.c.size())-1;k>=order;--k){double f=1;for(int j=0;j<order;++j)f*=k-j;sum=sum*u+sp.c[k]*f;}return sum;}
 static double scalarArc(const Span& sp,double u){
     constexpr double x[]={.18343464249564980494,.52553240991632898582,.79666647741362673959,.96028985649753623168};
     constexpr double w[]={.36268378337836198297,.31370664587788728734,.22238103445337447054,.10122853629037625915};
-    auto speed=[&](double at){Vec3 v=sp.c[7]*7;for(int k=6;k>=1;--k)v=v*at+sp.c[k]*k;return norm(v);};
+    auto speed=[&](double at){Vec3 v=sp.c.back()*double(sp.c.size()-1);for(int k=int(sp.c.size())-2;k>=1;--k)v=v*at+sp.c[k]*k;return norm(v);};
     double sum=0;for(int i=0;i<4;++i)sum+=w[i]*(speed((1-x[i])*u*.5)+speed((1+x[i])*u*.5));return sum*u*.5;
 }
 static Vec3 geometricJ(const Span& sp,double u){
@@ -36,6 +36,8 @@ static void verifyJoins(const Track& t){
         close(a.sample.position,b.sample.position,2e-9,"G0 join");close(a.sample.tangent,b.sample.tangent,2e-9,"G1 join");close(a.sample.curvature,b.sample.curvature,2e-8,"G2 join");close(geometricJ(sp,1),geometricJ(t.spans[j],0),2e-7,"G3 true arc join");
         close(a.curvatureS,geometricJ(sp,1),2e-8,"Analytic curvature derivative matches independent formula");
         close(a.sample.up,b.sample.up,2e-9,"Frame C0 join");close(a.upS,b.upS,2e-8,"Frame C1 true arc join");close(a.upSS,b.upSS,2e-7,"Frame C2 true arc join");
+        close(a.upSSS,b.upSSS,2e-7,"Frame C3 true arc join, including the closed seam");
+        close(a.curvatureSS,b.curvatureSS,2e-7,"Centreline C4 true arc join supplies continuous angular jerk");
     }
     check(highOrder,"Nontrivial fixture exercises c6 and c7");
     auto copy=t;copy.rebuild();check(copy.spans.size()==t.spans.size()&&copy.length==t.length,"Rebuild length determinism");
@@ -54,7 +56,7 @@ static void verifyJoins(const Track& t){
         const auto a=t.locate(s),b=t.locate(wrapped);
         check(a.span==b.span&&a.parameter==b.parameter,"In-range fast path preserves exact wrapping at lap boundaries");
     }
-    for(size_t i=0;i<t.spans.size();++i){for(int k=0;k<8;++k)close(t.spans[i].c[k],copy.spans[i].c[k],0,"Septic coefficient determinism");for(int k=0;k<6;++k){close(t.spans[i].referenceUp[k],copy.spans[i].referenceUp[k],0,"Reference frame cache determinism");check(t.spans[i].bank[k]==copy.spans[i].bank[k],"Bank cache determinism");}}
+    for(size_t i=0;i<t.spans.size();++i){for(size_t k=0;k<t.spans[i].c.size();++k)close(t.spans[i].c[k],copy.spans[i].c[k],0,"Position coefficient determinism");for(size_t k=0;k<t.spans[i].bank.size();++k){close(t.spans[i].referenceUp[k],copy.spans[i].referenceUp[k],0,"Reference frame cache determinism");check(t.spans[i].bank[k]==copy.spans[i].bank[k],"Bank cache determinism");}}
 }
 static void reportPrecision(){
     // A twelve-digit JSON report rounded the first value to1.02, changing a
@@ -74,5 +76,5 @@ int main(){try{reportPrecision();
     for(auto bad:{NAN,INFINITY,-INFINITY}){bool rejected=false;try{straight.locate(bad);}catch(...){rejected=true;}check(rejected,"Nonfinite sample rejected");}
     auto broken=closed;broken.knots.back().bank+=.01;bool rejected=false;try{broken.rebuild();}catch(...){rejected=true;}check(rejected,"Mismatched closed canonical jets rejected");
     broken=closed;broken.knots.back().bank+=1e-12;rejected=false;try{broken.rebuild();}catch(...){rejected=true;}check(rejected,"Even small authored seam discontinuity is not hidden by tolerance");
-    std::cout<<"PASS "<<checks<<" G3 geometry/cache/arc/C2 join checks\n";return 0;
+    std::cout<<"PASS "<<checks<<" C4 geometry/cache/arc/C3 frame join checks\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

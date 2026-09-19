@@ -2,9 +2,11 @@
 
 A roller-coaster prototype with a C++20 generation and simulation core and an Unreal Engine viewer. The current build generates rides on flat ground.
 
-Current source save version: `0.8.2-graded.1 / COASTER5`. Earlier `0.8.1-linear.1` and original `0.8.0-immelmann.2` saves retain their authored geometry, operations and provenance and pass the same validation when loaded. Other numerical versions and hills/canyon saves are unsupported.
+Save format: `0.8.4-layout.1 / COASTER5`. Saves from `0.8.3-flow.1`, `0.8.2-graded.1`, `0.8.1-linear.1` and `0.8.0-immelmann.2` retain their authored geometry, interpolation and operations and undergo the same validation when loaded. Other versions and hills/canyon saves are unsupported.
 
-The bounded maintenance pass covers unnecessary flats, section boosters on straight constant-grade track, and physical braking after the final bank. [HANDOFF.md](HANDOFF.md) records release status, preserved inputs, validation and the next-turn TODO for non-signature element variety.
+Rides use a sweeping route with a turning record hill, an Immelmann, a loop-to-booster S, and an outward-banked return crest. Validation checks continuity, finite-train forces, ground clearance and structure clearance.
+
+The layout takes its pacing and broad curves from [Intamin's Falcon's Flight design description](https://www.intamin.com/project/falcons-flight/) and its connected inversion sequence from [Tormenta Rampaging Run](https://www.sixflags.com/overtexas/attractions/tormenta-rampaging-run). It is an original simulated layout, not a reconstruction. Exact motion-frequency equivalence is not established without reference telemetry.
 
 ## Source
 
@@ -37,7 +39,7 @@ Packages are written under `native/unreal/Packaged`; `-OutputDirectory <path>` s
 
 ## Play
 
-Open **Play VibeCoaster.lnk** in this folder for the verified `0.8.1-linear.1` packaged game, without opening the Unreal Editor or Epic launcher. Generate a fresh ride to see the changes; loading an original `0.8.0-immelmann.2` ride preserves its original behavior. The old package remains under `D:/Coding/Codex/vibecoasterlegacy/current-game` as a fallback.
+Open **Play VibeCoaster.lnk** for the existing `0.8.4-layout.1` package. Rebuild from the workspace source to include edits absent from that executable.
 
 In a Windows package, open `VibeCoaster/Binaries/Win64/VibeCoaster.exe` directly. Keep the complete package folder together.
 

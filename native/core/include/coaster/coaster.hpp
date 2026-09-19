@@ -13,7 +13,7 @@
 namespace coaster {
 constexpr double pi=3.14159265358979323846, gravity=9.80665;
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
-constexpr const char* generatorVersion="0.8.2-graded.1";
+constexpr const char* generatorVersion="0.8.4-layout.1";
 struct Vec3 {
     double x{},y{},z{};
     Vec3 operator+(Vec3 b) const { return {x+b.x,y+b.y,z+b.z}; }
@@ -44,15 +44,16 @@ enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Ret
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
 struct Knot { Vec3 position,tangent,curvature,up; double bank{}; Element element{Element::Return}; };
 // Deterministic caches rebuilt from the COASTER5 canonical knots.
-struct Span { std::array<Vec3,8> c{}; std::array<Vec3,6> referenceUp{}; std::array<double,6> bank{}; double start{},length{}; };
+struct Span { std::array<Vec3,10> c{}; std::array<Vec3,8> referenceUp{}; std::array<double,8> bank{}; double start{},length{}; };
 struct TrackSample { Vec3 position,tangent,curvature,up,right; Element element; };
 struct TrackLocation { size_t span{}; double parameter{}; };
-struct TrackKinematics { TrackSample sample; Vec3 upS,upSS,curvatureS; };
+struct TrackKinematics { TrackSample sample; Vec3 upS,upSS,curvatureS,upSSS,curvatureSS; };
 struct Track {
     std::vector<Knot> knots;
     std::vector<Span> spans;
     double length{};
     bool closed{true};
+    bool legacyInterpolation{false};
     void rebuild();
     TrackLocation locate(double distance) const;
     TrackLocation locate(double distance,size_t& spanHint) const;
@@ -60,7 +61,7 @@ struct Track {
     Vec3 tangent(double distance) const;
     Vec3 tangent(double distance,size_t& spanHint) const;
     TrackSample sampleSpan(size_t span,double parameter) const;
-    std::array<double,6> bankPolynomial(size_t span) const;
+    std::array<double,8> bankPolynomial(size_t span) const;
     double distanceAtSpan(size_t span,double parameter) const;
 };
 void rebuildFramePolynomials(Track&);
@@ -70,22 +71,7 @@ Track compile(const std::vector<AuthoredPoint>& points,bool closed=true);
 
 struct TrainConfig {
     int cars{6}; double carMass{1500},spacing{3.4},seatHeight{1.2};
-    // Rolling resistance was 0.002, which is a steel wheel on a steel rail. Coaster
-    // trains run polyurethane and nylon wheels and measure nearer 0.010-0.015, so
-    // 0.004 is still an optimistic 2030s bearing and compound rather than a railway
-    // number - but it is twice the old figure and the train now loses speed the way
-    // a real one does. Drag likewise: 2.4 m^2 of CdA is thin for six cars and twenty
-    // metres of train even behind a windshield, so 3.0 with the streamlining a
-    // 250 km/h train would actually get.
-    //
-    // The value is also picked for a reason that is not about wheels. Swept across
-    // the pinned seeds at a single-candidate budget the failures scatter rather than
-    // trend - 0.0070 loses seed 10 to clearance, 0.0060 loses two, 0.0050 loses
-    // seed 5, 0.0045 through 0.0030 lose none, 0.0025 loses seed 38 - because the
-    // first candidate of several of these layouts sits within a metre or two of a
-    // clearance or curvature gate, and any change to the authored heights tips a
-    // different one over. 0.004 sits in the middle of the band that holds. The
-    // scatter is the real defect and it is still there underneath this number.
+    // Provisional drag and rolling resistance, tuned against generated rides.
     double dragCdA{3.0},rollingResistance{0.004},airDensity{1.225};
 };
 inline double seatDistanceOffset(const TrainConfig& train,int seat){int car=seat==0?0:seat==1?(train.cars-1)/2:train.cars-1;return ((train.cars-1)*.5-car)*train.spacing;}
@@ -115,10 +101,7 @@ struct ReferenceBenchmark {
     std::vector<ReferenceRecording> recordings;
 };
 struct Targets {
-    // Setpoints the generator lands on, in the units the player dials them:
-    // 300 km/h, and a 0-180 km/h launch that beats the Do-Dodonpa record of
-    // 1.56 s. That record is the reference the dial multiplies, not a ceiling --
-    // this ride is meant to exceed it. Removed was the random margin, not the speed.
+    // SI units; launchSeconds measures acceleration from rest to 50 m/s.
     double height{220},speed{290/3.6},inversionHeight{80},launchSeconds{1.4};
     bool requireIntensity{true};
     double referenceExposure{std::numeric_limits<double>::quiet_NaN()};

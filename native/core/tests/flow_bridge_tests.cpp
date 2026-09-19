@@ -32,7 +32,7 @@ int main(){try{
     check(norm(sampleSpanKinematics(joined,80,0).sample.curvature)>1e-7,"Join carries curvature through the previously straight middle");
     for(size_t i=1;i<joined.spans.size();++i){auto a=sampleSpanKinematics(joined,i-1,1),b=sampleSpanKinematics(joined,i,0);
         close(a.sample.position,b.sample.position);close(a.sample.tangent,b.sample.tangent);close(a.sample.curvature,b.sample.curvature);close(a.curvatureS,b.curvatureS);
-        close(a.sample.up,b.sample.up);close(a.upS,b.upS);close(a.upSS,b.upSS);
+        close(a.sample.up,b.sample.up);close(a.upS,b.upS);close(a.upSS,b.upSS);close(a.upSSS,b.upSSS);close(a.curvatureSS,b.curvatureSS);
     }
     for(size_t i:{size_t(32),size_t(126)}){close(points[i].position,original[i].position);check(std::abs(points[i].bank-original[i].bank)<1e-9,"Join preserves endpoint bank");}
     // Recompilation estimates new endpoint jets from the resampled curve.

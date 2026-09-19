@@ -1,6 +1,5 @@
-#include "station.hpp"
+#include "coaster/coaster.hpp"
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -95,9 +94,6 @@ int main(int argc,char**argv){try{
         require(checkpoints==13,"Cancellation did not stop at its first requested checkpoint");
         auto parseBefore=stationPayload(restored);require(!parseStationPayload(payload,restored,error,[]{return true;}),"Parser cancellation ignored");require(stationPayload(restored)==parseBefore,"Cancelled parse replaced previous station");
         threw=false;try{buildStation(design.track,design.request.terrain,design.request.train,[]{return true;});}catch(...){threw=true;}require(threw,"Builder cancellation ignored");
-
-
-        std::ofstream out(std::filesystem::absolute(argv[0]).parent_path()/(name+"-station.txt"));out<<payload;
         std::cout<<"Station passes: "<<name<<" parts="<<station.boxes.size()<<"\n";
     }
     std::cout<<"PASS "<<checks<<" station checks\n";return 0;

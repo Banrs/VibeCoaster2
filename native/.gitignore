@@ -1,6 +1,3 @@
-/build-cmake/
 /test-output/
 /test-artifacts/
 /structure-test-output/
-__pycache__/
-*.pyc

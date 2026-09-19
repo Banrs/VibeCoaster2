@@ -22,10 +22,10 @@ double magnitude(double x){return std::abs(x);}double magnitude(Vec3 x){return n
 template<class T,size_t N> double errorReserve(const std::array<T,N>& power){double x=1;for(const auto& p:power)x+=magnitude(p);return x*1e-10;}
 template<class T,size_t N> double maximum(const std::array<T,N>& controls,double reserve){double x=0;for(const auto& p:controls)x=std::max(x,magnitude(p));return x+reserve;}
 struct Node {
-    std::array<Vec3,7> velocity;
-    std::array<Vec3,6> acceleration,rawUp;
-    std::array<Vec3,5> upDerivative;
-    std::array<double,5> bankDerivative;
+    std::array<Vec3,9> velocity;
+    std::array<Vec3,8> acceleration,rawUp;
+    std::array<Vec3,7> upDerivative;
+    std::array<double,7> bankDerivative;
     double begin{},end{1};unsigned depth{};
 };
 struct Reserves {double velocity,acceleration,up,upDerivative,bankDerivative;};
@@ -73,15 +73,15 @@ ClearanceSweep buildClearanceSweep(const Track& source,const TrainConfig& train,
     for(size_t i=0;i<t.spans.size();++i){
         if((i&63)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");
         if(t.spans[i].start!=source.spans[i].start||t.spans[i].length!=source.spans[i].length)throw std::runtime_error("Stale canonical arc cache");
-        for(size_t k=0;k<8;++k){auto a=t.spans[i].c[k],b=source.spans[i].c[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z)throw std::runtime_error("Stale canonical polynomial cache");}
-        for(size_t k=0;k<6;++k){auto a=t.spans[i].referenceUp[k],b=source.spans[i].referenceUp[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z||t.spans[i].bank[k]!=source.spans[i].bank[k])throw std::runtime_error("Stale canonical frame cache");}
+        for(size_t k=0;k<t.spans[i].c.size();++k){auto a=t.spans[i].c[k],b=source.spans[i].c[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z)throw std::runtime_error("Stale canonical polynomial cache");}
+        for(size_t k=0;k<t.spans[i].referenceUp.size();++k){auto a=t.spans[i].referenceUp[k],b=source.spans[i].referenceUp[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z||t.spans[i].bank[k]!=source.spans[i].bank[k])throw std::runtime_error("Stale canonical frame cache");}
     }
     ClearanceSweep out;out.top=std::max(2.4,train.seatHeight+.6);out.length=t.length;
     // Each accepted canonical-u cell has true arc bound <=.04 m and frame
     // angular variation <=.08 rad. From its exact midpoint every body point
     // moves <=.02+.04*4.2=.188 m; every hardware point <=.02+.04*.9=.056 m.
     // The existing .20/.06 pads therefore cover the complete interval. This
-    // uses the ACTUAL cached quintic raw frame/bank, with no nlerp rate premise.
+    // uses the actual cached raw frame/bank, with no nlerp rate premise.
     size_t visited=0;
     for(size_t i=0;i<t.spans.size();++i){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
@@ -174,4 +174,3 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
     return -1;
 }
 }
-

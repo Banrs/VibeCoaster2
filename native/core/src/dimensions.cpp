@@ -23,7 +23,7 @@ std::vector<double> roots(Polynomial p){
     std::sort(found.begin(),found.end());found.erase(std::unique(found.begin(),found.end(),[](double a,double b){return std::abs(a-b)<1e-12;}),found.end());return found;
 }
 }
-std::pair<double,double> polynomialBounds(const std::array<double,8>& coefficients){
+template<size_t N>static std::pair<double,double> bounds(const std::array<double,N>& coefficients){
     Polynomial p(coefficients.begin(),coefficients.end()),derivative;
     for(double c:p)if(!std::isfinite(c))throw std::runtime_error("Nonfinite dimension polynomial");
     for(size_t i=1;i<p.size();++i)derivative.push_back(p[i]*i);
@@ -31,6 +31,7 @@ std::pair<double,double> polynomialBounds(const std::array<double,8>& coefficien
     for(double r:roots(derivative)){double v=value(p,r);lo=std::min(lo,v);hi=std::max(hi,v);}
     return {lo,hi};
 }
+std::pair<double,double> polynomialBounds(const std::array<double,8>& coefficients){return bounds(coefficients);}
 std::vector<InversionDimensions> measureInversionDimensions(const Track& track,Cancel cancel){
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
     size_t n=track.spans.size();
@@ -48,9 +49,8 @@ std::vector<InversionDimensions> measureInversionDimensions(const Track& track,C
         if(!active){InversionDimensions d;d.startDistance=sp.start;d.horizontalForward=unit(Vec3{sp.c[1].x,sp.c[1].y,0});d.horizontalAxisFallback=norm(d.horizontalForward)<.5;if(d.horizontalAxisFallback)d.horizontalForward={1,0,0};d.horizontalRight=cross(d.horizontalForward,{0,0,1});result.push_back(d);low.fill(INFINITY);high.fill(-INFINITY);active=true;}
         auto& d=result.back();if(d.pathLength>0&&i<lastIndex)d.wrapsSeam=true;lastIndex=i;d.pathLength+=sp.length;d.endDistance=sp.start+sp.length;
         std::array<Vec3,3> axes{d.horizontalForward,d.horizontalRight,Vec3{0,0,1}};
-        for(size_t a=0;a<3;++a){std::array<double,8> c;for(size_t j=0;j<8;++j)c[j]=dot(sp.c[j],axes[a]);auto [lo,hi]=polynomialBounds(c);low[a]=std::min(low[a],lo);high[a]=std::max(high[a],hi);}
+        for(size_t a=0;a<3;++a){std::array<double,10> c;for(size_t j=0;j<c.size();++j)c[j]=dot(sp.c[j],axes[a]);auto [lo,hi]=bounds(c);low[a]=std::min(low[a],lo);high[a]=std::max(high[a],hi);}
     }
     if(active)finish();return result;
 }
 }
-

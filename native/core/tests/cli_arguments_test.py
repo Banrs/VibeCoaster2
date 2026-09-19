@@ -1,13 +1,10 @@
-"""Real CLI argument regressions; fail-fast invalid budgets avoid generating rides.
-
-Run: python test_cli_arguments.py /path/to/coaster_cli
-Discovery runs can set COASTER_CLI; otherwise these executable tests are skipped.
-"""
+"""Run: python cli_arguments_test.py /path/to/coaster_cli"""
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 CLI = os.environ.get("COASTER_CLI")
@@ -44,11 +41,27 @@ class CliArguments(unittest.TestCase):
             with self.subTest(text=text):
                 self.invalid("--seed", text)
 
+    def test_validate_rejects_generation_options_before_loading(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for option, value in (("--seed", "99"), ("--candidates", "0"),
+                                  ("--terrain", "flat"), ("--reference-file", "missing.json")):
+                with self.subTest(option=option):
+                    result = subprocess.run(
+                        [str(Path(CLI).resolve()), "validate", str(Path(folder) / "missing.coaster"), option, value],
+                        capture_output=True, text=True, encoding="utf-8", timeout=15,
+                    )
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn("generate", result.stderr)
+                    self.assertEqual(result.stdout, "")
+
     def test_only_flat_terrain_is_available(self):
         self.assertEqual(self.parsed("--terrain", "flat")["terrain"], "flat")
-        for terrain in ("hills", "canyon"):
-            with self.subTest(terrain=terrain):
-                self.invalid("--terrain", terrain)
+        with tempfile.TemporaryDirectory() as folder:
+            for terrain in ("hills", "canyon"):
+                with self.subTest(terrain=terrain):
+                    self.invalid("--terrain", terrain, "--out", str(Path(folder) / "ride.coaster"),
+                                 "--json", str(Path(folder) / "report.json"))
+                    self.assertEqual(list(Path(folder).iterdir()), [])
 
     def test_seed_unsigned_boundaries(self):
         for text in ("0", "42", "00042", "18446744073709551615"):

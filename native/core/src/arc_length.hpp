@@ -37,13 +37,13 @@ inline double spanArcLength(const Span& span,double u){
     // norm and weighted addition in scalar order; do not fuse multiply/add.
     constexpr double nodes[]={.18343464249564980494,.52553240991632898582,.79666647741362673959,.96028985649753623168};
     constexpr double weights[]={.36268378337836198297,.31370664587788728734,.22238103445337447054,.10122853629037625915};
-    std::array<Vec3,7> c;for(size_t i=0;i<c.size();++i)c[i]=span.c[i+1]*double(i+1);
+    std::array<Vec3,9> c;for(size_t i=0;i<c.size();++i)c[i]=span.c[i+1]*double(i+1);
     using namespace arc_pair;
     double result=0;
     for(int i=0;i<4;++i){
         const auto parameter=pair((1-nodes[i])*u*.5,(1+nodes[i])*u*.5);
-        auto x=repeat(c[6].x),y=repeat(c[6].y),z=repeat(c[6].z);
-        for(int k=5;k>=0;--k){
+        auto x=repeat(c.back().x),y=repeat(c.back().y),z=repeat(c.back().z);
+        for(int k=int(c.size())-2;k>=0;--k){
             x=add(mul(x,parameter),repeat(c[k].x));
             y=add(mul(y,parameter),repeat(c[k].y));
             z=add(mul(z,parameter),repeat(c[k].z));

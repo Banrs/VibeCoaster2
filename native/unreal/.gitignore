@@ -7,4 +7,3 @@ Packaged/
 *.sln
 Content/Maps/*.umap
 Content/Materials/*.uasset
-scripts/__pycache__/
