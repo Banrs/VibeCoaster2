@@ -53,6 +53,8 @@ Current package: `dist/2.0.0-rift.1/run-20260921-181214-655`, executable SHA256 
 
 Finish checkpoint3: controlled performance, final evidence/cleanup, final versioned commit/push with checkpoint CI, fresh clean package, actual GPU verification and exact Play promotion. Use one compiler worker and no subagents.
 
+The final verification candidate is `2.0.0-default.1`. It retains Rift's compiled ride and accepts Rift saves with fresh validation. Its package, controlled benchmarks and GPU verification must pass before replacing the currently verified Rift Play target.
+
 ### Protected reference measurements
 
 The protected camelback's isolated result retains crest height224.65476m and ascent/descent pitch59.6774/67.5457° at83.5m/s. It cuts0.75s from the final4.005G hold, releases over0.30s to1.9G and exits at the first rising0.02rad port. The protected prefix differs by at most5.03e−11m. Full footprint grows749.479→791.557m (+5.614%); valley minimum changes−1.27977→−4.49481m relative to entry. Its isolated and connected baseline histories pass. Faster scaled copies shorten only the final positive hold as needed. Source/traces/hash evidence: `native/build/evidence/camelback-feasibility`.

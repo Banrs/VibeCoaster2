@@ -20,7 +20,7 @@
 namespace coaster {
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
 constexpr const char* generatorVersion=COASTER_GENERATOR_VERSION;
-inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
+inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
 
 enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
