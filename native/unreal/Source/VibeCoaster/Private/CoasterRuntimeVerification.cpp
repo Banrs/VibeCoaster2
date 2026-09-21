@@ -440,6 +440,9 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             GeometryIdentity(*PC.Ride->ActiveDesign()) != S.Identity || !PC.Ride->Status().StartsWith(TEXT("Save cancelled before commit;")))
         { S.Fail(TEXT("Pre-commit save cancellation did not preserve file, ride and truthful status")); break; }
         S.SaveCancelChecked = true; S.Event(TEXT("save-cancellation-preserved-file-and-ride"));
+        // Load-only traversal finishes at the terminal stop; establish moving
+        // playback before checking that a replacement request preserves it.
+        PC.Ride->Restart();
         S.CancelRevision = PC.Ride->GeometryRevision(); S.CancelRideTime = PC.Ride->Playback().Time;
         if(PC.Ride->IsPaused()) PC.Ride->TogglePause();
         PC.Ride->Generate(PC.Ride->ActiveDesign()->request);
