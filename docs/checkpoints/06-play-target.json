@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-09-21T18:27:45.3592856Z",
+  "codeCommit": "b311cd1457272c49fcd1145a8747a9f7f7b11fbf",
+  "release": "2.0.0-rift.1",
+  "targetPath": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-rift.1\\run-20260921-181214-655\\Windows\\VibeCoaster\\Binaries\\Win64\\VibeCoaster.exe",
+  "sha256": "6A6329D4EBF9012DEABFB6D3AC40C570BDE2DE2F7D301086794D4F489F805F04",
+  "arguments": "-UserDir=\"D:\\Coding\\Codex\\Vibecoaster2\\UserData-Rift-Verified\"",
+  "workingDirectory": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-rift.1\\run-20260921-181214-655\\Windows",
+  "shortcutSha256": "779E06CC7ECC714C8801DF3DA6CC87C4FCA042447CCB731FAD5EC6DCB9548330",
+  "packageManifestSha256": "12DCD13718CB5815EA369E740463EC1DE450C2E2C0D6B0ED2A54F76A7605A9DC",
+  "savedRideSha256": "555D687763FC176EC26EB3C56E8BFD092A5915DCF3A464B8A53DB5C928D9DE84",
+  "geometrySha1": "2D2B4A3D6558FFA79C5F2D9D3E1CBD51565A128D",
+  "fallbackShortcut": "D:\\Coding\\Codex\\Vibecoaster2\\Play VibeCoaster2 Foundation.lnk",
+  "preservationManifest": "D:\\Coding\\Codex\\vibecoasterlegacy\\foundation-fallback-20260921-175217\\preservation-manifest.json",
+  "gpuFront": "automated-smoke-passed",
+  "gpuRear": "automated-smoke-passed",
+  "gpuEvidencePrefix": "D:\\Coding\\Codex\\Vibecoaster2\\native\\build\\evidence\\gpu-rift-b311"
+}

@@ -39,5 +39,13 @@
       "Archive": "D:\\Coding\\Codex\\vibecoasterlegacy\\foundation-pruning-20260921-145134\\native\\archive\\README.md"
     }
   ],
-  "CreatedUtc": "2026-09-21T14:51:36.1183284Z"
+  "CreatedUtc": "2026-09-21T14:51:36.1183284Z",
+  "FoundationFallback": {
+    "Archive": "D:\\Coding\\Codex\\vibecoasterlegacy\\foundation-fallback-20260921-175217",
+    "Manifest": "D:\\Coding\\Codex\\vibecoasterlegacy\\foundation-fallback-20260921-175217\\preservation-manifest.json",
+    "ManifestSha256": "3BC9890DD5AC78BB70121F874FF97CF8F024ECA443CF3DC2E75C9576C70E9678",
+    "Files": 58,
+    "Bytes": 966479897,
+    "Verified": true
+  }
 }
