@@ -39,6 +39,11 @@ int main(){try{
         Vec3 up=unit(Vec3{0,0,1}-tangent*tangent.z);up=rotate(up,tangent,.02*std::sin(s/19));
         points.push_back({{500*std::sin(theta),500*(1-std::cos(theta)),50+2*std::sin(s/30)},.25*std::sin(s/24),Element::Return,up});}
     auto curved=compile(points,false);
+    size_t positionHint=curved.spans.size();
+    for(double s=0.;s<=curved.length;s+=.73){
+        const auto position=curved.position(s,positionHint);
+        near(norm(position-curved.sample(s).position),0,2e-12,"Position-only canonical sampling matches the full frame position");
+    }
     for(size_t i=1;i<curved.spans.size();++i){auto a=sampleSpanKinematics(curved,i-1,1),b=sampleSpanKinematics(curved,i,0);
         near(norm(a.sample.up-b.sample.up),0,1e-9,"Reference frame value is continuous");
         near(norm(a.upS-b.upS),0,2e-8,"Reference frame first derivative has no impulse at a knot");
@@ -62,10 +67,20 @@ int main(){try{
         Vec3 u{0,-std::sin(b),std::cos(b)},r=cross({1,0,0},u);
         near(norm(sampleKinematics(quartic,s).upSSS-(r*(third-first*first*first)-u*(3*first*second))),0,1e-10,"Quartic-bank closed-form third derivative on unequal spans");
     }
-    auto legacy=curved;legacy.legacyInterpolation=true;legacy.rebuild();double oldJump=0;
-    for(size_t i=1;i<legacy.spans.size();++i)oldJump=std::max(oldJump,norm(sampleSpanKinematics(legacy,i-1,1).upSSS-sampleSpanKinematics(legacy,i,0).upSSS));
-    check(oldJump>1e-7,"Regression fixture exposes the former C2 frame's third-derivative jump");
     auto track=straight(.003,0);TrainConfig train;train.cars=1;
+    // Differentiate a physical seat trajectory in time, independently of the
+    // analytic frame jets. Component force rate includes rotating rider axes.
+    const double at=80,velocity=31,accel=3,accelRate=-1.2,height=1.2,h=.0005;
+    const auto dynamic=measureSeatDynamics(track,at,velocity,accel,accelRate,height);
+    auto stateAt=[&](double t){return std::array<double,3>{at+velocity*t+.5*accel*t*t+accelRate*t*t*t/6,velocity+accel*t+.5*accelRate*t*t,accel+accelRate*t};};
+    auto specificAt=[&](double t){const auto x=stateAt(t);const auto k=sampleKinematics(track,x[0]);return (k.sample.tangent+k.upS*height)*x[2]+(k.sample.curvature+k.upSS*height)*(x[1]*x[1])+Vec3{0,0,gravity};};
+    near(norm(dynamic.inertialJerk-(specificAt(h)-specificAt(-h))/(2*h)),0,1e-5,"Seat inertial jerk matches an independent time derivative including offset rotation");
+    const auto xm=stateAt(-h),xp=stateAt(h);const auto fm=measureSeatForces(track,xm[0],xm[1],xm[2],height),fp=measureSeatForces(track,xp[0],xp[1],xp[2],height);
+    near(dynamic.rate.vertical,(fp.vertical-fm.vertical)/(2*h),1e-6,"Vertical body-axis rate includes rotation");
+    near(dynamic.rate.lateral,(fp.lateral-fm.lateral)/(2*h),1e-6,"Lateral body-axis rate includes rotation");
+    near(dynamic.rate.longitudinal,(fp.longitudinal-fm.longitudinal)/(2*h),1e-6,"Longitudinal body-axis rate includes actuator jerk");
+    near(norm(dynamic.angularVelocity),.003*velocity,1e-9,"Angular velocity uses the physical frame through twist");
+    near(norm(dynamic.angularJerk),.003*std::abs(accelRate),1e-8,"Constant spatial twist has the expected time angular jerk");
     std::vector<Operation> ops{{0,track.length,DriveKind::Launch,20,4000,1000000,.2}};
     auto coarse=simulate(track,ops,train,1./240),fine=simulate(track,ops,train,1./480);
     const auto motion=simulateMotion(track,ops,train,1./240,{});

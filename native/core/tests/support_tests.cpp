@@ -16,7 +16,7 @@ static uint64_t hash(const std::string& s){uint64_t h=14695981039346656037ull;fo
 static std::vector<std::string> lines(const std::string& s){std::istringstream in(s.substr(s.find('\n')+1));std::vector<std::string> out;std::string l;while(std::getline(in,l))out.push_back(l);return out;}
 static std::vector<std::string> tokens(const std::string& s){std::istringstream in(s);std::vector<std::string> v;std::string x;while(in>>x)v.push_back(x);return v;}
 static std::string join(const std::vector<std::string>& v,const char* sep){std::string s;for(auto& x:v){if(!s.empty())s+=sep;s+=x;}return s;}
-static void corrupt(const fs::path& p,std::vector<std::string> v,size_t row,size_t column,const std::string& value){auto fields=tokens(v[row]);fields.at(column)=value;v[row]=join(fields," ");std::string payload=join(v,"\n")+"\n";std::ofstream f(p,std::ios::binary);f<<"COASTER 5 "<<payload.size()<<' '<<hash(payload)<<'\n'<<payload;}
+static void corrupt(const fs::path& p,std::vector<std::string> v,size_t row,size_t column,const std::string& value){auto fields=tokens(v[row]);fields.at(column)=value;v[row]=join(fields," ");std::string payload=join(v,"\n")+"\n";std::ofstream f(p,std::ios::binary);f<<"COASTER 6 "<<payload.size()<<' '<<hash(payload)<<'\n'<<payload;}
 static bool code(const ValidationReport& r,const char* s){for(auto& f:r.errors)if(f.code==s)return true;return false;}
 static void sameSupport(const Support& a,const Support& b){exact(a.base,b.base,"Support base exact");exact(a.top,b.top,"Support top exact");exact(a.attachment,b.attachment,"Support attachment exact");check(a.hasAttachment==b.hasAttachment&&a.trackDistance==b.trackDistance,"Support contact identity exact");check(a.members.size()==b.members.size(),"Member count exact");for(size_t i=0;i<a.members.size();++i){auto& x=a.members[i];auto& y=b.members[i];exact(x.base,y.base,"Member base exact");exact(x.top,y.top,"Member top exact");check(x.radiusBase==y.radiusBase&&x.radiusTop==y.radiusTop&&x.kind==y.kind&&x.spineContact==y.spineContact,"Member radii/kind/contact exact");}}
 int main(){try{
@@ -36,7 +36,7 @@ int main(){try{
                 auto u=VibeCoordinates::Position(mesh.positions[a]),v=VibeCoordinates::Position(mesh.positions[c]),w=VibeCoordinates::Position(mesh.positions[b]);auto expected=VibeCoordinates::Direction(mesh.normals[a]+mesh.normals[b]+mesh.normals[c]);check(dot(cross(Vec3{v.X-u.X,v.Y-u.Y,v.Z-u.Z},Vec3{w.X-u.X,w.Y-u.Y,w.Z-u.Z}),Vec3{expected.X,expected.Y,expected.Z})>0,"Reflected UE winding remains outward");}
         }
     }
-    auto good=out/"new.coaster";check(saveDesign(d,good.string(),error),"New save: "+error);Design replay;check(loadDesign(good.string(),replay,error),"New load: "+error);check(reportJson(d)==reportJson(replay),"Schema5 exact independent replay");for(size_t i=0;i<d.supports.size();++i)sameSupport(d.supports[i],replay.supports[i]);
+    auto good=out/"new.coaster";check(saveDesign(d,good.string(),error),"New save: "+error);Design replay;check(loadDesign(good.string(),replay,error),"New load: "+error);check(reportJson(d)==reportJson(replay),"Schema6 exact independent replay");for(size_t i=0;i<d.supports.size();++i)sameSupport(d.supports[i],replay.supports[i]);
     auto support=d.supports.front();
     check(!support.members.empty()&&support.members.front().kind==SupportMemberKind::Footing,"Malformed-footing fixtures start from a real footing");
     check(support.members.back().spineContact,"Malformed-contact fixtures start from the verified spine endpoint");

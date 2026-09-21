@@ -21,6 +21,8 @@ public:
     AVibeCoasterAssembly();
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Ties;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Supports;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> LSMHardware;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> BrakeHardware;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Cars;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationSteel;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationConcrete;
@@ -71,6 +73,8 @@ private:
     UPROPERTY() TObjectPtr<UMaterialInterface> GroundMaterial;
     UPROPERTY() TObjectPtr<UMaterialInterface> StructureMaterial;
     UPROPERTY() TObjectPtr<UMaterialInterface> FootingMaterial;
+    UPROPERTY() TObjectPtr<UMaterialInterface> LSMMaterial;
+    UPROPERTY() TObjectPtr<UMaterialInterface> BrakeMaterial;
     void StartQueuedJob();
     void PollJob();
     void CommitChunks();

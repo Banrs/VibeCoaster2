@@ -209,6 +209,8 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
     if (!TestTrue(TEXT("Accepted canonical ride prepares real render buffers"), VibeMesh::Prepare(Prepared, [] { return false; })))
     { AddError(Prepared.Error); return false; }
 
+    TestTrue(TEXT("Physical drive and brake assemblies are prepared"), Prepared.LSMHardware.Num()>0 && Prepared.BrakeHardware.Num()>0 && Prepared.TrimFins.Num()>0);
+    for(const auto& Fin: Prepared.TrimFins) TestTrue(TEXT("Moving trim fins retain valid operation and instance mappings"), Fin.Operation<D->operations.size() && Prepared.BrakeHardware.IsValidIndex(Fin.Instance) && D->operations[Fin.Operation].kind==coaster::DriveKind::Trim);
     TArray<FVector> SteelVertices, FootingVertices;
     TArray<int32> SteelIndices, FootingIndices;
     bool ValidIndices = true, ValidGround = true, ValidAttributes = true, ChunkBudget = true;
@@ -379,8 +381,10 @@ bool FCoasterStationArtTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterImportedArtTest, "VibeCoaster.ImportedArtContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
 {
-    auto* ReliefGround = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Ground_Relief.M_Ground_Relief"));
+    auto* ReliefGround = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Ground_Highlands.M_Ground_Highlands"));
     TestNotNull(TEXT("Current texture-free relief ground material is available to the packaged runtime"), ReliefGround);
+    TestNotNull(TEXT("LSM hardware material is available"),LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Materials/M_LSM.M_LSM")));
+    TestNotNull(TEXT("Brake hardware material is available"),LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Materials/M_Brake.M_Brake")));
     if (ReliefGround) TestTrue(TEXT("Relief ground is an opaque surface"), ReliefGround->GetBlendMode() == BLEND_Opaque);
 
     struct FAssetContract
@@ -525,6 +529,67 @@ bool FCoasterGroundTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Plane vertices, normals and UVs agree with flat SI ground"), V.Z==0 && Ground.Normals[I]==FVector::UpVector && Ground.UV[I]==FVector2D(V.X/8000.,-V.Y/8000.));
     }
     TestTrue(TEXT("Ground extends beyond the entire ride"), Coverage.Min.X<Bounds.Min.X && Coverage.Min.Y<Bounds.Min.Y && Coverage.Max.X>Bounds.Max.X && Coverage.Max.Y>Bounds.Max.Y);
+    auto Landscape = std::make_shared<coaster::Design>();
+    Landscape->request.terrain.kind=coaster::TerrainKind::Highlands;
+    Landscape->request.terrain.centerX=17.3; Landscape->request.terrain.centerY=-51.7;
+    Landscape->request.terrain.bend=-.28;
+    Landscape->request.terrain.plateau=.7;
+    Landscape->request.terrain.cliffX=150; Landscape->request.terrain.cliffHeading=.2;
+    Landscape->request.terrain.ramps.push_back({-300,-200,100,200,0,60,.1,.2,100});
+    Landscape->request.terrain.ridge.points={{-120,-80,75,.2,.1},{0,-40,105,.15,0},{90,15,85,-.15,.2},{0,40,70,0,0}};
+    Landscape->request.terrain.ridge.spineCount=3;
+    Landscape->request.terrain.cliffCurvature=.001;
+    Landscape->request.terrain.ravines.push_back({-250,-50,100,100,30,65,60,90});
+    // A broad foothill lies beyond all ride interaction. It must be sampled by
+    // the distant rings without forcing its whole footprint onto the fine grid.
+    Landscape->request.terrain.knolls.push_back({900,850,120,600});
+    coaster::Span Bow; Bow.c[0]={0,0,50}; Bow.c[1]={1600,0,0}; Bow.c[2]={-1600,0,0};
+    Landscape->track.spans.push_back(Bow);
+    VibeMesh::FPreparedRide Relief; Relief.Bounds=Bounds; Relief.Design=Landscape;
+    if (TestTrue(TEXT("Resolved highlands prepare"),VibeMesh::AppendGround(Relief,{})))
+    {
+        const auto& Surface=Relief.Chunks[0];
+        TestTrue(TEXT("Highlands preserve ride-only overview bounds"),Relief.Bounds.Equals(Bounds,0));
+        TestTrue(TEXT("Highlands contain real terrain relief"),Surface.Vertices.Num()>100 && Surface.Vertices.ContainsByPredicate([](const FVector& P){return P.Z>5000;}));
+        int64 Faces=0;
+        TestTrue(TEXT("Every highland and basin face has the correct winding"),HasEngineFrontFaces(Surface.Vertices,Surface.Normals,Surface.Indices,Faces));
+        const auto& Exact=Relief.GroundExactBounds;
+        const double BodyRadius=coaster::occupiedRadius(Landscape->request.train);
+        bool EnclosesRide=Exact[0]<=Bounds.Min.X/100&&Exact[1]<=-Bounds.Max.Y/100&&Exact[2]>=Bounds.Max.X/100&&Exact[3]>=-Bounds.Min.Y/100;
+        for(int32 I=0;I<=32;++I){const double U=I/32.,X=1600*U*(1-U);EnclosesRide&=Exact[0]<=X-BodyRadius&&Exact[2]>=X+BodyRadius&&Exact[1]<=-BodyRadius&&Exact[3]>=BodyRadius;}
+        TestTrue(TEXT("Exact terrain encloses structures and the complete bowed track plus occupied radius"),EnclosesRide);
+        bool ExactSurface=true,SharedField=true,Finite=true,DistantRelief=false;
+        int64 NearFaces=0;
+        FBox SurfaceBounds(ForceInit);
+        TMap<uint64,int32> EdgeUses;
+        for(int32 I=0;I<Surface.Vertices.Num();++I){
+            const auto& P=Surface.Vertices[I];SurfaceBounds+=P;
+            const auto Q=VibeCoordinates::CorePosition({P.X,P.Y,P.Z});
+            SharedField&=std::abs(Q.z-Landscape->request.terrain.height(Q.x,Q.y))<1e-7;
+            Finite&=!P.ContainsNaN()&&!Surface.Normals[I].ContainsNaN()&&FMath::IsFinite(Surface.UV[I].X)&&FMath::IsFinite(Surface.UV[I].Y);
+        }
+        for(int32 I=0;I<Surface.Indices.Num();I+=3){
+            const auto& A=Surface.Vertices[Surface.Indices[I]];const auto& B=Surface.Vertices[Surface.Indices[I+1]];const auto& C=Surface.Vertices[Surface.Indices[I+2]];
+            const FVector P=(A+B+C)/3;
+            const auto Q=VibeCoordinates::CorePosition({P.X,P.Y,P.Z});
+            if(Q.x>=Exact[0]&&Q.x<=Exact[2]&&Q.y>=Exact[1]&&Q.y<=Exact[3]){
+                ++NearFaces;ExactSurface&=std::abs(Q.z-Landscape->request.terrain.height(Q.x,Q.y))<1e-7;
+                for(const FVector* V:{&A,&B,&C}){const auto R=VibeCoordinates::CorePosition({V->X,V->Y,V->Z});ExactSurface&=R.x>=Exact[0]&&R.x<=Exact[2]&&R.y>=Exact[1]&&R.y<=Exact[3];}
+            }else DistantRelief|=P.Z>100&&(A-B).SizeSquared2D()>800.*800.;
+            for(int32 E=0;E<3;++E){const uint32 First=uint32(Surface.Indices[I+E]),Second=uint32(Surface.Indices[I+(E+1)%3]);const uint64 Key=(uint64(FMath::Min(First,Second))<<32)|FMath::Max(First,Second);++EdgeUses.FindOrAdd(Key);}
+        }
+        bool Stitched=true;
+        for(const auto& Edge:EdgeUses){
+            if(Edge.Value==2)continue;
+            const auto& A=Surface.Vertices[int32(Edge.Key>>32)];const auto& B=Surface.Vertices[int32(uint32(Edge.Key))];
+            const bool Horizon=(A.X==SurfaceBounds.Min.X&&B.X==SurfaceBounds.Min.X)||(A.X==SurfaceBounds.Max.X&&B.X==SurfaceBounds.Max.X)||
+                (A.Y==SurfaceBounds.Min.Y&&B.Y==SurfaceBounds.Min.Y)||(A.Y==SurfaceBounds.Max.Y&&B.Y==SurfaceBounds.Max.Y);
+            Stitched&=Edge.Value==1&&Horizon;
+        }
+        TestTrue(TEXT("Near-interaction triangle interiors retain the exact native clearance surface"),ExactSurface&&NearFaces>100);
+        TestTrue(TEXT("Distant terrain nodes sample the same finite resolved field"),SharedField&&Finite&&DistantRelief);
+        TestTrue(TEXT("Every interior terrain edge is shared, including fine/coarse ring stitches"),Stitched);
+    }
     VibeMesh::FPreparedRide Cancelled; Cancelled.Bounds=Bounds;
     TestFalse(TEXT("Cancelled ground is not appended"),VibeMesh::AppendGround(Cancelled,[]{return true;}));
     TestTrue(TEXT("Cancellation preserves existing state"),Cancelled.Chunks.IsEmpty() && Cancelled.Bounds.Equals(Bounds,0));

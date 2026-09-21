@@ -11,7 +11,7 @@ static void check(bool b,const std::string& s){++checks;if(!b)throw std::runtime
 static bool code(const ValidationReport& r,const char* c){for(const auto& e:r.errors)if(e.code==c)return true;return false;}
 static std::string bytes(const fs::path& p){std::ifstream f(p,std::ios::binary);return {std::istreambuf_iterator<char>(f),{}};}
 static uint64_t hash(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
-static void write(const fs::path& p,const std::string& s){std::ofstream f(p,std::ios::binary);f<<"COASTER 5 "<<s.size()<<' '<<hash(s)<<'\n'<<s;}
+static void write(const fs::path& p,const std::string& s){std::ofstream f(p,std::ios::binary);f<<"COASTER 6 "<<s.size()<<' '<<hash(s)<<'\n'<<s;}
 int main(){try{
     const auto out=fs::current_path()/"structure-test-output";fs::create_directories(out);
     GenerationRequest req;req.targets.requireIntensity=false;Design d=generate(req);check(d.accepted(),"Combined candidate accepted");
@@ -20,12 +20,6 @@ int main(){try{
     auto bad=d;bad.station={};check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"New provenance cannot omit station");
     bad=d;bad.supports[0].members.clear();check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"New provenance cannot omit member geometry");
     bad=d;bad.generationVersion="unknown";check(code(validateDesignStructures(bad),"GENERATOR_VERSION"),"Unknown provenance never gains legacy exemption");
-    auto compatible=d;compatible.generationVersion="0.8.0-immelmann.2";check(validateDesignStructures(compatible).valid(),"Original 0.8.0 provenance passes the same structure checks");
-    bad=compatible;bad.station={};check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.0 provenance cannot omit station");
-    bad=compatible;bad.supports.front().members.clear();check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.0 provenance cannot omit support members");
-    compatible.generationVersion="0.8.1-linear.1";check(validateDesignStructures(compatible).valid(),"Original 0.8.1 provenance passes the same structure checks");
-    bad=compatible;bad.station={};check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.1 provenance cannot omit station");
-    bad=compatible;bad.supports.front().members.clear();check(code(validateDesignStructures(bad),"REQUIRED_STRUCTURE"),"Original 0.8.1 provenance cannot omit support members");
     for(const auto* identity:{"0.2.1","0.3.0-pacing.2","0.4.0-foundation.1","0.4.0-foundation.2-work"}){
         auto old=d;old.generationVersion=identity;check(code(validateDesignStructures(old),"GENERATOR_VERSION"),"Old geometry semantics are never reinterpreted under new runtime");
         old.station={};old.supports.front().members.clear();check(code(validateDesignStructures(old),"GENERATOR_VERSION"),"Old identity cannot gain absence exemptions");
@@ -34,16 +28,25 @@ int main(){try{
     check(saveDesign(d,good.string(),error),"Combined save: "+error);const auto saved=bytes(good),payload=saved.substr(saved.find('\n')+1);
     Design replay;check(loadDesign(good.string(),replay,error),"Combined replay: "+error);check(stationPayload(d.station)==stationPayload(replay.station),"Canonical station fields preserved exactly");check(reportJson(d)==reportJson(replay),"Replay recomputes identical physics/reference/dimensions");
     auto rejected=[&](const std::string& p,const std::string& expected="REQUIRED_STRUCTURE"){write(malformed,p);Design prior=d;check(!loadDesign(malformed.string(),prior,error),"Checksummed missing geometry rejected");check(error.find(expected)!=std::string::npos,"Missing geometry receives explicit completeness finding: "+error);check(reportJson(prior)==reportJson(d),"Rejected load preserves accepted design");};
-    const auto ext=payload.find("EXTENSIONS ");check(ext!=std::string::npos,"Schema5 extension directory present");
+    const auto ext=payload.find("EXTENSIONS ");check(ext!=std::string::npos,"Schema6 extension directory present");
     // Strip only the structure under test. A valid landscape remains mandatory
     // in the new exact version, so it must survive the missing-station fixture.
+    std::vector<std::pair<std::string,std::string>> blocks;
     std::istringstream directory(payload.substr(ext));std::string tag,terrainBlock;size_t extensionCount=0;
     directory>>tag>>extensionCount;check(tag=="EXTENSIONS", "Extension directory parsed");
-    for(size_t i=0;i<extensionCount;++i){std::string name;int version=0;size_t length=0;directory>>name>>version>>length;check(directory.get()=='\n',"Extension terminator");std::string data(length,'\0');check(bool(directory.read(data.data(),std::streamsize(length))),"Complete extension payload");if(name=="TERRAIN_PROFILE")terrainBlock=name+" "+std::to_string(version)+" "+std::to_string(length)+"\n"+data;}
+    for(size_t i=0;i<extensionCount;++i){std::string name;int version=0;size_t length=0;directory>>name>>version>>length;check(directory.get()=='\n',"Extension terminator");std::string data(length,'\0');check(bool(directory.read(data.data(),std::streamsize(length))),"Complete extension payload");const auto block=name+" "+std::to_string(version)+" "+std::to_string(length)+"\n"+data;blocks.push_back({name,block});if(name=="TERRAIN_PROFILE")terrainBlock=block;}
+    // Preserve every unrelated extension, including physical trim metadata.
+    // A station-only mutation must reach structure validation intact.
+    auto withStation=[&](const std::string& station){
+        std::string changed=payload.substr(0,ext)+"EXTENSIONS "+std::to_string(blocks.size()-1+(!station.empty()))+"\n";
+        for(const auto& block:blocks)if(block.first!="STATION")changed+=block.second;
+        if(!station.empty())changed+="STATION 1 "+std::to_string(station.size())+"\n"+station;
+        return changed;
+    };
     check(!terrainBlock.empty(),"Exact saved terrain profile retained in structure fixtures");
     rejected(payload.substr(0,ext)+"EXTENSIONS 0\n","Missing required terrain profile");
-    rejected(payload.substr(0,ext)+"EXTENSIONS 1\n"+terrainBlock);
-    rejected(payload.substr(0,ext),"Missing COASTER5 extension directory");
+    rejected(withStation(""));
+    rejected(payload.substr(0,ext),"Missing COASTER6 extension directory");
     std::vector<std::string> rows;std::istringstream in(payload);std::string line;while(std::getline(in,line))rows.push_back(line);
     const size_t first=5+d.track.knots.size()+d.operations.size(),count=d.supports.front().members.size();
     rows[first]=rows[first].substr(0,rows[first].find_last_of(' '))+" 0";rows.erase(rows.begin()+first+1,rows.begin()+first+1+count);std::string missing;for(const auto& row:rows)missing+=row+'\n';rejected(missing);
@@ -52,10 +55,8 @@ int main(){try{
     bad=d;const auto q=bad.track.sample(5);bad.station.boxes.push_back({q.position-q.up*.66,q.tangent,q.right,q.up,{1.,1.5,.03},StationRole::Post});
     check(validateStationDefinition(bad.station).valid(),"Adverse spine crossbar is connected canonical station geometry");
     check(code(validateDesignStructures(bad),"STATION_HARDWARE_CLEARANCE"),"Direct station/spine obstruction rejected");
-    bad.generationVersion="0.8.0-immelmann.2";check(code(validateDesignStructures(bad),"STATION_HARDWARE_CLEARANCE"),"Original 0.8.0 provenance cannot bypass station/spine clearance");bad.generationVersion=d.generationVersion;
-    bad.generationVersion="0.8.1-linear.1";check(code(validateDesignStructures(bad),"STATION_HARDWARE_CLEARANCE"),"Original 0.8.1 provenance cannot bypass station/spine clearance");bad.generationVersion=d.generationVersion;
     check(!saveDesign(bad,good.string(),error),"Station/spine overlap cannot overwrite accepted save");check(bytes(good)==saved,"Rejected crossbar save preserves exact bytes");
-    const std::string adverse=stationPayload(bad.station);write(malformed,payload.substr(0,ext)+"EXTENSIONS 2\n"+terrainBlock+"STATION 1 "+std::to_string(adverse.size())+"\n"+adverse);
+    const std::string adverse=stationPayload(bad.station);write(malformed,withStation(adverse));
     Design retained=d;check(!loadDesign(malformed.string(),retained,error),"Checksummed station/spine overlap cannot load");check(error.find("STATION_HARDWARE_CLEARANCE")!=std::string::npos,"Load reports exact station hardware certification gap");check(reportJson(retained)==reportJson(d),"Crossbar load preserves last accepted ride");
     const auto platform=*std::find_if(d.station.boxes.begin(),d.station.boxes.end(),[](const StationBox& b){return b.role==StationRole::Platform;});
     Support member;member.members={{{}, {}, .18,.18,SupportMemberKind::Steel,true}};member.members[0].base=platform.center-platform.forward;member.members[0].top=platform.center+platform.forward;member.attachment=member.members[0].top;
@@ -65,5 +66,5 @@ int main(){try{
     member.members[0].base=member.members[0].base+platform.up*20;member.members[0].top=member.members[0].top+platform.up*20;check(!supportStationCollision(member,d.station),"Distant canonical member stays clear");
     member.members.clear();member.base=platform.center-platform.forward;member.top=platform.center+platform.forward;check(supportStationCollision(member,d.station),"Legacy physical member uses same mutual clearance check");
     bool cancelled=false;try{supportStationCollision(member,d.station,[]{return true;});}catch(const std::exception& e){cancelled=std::string(e.what())=="CANCELLED";}check(cancelled,"Mutual clearance cancellation");check(code(validateDesignStructures(d,[]{return true;}),"CANCELLED"),"Design structure cancellation");
-    std::cout<<"PASS "<<checks<<" combined station/member completeness, mutual clearance, schema5 stripping and exact replay checks\n";return 0;
+    std::cout<<"PASS "<<checks<<" combined station/member completeness, mutual clearance, schema6 stripping and exact replay checks\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

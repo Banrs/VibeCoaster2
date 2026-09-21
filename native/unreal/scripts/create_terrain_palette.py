@@ -10,7 +10,7 @@ from pathlib import Path
 import traceback
 import unreal
 
-NAME = "M_Ground_Relief"
+NAME = "M_Ground_Highlands"
 ASSET = "/Game/Materials/" + NAME
 # PixelNormalWS uses the renderer's canonical terrain normals. Core Y reflection
 # leaves world Z unchanged. abs preserves the existing two-sided soil convention.
@@ -18,7 +18,7 @@ ASSET = "/Game/Materials/" + NAME
 CODE = r"""
 float upright = saturate(abs(SurfaceNormal.z));
 float rock = 1.0 - smoothstep(0.422618262, 0.939692621, upright);
-return lerp(float3(0.120, 0.105, 0.085), float3(0.073, 0.081, 0.092), rock);
+return lerp(float3(0.055, 0.105, 0.035), float3(0.073, 0.081, 0.092), rock);
 """
 SIGNATURE = hashlib.sha256(CODE.encode("utf-8")).hexdigest()
 SCALARS = {"MP_ROUGHNESS": 0.95, "MP_METALLIC": 0.0, "MP_SPECULAR": 0.20}
@@ -68,13 +68,13 @@ def validate(material):
     return {"expressionCount": len(nodes), "codeSha256": SIGNATURE,
             "normalInput": "PixelNormalWS", "scalars": actual_scalars,
             "blendMode": "BLEND_OPAQUE", "shadingModel": "MSM_DEFAULT_LIT", "twoSided": True,
-            "shelfLinearRGB": [0.120, 0.105, 0.085], "rockLinearRGB": [0.073, 0.081, 0.092],
+            "grassLinearRGB": [0.055, 0.105, 0.035], "rockLinearRGB": [0.073, 0.081, 0.092],
             "slopeTransitionDegrees": [20, 65], "absentProperties": list(absent)}
 
 
 def main():
     saved = Path(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_saved_dir())).resolve()
-    directory = saved / "TerrainPalette" / (datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f") + "-v073")
+    directory = saved / "TerrainPalette" / (datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f") + "-highlands")
     directory.mkdir(parents=True, exist_ok=False)
     receipt = {"schema": "vibecoaster-terrain-palette-1", "asset": ASSET,
                "status": "started", "runtimePromoted": False, "visualReview": "pending"}
@@ -97,7 +97,7 @@ def main():
             material.set_editor_property("two_sided", True)
             base = edit.create_material_expression(material, unreal.MaterialExpressionCustom, -200, 0)
             base.set_editor_property("code", CODE)
-            base.set_editor_property("description", "Plain shelf-to-rock slope palette; no terrain displacement")
+            base.set_editor_property("description", "Green highland-to-rock slope palette; no terrain displacement")
             base.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
             item = unreal.CustomInput()
             item.set_editor_property("input_name", "SurfaceNormal")

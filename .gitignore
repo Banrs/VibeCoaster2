@@ -1,7 +1,22 @@
-.codex/
-.swarm/
 build/
 build-cmake/
 __pycache__/
 *.pyc
-/RFDB Data/
+native/unreal/Binaries/
+native/unreal/Intermediate/
+native/unreal/Saved/
+native/unreal/Packaged/
+native/unreal/DerivedDataCache/
+native/unreal/Content/Maps/
+native/unreal/Content/Materials/
+native/unreal/Content/Collections/
+native/unreal/Content/Developers/
+native/unreal/Content/VT/
+.vs/
+native/build-before-move/
+/dist/
+/UserData*/
+/native/archive/
+# Local coordination state; never package or commit it.
+/.swarm/
+/.codex/

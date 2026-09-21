@@ -1,9 +1,0 @@
-Binaries/
-DerivedDataCache/
-Intermediate/
-Saved/
-Packaged/
-.vs/
-*.sln
-Content/Maps/*.umap
-Content/Materials/*.uasset

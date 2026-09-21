@@ -43,14 +43,13 @@ def make_material(name, colour, metallic, roughness):
 
 def main():
     make_material("M_Rail", (0.52, 0.055, 0.02), 0.45, 0.32)
-    make_material("M_Ground", (0.04, 0.07, 0.028), 0.0, 0.95)
     make_material("M_Structure", (0.13, 0.19, 0.23), 0.6, 0.48)
     make_material("M_Footing", (0.42, 0.40, 0.36), 0.0, 0.95)
+    make_material("M_LSM", (0.48, 0.19, 0.055), 0.85, 0.32)
+    make_material("M_Brake", (0.44, 0.50, 0.57), 0.8, 0.28)
     make_material("M_Train", (0.6, 0.08, 0.03), 0.4, 0.35)
-    # Plain lit soil: no texture, noise graph, or terrain displacement.
-    make_material("M_Ground_Plain", (0.12, 0.105, 0.085), 0.0, 0.95)
     # Separate texture-free relief asset; the script validates existing graphs.
-    runpy.run_path(str(Path(__file__).with_name("create_terrain_palette_v073.py")), run_name="__main__")
+    runpy.run_path(str(Path(__file__).with_name("create_terrain_palette.py")), run_name="__main__")
     subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     if not unreal.EditorAssetLibrary.does_asset_exist("/Game/Maps/Ride"):
         if not subsystem.new_level("/Game/Maps/Ride"):

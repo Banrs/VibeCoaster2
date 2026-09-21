@@ -1,7 +1,9 @@
 #include "coaster/coaster.hpp"
+#include "coaster/clearance.hpp"
 #include "coaster/track_hardware.hpp"
 #include <iomanip>
 #include <locale>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <deque>
@@ -47,7 +49,7 @@ ValidationReport stationTrackDomain(const Track& track,const Terrain& terrain,co
             for(size_t k=0;k<a.c.size();++k)if(!finite(a.c[k])||norm(a.c[k]-b.c[k])!=0)throw std::runtime_error("Stale canonical span coefficients");
             for(size_t k=0;k<a.referenceUp.size();++k)if(!finite(a.referenceUp[k])||norm(a.referenceUp[k]-b.referenceUp[k])!=0||!std::isfinite(a.bank[k])||a.bank[k]!=b.bank[k])throw std::runtime_error("Stale canonical frame coefficients");
             double angle=std::atan2(norm(cross(unit(track.knots[i].up),unit(track.knots[i+1].up))),std::clamp(dot(unit(track.knots[i].up),unit(track.knots[i+1].up)),-1.,1.));
-            if(std::abs(track.knots[i+1].bank-track.knots[i].bank)/a.length>.12||angle/a.length>.12||angle>.2)throw std::runtime_error("Unsupported canonical station frame rate");
+            if(std::abs(track.knots[i+1].bank-track.knots[i].bank)/a.length>.12||angle/a.length>.12||angle>.2){std::ostringstream m;m<<"Unsupported canonical station frame rate at "<<a.start<<" m: span="<<a.length<<", upAngle="<<angle<<", bankChange="<<track.knots[i+1].bank-track.knots[i].bank;throw std::runtime_error(m.str());}
         }
     }catch(const std::exception& e){out.fail("STATION_CONFIG",e.what());}
     return out;
@@ -144,7 +146,7 @@ StationGeometry buildStation(const Track& track,const Terrain& terrain,const Tra
     }
     return station;
 }
-ValidationReport validateStation(const Track& track,const Terrain& terrain,const TrainConfig& train,const StationGeometry& station,Cancel cancel) {
+static ValidationReport validateStationImpl(const Track& track,const Terrain& terrain,const TrainConfig& train,const StationGeometry& station,const ClearanceSweep* prepared,Cancel cancel) {
     auto out=validateStationDefinition(station,cancel); if(!out.valid()||!station.enabled) return out;
     out=stationTrackDomain(track,terrain,train,cancel);if(!out.valid())return out;
     auto stationStart=track.sample(0);
@@ -194,13 +196,16 @@ ValidationReport validateStation(const Track& track,const Terrain& terrain,const
     // including seatHeight <=3 m plus .6 m headroom. Midpoint displacement
     // is <=.02+.04*4.2=.188 m < the .20 m pad. The new quintic frame uses its
     // actual polynomial bounds; no sampled-rate or old nlerp assumption applies.
-    const double riderBottom=.4,riderTop=std::max(2.4,train.seatHeight+.6);
+    const double riderBottom=.4,riderTop=patronTopHeight(train);
     try {
-        const auto sweep=buildClearanceSweep(track,train,cancel);size_t scan=0;
+        std::optional<ClearanceSweep> ownedSweep;
+        const ClearanceSweep* sweep=prepared;
+        if(!sweep){ownedSweep.emplace(buildClearanceSweep(track,train,cancel));sweep=&*ownedSweep;}
+        size_t scan=0;
         std::vector<double> obstacleRadii;obstacleRadii.reserve(station.boxes.size());
         for(const auto& box:station.boxes)obstacleRadii.push_back(norm(box.half)+4.6);
         std::vector<size_t> nearby;nearby.reserve(station.boxes.size());
-        for(const auto& frame:sweep.frames()){
+        for(const auto& frame:sweep->frames()){
             if((scan++&127)==0&&cancel&&cancel()){out.fail("CANCELLED","Station validation cancelled");return out;}
             const auto& q=frame.sample;const double s=frame.distance;
             nearby.clear();
@@ -210,9 +215,9 @@ ValidationReport validateStation(const Track& track,const Terrain& terrain,const
             std::array<StationBox,3> trainBoxes{{
                 {q.position,q.tangent,q.right,q.up,{1.4,.95,.3},StationRole::Post},
                 {q.position+q.up*.35,q.tangent,q.right,q.up,{1.275,.85,.225},StationRole::Post},
-                {q.position+q.up*((riderBottom+riderTop)*.5),q.tangent,q.right,q.up,{1.3,1.5,(riderTop-riderBottom)*.5},StationRole::Post}
+                {q.position+q.up*((riderBottom+riderTop)*.5),q.tangent,q.right,q.up,{trainHalfLength,patronHalfWidth,(riderTop-riderBottom)*.5},StationRole::Post}
             }};
-            for(auto& b:trainBoxes)b=expanded(b,sweep.padding());
+            for(auto& b:trainBoxes)b=expanded(b,sweep->padding());
             // Rail, tie and spine corners all lie <.9 m from the canonical origin.
             // True cell midpoint motion <=.02*(1+2*.9)=.056 m; .06 encloses it.
             std::array<StationBox,6> hardware{{
@@ -238,6 +243,12 @@ ValidationReport validateStation(const Track& track,const Terrain& terrain,const
         }
     }catch(const std::exception& e){const std::string message=e.what();out.fail(message=="CANCELLED"?"CANCELLED":"STATION_CONFIG",message);}
     return out;
+}
+ValidationReport validateStation(const Track& track,const Terrain& terrain,const TrainConfig& train,const StationGeometry& station,Cancel cancel) {
+    return validateStationImpl(track,terrain,train,station,nullptr,cancel);
+}
+ValidationReport validateStation(const Track& track,const Terrain& terrain,const TrainConfig& train,const StationGeometry& station,const ClearanceSweep& sweep,Cancel cancel) {
+    return validateStationImpl(track,terrain,train,station,&sweep,cancel);
 }
 std::string stationPayload(const StationGeometry& station,Cancel cancel) {
     auto checked=validateStationDefinition(station,cancel);if(!checked.valid()) throw std::runtime_error(checked.errors.front().message);

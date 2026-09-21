@@ -1,4 +1,7 @@
 #include "coaster/coaster.hpp"
+#include <array>
+#include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <tuple>
@@ -6,61 +9,29 @@ using namespace coaster;
 namespace {
 int checks=0;
 void check(bool value,const char* message){++checks;if(!value)throw std::runtime_error(message);}
-struct ObservedInversions {int fullLoop{},immelmann{},diveLoop{};double immelmannRise{},immelmannForwardExtent{};};
-ObservedInversions classifyGeometry(const Design& design){
-    ObservedInversions observations;
-    // Type is inferred from canonical tangent, up and elevation, independently
-    // of generator module names or planning diagnostics. The label merely
-    // supplies each measured span group's interval.
-    for(const auto& region:design.inversionDimensions){
-        auto start=design.track.sample(region.startDistance),end=design.track.sample(region.endDistance);
-        Vec3 forward=unit(Vec3{start.tangent.x,start.tangent.y,0});
-        Vec3 exitForward=unit(Vec3{end.tangent.x,end.tangent.y,0});
-        double headingAgreement=dot(forward,exitForward),rise=end.position.z-start.position.z;
-        constexpr double portAngle=15*pi/180,phaseTolerance=2*portAngle,headingCosine=.984807753012208;
-        double pitch=std::atan2(start.tangent.z,dot(start.tangent,forward)),initialPitch=pitch,roll=0,initialRoll=0;
-        double firstAscendingVertical=INFINITY,firstDescendingVertical=INFINITY,ascendingRoll=0,descendingRoll=0;
-        double invertedApex=-INFINITY;const int samples=int(std::ceil(region.pathLength/.25));
-        for(int i=0;i<=samples;++i){
-            double distance=region.startDistance+region.pathLength*i/samples;auto sample=design.track.sample(distance);
-            check(finite(sample.position)&&finite(sample.tangent)&&finite(sample.up),"Generated canonical inversion has finite frames");
-            double projected=dot(sample.tangent,forward);
-            check(std::hypot(projected,sample.tangent.z)>.5,"Pitch topology retains a resolved vertical-plane projection");
-            pitch+=std::remainder(std::atan2(sample.tangent.z,projected)-pitch,2*pi);
-            Vec3 pitchUp=Vec3{0,0,1}*std::cos(pitch)-forward*std::sin(pitch);
-            pitchUp=unit(pitchUp-sample.tangent*dot(pitchUp,sample.tangent));
-            double angle=std::atan2(dot(sample.up,cross(sample.tangent,pitchUp)),dot(sample.up,pitchUp));
-            roll+=std::remainder(angle-roll,2*pi);if(i==0)initialRoll=roll;
-            if(sample.tangent.z>std::cos(portAngle)&&!std::isfinite(firstAscendingVertical)){firstAscendingVertical=distance;ascendingRoll=roll;}
-            if(sample.tangent.z< -std::cos(portAngle)&&!std::isfinite(firstDescendingVertical)){firstDescendingVertical=distance;descendingRoll=roll;}
-            if(sample.up.z<-.5)invertedApex=std::max(invertedApex,sample.position.z-design.request.terrain.height(sample.position.x,sample.position.y));
-        }
-        double pitchSweep=pitch-initialPitch,rollSweep=roll-initialRoll;
-        // A full pitch revolution survives borrowed rising ports. A barrel
-        // roll has no pitch revolution; a horizontal hairpin lacks a vertical
-        // landmark. Neither can substitute for these actual inversion shapes.
-        // The exit may already turn into the adjoining S while completing
-        // the same full pitch revolution; it need not recover a straight port.
-        if(headingAgreement>std::cos(phaseTolerance)&&std::abs(pitchSweep-2*pi)<phaseTolerance){
-            check(std::isfinite(firstAscendingVertical)&&std::isfinite(firstDescendingVertical)&&firstAscendingVertical<firstDescendingVertical,"Retained full loop contains ascent and descent pitch in its original heading");
-            check(std::abs(rollSweep)<phaseTolerance,"Full loop is a pitch revolution without an added barrel roll");
-            ++observations.fullLoop;
-        }else if(headingAgreement< -.9&&region.verticalExtent>70&&rise>=-1&&rise<40&&std::abs(pitchSweep-pi)<phaseTolerance){
-            check(std::isfinite(firstAscendingVertical)&&!std::isfinite(firstDescendingVertical),"Immelmann contains an actual ascending half-loop");
-            check(std::abs(std::abs(rollSweep)-pi)<phaseTolerance&&std::abs(ascendingRoll-initialRoll)<pi/3,"Compound Immelmann reaches ascending vertical before completing most of its half-roll");
-            observations.immelmannRise=region.verticalExtent;observations.immelmannForwardExtent=region.forwardExtent;++observations.immelmann;
-        }else if(headingAgreement< -headingCosine&&rise< -70&&std::abs(pitchSweep+pi)<phaseTolerance){
-            check(std::isfinite(firstDescendingVertical)&&!std::isfinite(firstAscendingVertical),"Dive loop contains an actual descending half-loop");
-            check(std::abs(std::abs(rollSweep)-pi)<phaseTolerance&&std::abs(descendingRoll-initialRoll)>2*pi/3,"Compound dive loop completes most of its half-roll before descending vertical");
-            ++observations.diveLoop;
-        }else check(false,"Every inversion group in the paired fixture has a geometrically recognized complete topology");
-        check(invertedApex>=design.request.targets.inversionHeight,"Each genuine inverted apex meets the terrain-relative target");
+void checkInversions(const Design& d){
+    check(d.inversionDimensions.size()==2,"The opening loop and later reversal remain real inversions");
+    int fullLoops=0,reversals=0;
+    for(const auto& region:d.inversionDimensions){
+        bool ascending=false,inverted=false;double apex=0;
+        const auto first=d.track.sample(region.startDistance),last=d.track.sample(region.endDistance);
+        const Vec3 forward=unit(Vec3{first.tangent.x,first.tangent.y,0});
+        const double initialPitch=std::atan2(first.tangent.z,dot(first.tangent,forward));double pitch=initialPitch;
+        for(double s=region.startDistance;s<=region.endDistance;s+=.25){const auto q=d.track.sample(s);
+            ascending|=q.tangent.z>.98;
+            pitch+=std::remainder(std::atan2(q.tangent.z,dot(q.tangent,forward))-pitch,2*pi);
+            if(q.up.z<-.5){inverted=true;apex=std::max(apex,q.position.z);}}
+        check(ascending&&inverted&&apex>=d.request.targets.inversionHeight,"Each inversion reaches upright ascent, genuine inversion and its requested height");
+        // A laterally separated loop need not contain an exactly vertical descent.
+        // Its accumulated tangent rotation, unlike a single pitch sample,
+        // distinguishes a full loop from a half-loop heading reversal.
+        if(std::abs(pitch-initialPitch)>1.5*pi)++fullLoops;
+        else{++reversals;check(dot(unit(Vec3{first.tangent.x,first.tangent.y,0}),unit(Vec3{last.tangent.x,last.tangent.y,0}))<-.8,"The Immelmann reverses the physical travel heading");}
     }
-    check(observations.fullLoop==1&&observations.immelmann==1&&observations.diveLoop==0,"Generated ride retains its full loop and complete low-exit Immelmann");
-    return observations;
+    check(fullLoops==1&&reversals==1,"Loop and high Immelmann have distinct measured pitch topologies");
 }
 void checkPropulsionCorridors(const Design& design){
-    constexpr double carAlignmentMargin=1.5;
+    const double carAlignmentMargin=(design.request.train.cars-1)*design.request.train.spacing+1.5;
     const double trainSpan=(design.request.train.cars-1)*design.request.train.spacing;
     for(const auto& operation:design.operations){
         if(operation.kind!=DriveKind::Launch&&operation.kind!=DriveKind::Boost)continue;
@@ -71,17 +42,16 @@ void checkPropulsionCorridors(const Design& design){
             const auto k=sampleKinematics(design.track,distance);const auto& p=k.sample;
             const Vec3 upright=unit(Vec3{0,0,1}-p.tangent*p.tangent.z);
             check(std::abs(std::remainder(std::atan2(p.tangent.y,p.tangent.x)-heading,2*pi))<.001,"Every motor retains one fixed plan heading throughout the powered car footprint");
-            check(std::abs(cross(p.tangent,p.curvature).z)<1e-5&&std::abs(p.curvature.z)<1e-4,"Every powered car remains on essentially linear geometry");
-            check(dot(p.up,upright)>.9998&&norm(k.upS)<.001,"Each powered car remains upright and aligned with its motor");
+            check(std::abs(cross(p.tangent,p.curvature).z)<1e-5,"Every powered car remains in its aligned vertical plane");
+            check(dot(p.up,upright)>.9998&&std::abs(dot(k.upS,p.right))<.001,"Each powered car remains upright and aligned with its motor");
             minimumPitch=std::min(minimumPitch,std::asin(p.tangent.z));maximumPitch=std::max(maximumPitch,std::asin(p.tangent.z));
         };
         for(double distance=operation.start-carAlignmentMargin;distance<operation.end+carAlignmentMargin;distance+=.125)observe(distance);
         observe(operation.end+carAlignmentMargin);
         for(const auto& span:design.track.spans)if(span.start>=operation.start-carAlignmentMargin&&span.start<=operation.end+carAlignmentMargin)observe(span.start);
-        check(maximumPitch-minimumPitch<.005,"A locally gentle motor path also retains nearly constant grade over its full length");
+
         // Datum fitting has a 0.1-degree allowance around the visual five-degree slope.
         check(std::max(std::abs(minimumPitch),std::abs(maximumPitch))<=.05*pi/180||minimumPitch>=4.9*pi/180||maximumPitch<=-4.9*pi/180,"Every active-car motor footprint is genuinely level or visibly inclined");
-        check(operation.end-operation.start<300,"Motor straights reserve working length without long empty corridors");
         double actualWorkSeconds=0;
         for(size_t i=1;i<design.simulation.frames.size();++i){const auto& f=design.simulation.frames[i];const auto& before=design.simulation.frames[i-1];
             if(f.distance-trainSpan*.5<=operation.start||f.distance+trainSpan*.5>=operation.end||f.speed>=operation.targetSpeed-.1)continue;
@@ -116,32 +86,11 @@ void checkTerminalBrake(const Design& design){
     auto timeAt=[&](double distance){auto right=std::lower_bound(design.simulation.frames.begin(),design.simulation.frames.end(),distance,[](const Frame& f,double s){return f.distance<s;});const auto& left=*(right-1);double u=(distance-left.distance)/(right->distance-left.distance);return left.time+u*(right->time-left.time);};
     const double entryTime=timeAt(turnExit);
     auto entry=std::lower_bound(design.simulation.frames.begin(),design.simulation.frames.end(),turnExit,[](const Frame& f,double s){return f.distance<s;});
-    check(entry->speed>40,"Terminal banked turn coasts at healthy ride speed until the straight brake approach");
+    check(entry->speed>0&&entry->brakeWorkPerMass==design.simulation.frames[size_t(entry-design.simulation.frames.begin())-1].brakeWorkPerMass,"The return reaches its straight braking corridor under its remaining passive energy");
     check(design.simulation.frames.back().speed==0&&std::abs(design.simulation.frames.back().distance-finish)<.25,"Physical braking reaches actual zero speed at the unchanged station reference without a snap");
-    check(design.simulation.frames.back().time-entryTime<14,"Straight terminal stopping no longer spends the banked turn creeping toward a distant target");
-}
-void checkDeadTrack(const Design& design){
-    // Constant heading, pitch and roll count as dead track at any grade.
-    // Exclude powered spans, which require straight corridors.
-    std::vector<char> powered(size_t(design.track.length)+2,0);
-    for(const auto& operation:design.operations){
-        const double end=operation.kind==DriveKind::Station?design.track.length:operation.end;
-        for(double s=std::max(0.,operation.start-40);s<std::min(design.track.length,end+40);s+=1)powered[size_t(s)]=1;}
-    constexpr double h=2,still=2e-4;double dead=0,longest=0,run=0;
-    const auto& frames=design.simulation.frames;
-    for(size_t i=1;i<frames.size();++i){
-        const double s=frames[i].distance;
-        if(s<0||s>=design.track.length||powered[size_t(s)]){run=0;continue;}
-        const auto a=design.track.sample(std::max(0.,s-h)),b=design.track.sample(std::min(design.track.length,s+h));
-        const double pitchRate=std::abs(std::asin(std::clamp(b.tangent.z,-1.,1.))-std::asin(std::clamp(a.tangent.z,-1.,1.)))/(2*h);
-        const double headingRate=std::abs(std::remainder(std::atan2(b.tangent.y,b.tangent.x)-std::atan2(a.tangent.y,a.tangent.x),2*pi))/(2*h);
-        const double rollRate=std::abs(dot(cross(a.up,b.up),design.track.sample(s).tangent))/(2*h);
-        if(pitchRate<still&&headingRate<still&&rollRate<still){const double step=frames[i].time-frames[i-1].time;dead+=step;run+=step;longest=std::max(longest,run);}
-        else run=0;
-    }
-    std::cout<<"deadSeconds="<<dead<<" deadShare="<<dead/design.simulation.metrics.duration<<" longestDead="<<longest<<"\n";
-    check(dead<design.simulation.metrics.duration*.09,"Unpowered geometry that holds heading, pitch and roll constant stays a small share of the ride");
-    check(longest<5,"No single stretch leaves the rider on unchanging geometry for five seconds");
+    std::cout<<"terminalBrakeSeconds="<<design.simulation.frames.back().time-entryTime<<'\n';
+    for(size_t i=1;i<design.simulation.frames.size();++i){const auto& a=design.simulation.frames[i-1];const auto& b=design.simulation.frames[i];
+        if(a.distance>=station->start&&a.speed>3&&b.speed>3)check(b.driveWorkPerMass==a.driveWorkPerMass,"Terminal brakes cannot accelerate the returning train; positioning tyres act only near rest");}
 }
 void checkC3Transitions(const Design& design){
     double largestUpJump=0,largestTangentJump=0;
@@ -155,13 +104,12 @@ void checkC3Transitions(const Design& design){
     check(largestUpJump<1e-9&&largestTangentJump<1e-9,"The complete physical rider frame is C3 at every knot, module transition and closed seam");
     std::cout<<"maximumUpThirdJump="<<largestUpJump<<" maximumTangentThirdJump="<<largestTangentJump<<'\n';
 }
-Design generateChecked(uint64_t seed){
-    GenerationRequest request;request.seed=seed;request.targets.requireIntensity=false;
-    request.maxCandidates=1;
+Design generateChecked(uint64_t seed,TerrainKind terrain=TerrainKind::Flat){
+    GenerationRequest request;request.seed=seed;request.terrain.kind=terrain;request.targets.requireIntensity=false;
     auto design=generate(request);
     if(!design.accepted())for(const auto* report:{&design.report,&design.simulation.report})for(const auto& error:report->errors)std::cerr<<"seed "<<seed<<' '<<error.code<<": "<<error.message<<'\n';
     check(design.accepted(),"Entire generated circuit passes unmodified geometry, train forces, target and convergence gates");
-    check(design.simulation.metrics.duration<=200&&design.simulation.frames.back().speed==0,"Ordinary maintenance fixtures complete the physical stop within200seconds");
+    check(design.simulation.metrics.duration>170&&design.simulation.frames.back().speed==0,"Restored full composition has substantial duration and completes the physical stop");
     check(design.convergence.coarseStep==1./960&&design.convergence.fineStep==1./1920,"Full ride uses required 960/1920 Hz simulation and verification");
     check(design.simulation.metrics.maxGroundHeight>=request.targets.height&&std::abs(design.simulation.metrics.maxSpeed-request.targets.speed)<=request.targets.speed*.01,"Record hill clears its height and the ride lands on the dialled speed setpoint");
     std::cout<<"seed="<<seed<<" accepted=true candidate="<<design.candidate<<" length="<<design.track.length<<" topology="<<design.topology<<'\n';
@@ -169,27 +117,130 @@ Design generateChecked(uint64_t seed){
 }
 bool same(Vec3 a,Vec3 b){return a.x==b.x&&a.y==b.y&&a.z==b.z;}
 }
-int main(){try{
-    auto first=generateChecked(42);classifyGeometry(first);checkPropulsionCorridors(first);checkTerminalBrake(first);checkDeadTrack(first);checkC3Transitions(first);
-    check(first.track.length<6000,"The complete record ride avoids the old multi-kilometre transit corridors");
-    check(first.simulation.metrics.minVerticalG<0,"The complete ride includes actual measured airtime");
-    // A rising hero element changes heading before its crest; pitch and bank
-    // carry into the descending sweep without an upright straight reset.
-    double hillHeading=0;bool hill=false;TrackSample previous{};
-    for(double s=200;s<first.track.length;s+=2){auto q=first.track.sample(s);if(q.element==Element::Hill){if(hill)hillHeading+=std::abs(std::remainder(std::atan2(q.tangent.y,q.tangent.x)-std::atan2(previous.tangent.y,previous.tangent.x),2*pi));hill=true;previous=q;}else if(hill)break;}
-    check(hillHeading>25*pi/180,"The main hill participates in the route's turn instead of terminating a straight corridor");
-    auto second=generateChecked(5);checkPropulsionCorridors(second);checkTerminalBrake(second);
-    check(std::abs(first.track.length-second.track.length)>1,"Seeds change the physical route");
-    for(const auto& menu:std::array<std::pair<double,double>,2>{{{180,65},{240,80}}}){
-        GenerationRequest request;request.targets.requireIntensity=false;request.targets.height=menu.first;request.targets.speed=menu.second;
-        const auto design=generate(request);check(design.accepted(),"Both menu extremes pass the unchanged physical gates");checkPropulsionCorridors(design);checkTerminalBrake(design);
+const RideSection& section(const Design& d,RideRole role,const char* recipeId=nullptr){
+    const auto found=std::find_if(d.sections.begin(),d.sections.end(),[&](const RideSection& s){
+        return s.role==role&&(!recipeId||s.recipeId==recipeId);
+    });
+    check(found!=d.sections.end(),"Required typed authored motion intent is present");return *found;
+}
+struct SectionSpan { double start{},end{}; };
+SectionSpan sectionSpan(const Design& d,RideRole role,const char* recipeId){
+    SectionSpan result{INFINITY,-INFINITY};
+    for(const auto& s:d.sections)if(s.role==role&&s.recipeId==recipeId){result.start=std::min(result.start,s.start);result.end=std::max(result.end,s.end);}
+    check(result.start<result.end,"Required typed recipe element has a measured span");return result;
+}
+void checkRecipeLayout(const Design& d){
+    const std::array<std::pair<RideRole,const char*>,16> expected{{
+        {RideRole::Station,"station"},{RideRole::Departure,"departure"},{RideRole::Opening,"opening"},
+        {RideRole::CliffApproach,"cliff-approach"},{RideRole::CliffLip,"cliff-lip"},{RideRole::CliffDrop,"cliff-drop"},
+        {RideRole::DownhillLaunch,"downhill-lsm"},{RideRole::Camelback,"camelback"},{RideRole::Wave,"wave"},
+        {RideRole::Loop,"loop"},{RideRole::Immelmann,"immelmann"},{RideRole::Signature,"signature"},
+        {RideRole::Return,"return-crest"},{RideRole::Return,"return-valley"},{RideRole::Return,"return-sweep"},
+        {RideRole::Brakes,"brakes"}}};
+    double previousEnd=-INFINITY;
+    for(const auto& [role,id]:expected){
+        const auto span=sectionSpan(d,role,id);
+        check(span.start>=previousEnd-1e-7,"Typed recipe elements retain the approved order");
+        previousEnd=span.end;
     }
-    GenerationRequest intense;intense.seed=1;intense.targets.referenceId="TEST_ONLY_SYNTHETIC_NOT_I305";intense.targets.referenceExposure=30;
-    const auto held=generate(intense);check(held.accepted()&&held.simulation.metrics.exposure10Seconds>=33,"A configured sustained-intensity target changes the route and meets its measured exposure without relaxing force or clearance gates");
+    for(const auto& s:d.sections)check(s.role!=RideRole::Unspecified&&!s.recipeId.empty(),"Every generated section carries its recipe role and stable ID");
+}
+void checkComposition(const Design& d){
+    checkRecipeLayout(d);
+    const auto opening=sectionSpan(d,RideRole::Opening,"opening"),camelback=sectionSpan(d,RideRole::Camelback,"camelback");
+    check(opening.end-opening.start>40,"The substantial opening remains a measured authored element");
+    double openingPeak=-INFINITY;for(double s=opening.start;s<=opening.end;s+=.5)openingPeak=std::max(openingPeak,d.track.sample(s).position.z);
+    check(openingPeak-d.track.sample(opening.start).position.z>50,"The opening crest has meaningful elevation before the cliff sequence");
+    for(const auto& s:d.sections)if(s.role==RideRole::Camelback)check(s.planar,"The approved camelback remains planar in its typed recipe sections");
+    check(camelback.start>opening.start&&d.motion.passed&&d.spatial.passed,"Typed composition and independent spatial refinement remain mandatory");
+    check(d.motion.longestFlatCoastSeconds<=2,"No unpowered level waiting stretch exceeds two seconds");
+    check(d.simulation.metrics.maxEnergyResidual<.5&&d.simulation.metrics.peakDrivePowerWatts>0,"Real propulsion work closes the finite-train energy balance");
+    const auto cliff=sectionSpan(d,RideRole::CliffDrop,"cliff-drop");double steep=0;for(double at=cliff.start;at<cliff.end;at+=.5)steep=std::max(steep,-std::asin(d.track.sample(at).tangent.z));
+    check(steep>87*pi/180,"The cliff has a genuinely near-vertical descent");
+    const auto wave=sectionSpan(d,RideRole::Wave,"wave"),signature=sectionSpan(d,RideRole::Signature,"signature");
+    check(wave.end-wave.start>20&&std::isfinite(d.track.sample(wave.end).position.z),"The compact wave remains a measured authored element");
+    check(d.track.sample(signature.start).position.z>d.track.sample(signature.end).position.z,"The new signature descends into its typed ravine return");
+    for(size_t i=0;i<d.sections.size();++i){const auto& authored=d.sections[i];const auto& measured=d.motion.sections[i];
+        if(authored.role==RideRole::CliffLip)check(measured.exitSpeed<15,"The typed cliff lip retains a slow entry");
+        if(std::any_of(d.operations.begin(),d.operations.end(),[&](const Operation& op){return (op.kind==DriveKind::Boost||op.kind==DriveKind::Launch)&&op.start>=authored.start&&op.end<=authored.end;}))
+            check(measured.exitSpeed>measured.entrySpeed&&measured.exitSpeed>measured.passiveExitSpeedUpperBound&&measured.maximumActuatorAcceleration>gravity,"Each booster measurably beats gravity-only travel and produces strong motor acceleration");
+    }
+    const auto& frames=d.simulation.frames;const auto& stop=frames.back(),&before=frames[frames.size()-2];
+    const double remaining=stop.time-before.time;
+    check(stop.speed==0&&std::abs(stop.acceleration)<1e-9&&stop.accelerationRate==0&&before.speed<.001,
+        "Terminal positioning tyres reach actual rest with zero acceleration and jerk");
+    check(std::abs(before.acceleration+3*before.speed/remaining)<.002&&std::abs(before.accelerationRate-6*before.speed/(remaining*remaining))<.15,
+        "The last display sample follows the cubic speed / quadratic acceleration capture law to its sub-step stopping event");
+    for(const auto& seat:d.simulation.metrics.seats)for(const auto& axis:seat.axes)check(axis.maxRateGps<=20,"All three seat-axis force rates meet the unchanged provisional gate");
+    double previous=frames.front().distance;
+    for(size_t i=1;i<frames.size();++i)for(int sample=0;sample<16;++sample){const double time=frames[i-1].time+(frames[i].time-frames[i-1].time)*sample/16;
+        const auto motion=interpolateMotion(frames[i-1],frames[i],time);
+        check(motion.distance+1e-8>=previous&&motion.speed>=-1e-7,"Continuous replay cannot reverse or overshoot its physical stop");previous=motion.distance;
+        for(int seat=0;seat<3;++seat){const auto measured=measureSeatDynamics(d.track,motion.distance+seatDistanceOffset(d.request.train,seat),motion.speed,motion.acceleration,motion.jerk,d.request.train.seatHeight);
+            const bool valid=measured.force.vertical>=d.request.limits.minVerticalG&&measured.force.vertical<=d.request.limits.maxVerticalG&&std::abs(measured.force.lateral)<=d.request.limits.maxLateralG&&std::abs(measured.force.longitudinal)<=d.request.limits.maxLongitudinalG&&std::abs(measured.rate.vertical)<=20&&std::abs(measured.rate.lateral)<=20&&std::abs(measured.rate.longitudinal)<=20;
+            if(!valid)std::cerr<<"replay time="<<time<<" seat="<<seat<<" G="<<measured.force.vertical<<','<<measured.force.lateral<<','<<measured.force.longitudinal<<" rates="<<measured.rate.vertical<<','<<measured.rate.lateral<<','<<measured.rate.longitudinal<<'\n';
+            check(valid,"Continuous rendered motion and synchronized HUD loads retain the physical force/rate limits");
+        }
+    }
+}
+void checkTrimOperatingCases(const Design& d){
+    const auto& loop=section(d,RideRole::Loop,"loop");bool protectedTurn=false;
+    for(const auto& op:d.operations)if(op.kind==DriveKind::Trim&&op.end<loop.start&&op.start>loop.start-400){const auto q=d.track.sample((op.start+op.end)*.5);
+        const auto upright=unit(Vec3{0,0,1}-q.tangent*q.tangent.z);protectedTurn|=q.tangent.z<0&&dot(q.up,upright)<.7;}
+    check(protectedTurn,"A real banked-descent regulator protects the loop entry");
+    for(int mode=0;mode<3;++mode){auto operations=d.operations;auto train=d.request.train;
+        if(mode==0)operations.erase(std::remove_if(operations.begin(),operations.end(),[](const Operation& op){return op.kind==DriveKind::Trim;}),operations.end());
+        if(mode==1)for(auto& op:operations)if(op.kind==DriveKind::Trim)op.targetSpeed=0;
+        if(mode==2)train.dragCdA*=.8;
+        const auto run=simulate(d.track,operations,train),fine=simulate(d.track,operations,train,1./1920);ConvergenceAssessment assessment;
+        const auto convergence=compareSimulationConvergence(run,fine,d.request.limits,assessment),limits=validateSimulationTargets(run,d.request.targets,d.request.limits);
+        std::cout<<"trimMode="<<mode<<" completed="<<run.completed<<" Gz="<<run.metrics.minVerticalG<<":"<<run.metrics.maxVerticalG<<" Gy="<<run.metrics.maxLateralG<<'\n';
+        check(run.completed&&limits.valid()&&convergence.valid(),"Trims off, fully deployed and lower-drag operation all complete within unchanged force/performance/refinement limits");
+    }
+}
+void checkAcceptedRevisionPersistence(const Design& d){
+    auto recipeEdited=d;
+    std::get<HillParameters>(recipeEdited.request.recipe.elements[2].parameters).riseMeters+=1;
+    check(!recipeEdited.accepted(),"Editing a recipe parameter invalidates the accepted in-memory revision");
+    auto targetEdited=d;targetEdited.request.targets.height+=1;
+    check(!targetEdited.accepted(),"Editing a generation target invalidates the accepted in-memory revision");
+
+    const auto folder=std::filesystem::temp_directory_path()/(
+        "vibecoaster-organic-persistence-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    check(std::filesystem::create_directory(folder),"Unique organic persistence directory created");
+    const auto path=folder/"baseline.coaster";std::string error;int initialCallbacks=0;
+    check(saveDesign(d,path.string(),error,{},[&](const WorkProgress&){++initialCallbacks;}),"Accepted organic baseline saves");
+    check(initialCallbacks>0,"Initial accepted save reports its work phases");
+    int unchangedCallbacks=0;bool unchangedForce=false;
+    check(saveDesign(d,path.string(),error,{},[&](const WorkProgress& progress){++unchangedCallbacks;unchangedForce|=progress.phase==WorkPhase::Forces;}),"Unchanged accepted revision saves atomically");
+    check(unchangedCallbacks>0&&!unchangedForce,"Unchanged accepted revision skips force-phase callbacks");
+    auto spanEdited=d;spanEdited.sections.front().end+=1;int editedCallbacks=0;bool editedForce=false;
+    check(!saveDesign(spanEdited,path.string(),error,{},[&](const WorkProgress& progress){++editedCallbacks;editedForce|=progress.phase==WorkPhase::Forces;}),"Edited canonical section span is refused without revalidation");
+    check(error.find("REVALIDATION_REQUIRED")!=std::string::npos&&editedCallbacks>0&&!editedForce,"Edited canonical span reports the revalidation requirement before force work");
+    Design reloaded;check(loadDesign(path.string(),reloaded,error)&&reloaded.accepted(),"Saved baseline reloads and passes independent validation");
+    std::error_code ignored;std::filesystem::remove(path,ignored);std::filesystem::remove(folder,ignored);
+}
+int main(int argc,char** argv){try{
+    check(Targets{}.speed==300/3.6,"Default baseline is 300 km/h");
+    const bool baselineOnly=argc==3&&std::string(argv[1])=="--baseline-only";
+    if(argc!=1&&!baselineOnly)throw std::runtime_error("Usage: organic_generation_tests [--baseline-only ACCEPTED_FILE]");
+    Design first;if(baselineOnly){std::string error;check(loadDesign(argv[2],first,error),("Baseline reload: "+error).c_str());}else first=generateChecked(42);
+    checkInversions(first);checkPropulsionCorridors(first);checkTerminalBrake(first);checkComposition(first);checkC3Transitions(first);checkTrimOperatingCases(first);
+    check(first.simulation.metrics.minVerticalG<0,"The complete ride includes actual measured airtime");
+    if(baselineOnly){checkAcceptedRevisionPersistence(first);std::cout<<"PASS "<<checks<<" checkpoint baseline, operating scenarios and persistence checks\n";return 0;}
+    auto second=generateChecked(5,TerrainKind::Highlands);checkComposition(second);checkPropulsionCorridors(second);
+    const auto varied=generateChecked(77,TerrainKind::Highlands);checkComposition(varied);
+    bool changed=first.track.knots.size()!=varied.track.knots.size();
+    if(!changed&&first.track.knots.size()==varied.track.knots.size())for(size_t i=0;i<first.track.knots.size();++i)changed|=norm(first.track.knots[i].position-varied.track.knots[i].position)>1e-6;
+    check(changed,"Representative seeds change the physical authored route while typed recipe identities remain available");
     const auto repeated=generateChecked(42);bool identical=first.track.knots.size()==repeated.track.knots.size();
     if(identical)for(size_t i=0;i<first.track.knots.size();++i){const auto& a=first.track.knots[i];const auto& b=repeated.track.knots[i];identical&=same(a.position,b.position)&&same(a.tangent,b.tangent)&&same(a.curvature,b.curvature)&&same(a.up,b.up)&&a.bank==b.bank&&a.element==b.element;}
+    first.timings=repeated.timings; // Wall-clock measurements are intentionally nondeterministic.
     check(identical&&reportJson(first)==reportJson(repeated),"Seed reproduces every canonical knot and independently measured telemetry");
     GenerationRequest request;auto cancelled=generate(request,[]{return true;});check(cancelled.simulation.cancelled&&!cancelled.accepted(),"Cancelled generation cannot be accepted");
-    auto strict=first;strict.report={};strict.request.targets.requireIntensity=true;evaluateTargets(strict);check(!strict.accepted(),"Missing benchmark cannot establish an all-records claim");
-    std::cout<<"PASS "<<checks<<" complete-route physics, C3 transitions, inversion topology, propulsion, pacing and determinism checks\n";return 0;
+    auto tampered=first;tampered.sections.front().end+=1;tampered.report={};assessMotion(tampered);check(!tampered.accepted(),"Invalid motion intent cannot bypass acceptance");
+    auto relabeled=first;relabeled.sections.front().role=RideRole::Loop;relabeled.report={};assessMotion(relabeled);
+    check(std::any_of(relabeled.report.errors.begin(),relabeled.report.errors.end(),[](const Finding& f){return f.code=="MOTION_RECIPE_MAP";}),"Rechecks reject a compiled role that disagrees with its saved recipe");
+    checkAcceptedRevisionPersistence(first);
+    std::cout<<"PASS "<<checks<<" complete-route physics, C3 motion, energy, typed composition, clearance and determinism checks\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

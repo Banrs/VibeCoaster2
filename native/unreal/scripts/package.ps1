@@ -3,12 +3,26 @@ param(
     [Parameter(Mandatory = $true)][string]$UnrealRoot,
     [ValidateSet('Development', 'Shipping')][string]$Configuration = 'Development',
     [string]$OutputDirectory,
+    [ValidateRange(1, 1)][int]$MaxParallelActions = 1,
     [switch]$PrepareOnly,
     [switch]$SkipAutomation
 )
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $Project = Join-Path $ProjectRoot 'VibeCoaster.uproject'
+$VersionHeader = Join-Path $ProjectRoot '../core/include/coaster/version.hpp'
+$ReleaseMatch = [regex]::Match((Get-Content -LiteralPath $VersionHeader -Raw), '#define COASTER_GENERATOR_VERSION "([^"]+)"')
+if (-not $ReleaseMatch.Success) { throw 'Canonical release version is missing.' }
+$ReleaseVersion = $ReleaseMatch.Groups[1].Value
+$GameConfig = Join-Path $ProjectRoot 'Config/DefaultGame.ini'
+$ConfigText = Get-Content -LiteralPath $GameConfig -Raw
+$UpdatedConfig = [regex]::Replace($ConfigText, '(?m)^ProjectVersion=[^\r\n]*', ('ProjectVersion=' + $ReleaseVersion))
+if ($UpdatedConfig -ne $ConfigText) { [IO.File]::WriteAllText($GameConfig, $UpdatedConfig, [Text.UTF8Encoding]::new($false)) }
+$RepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $ProjectRoot '../..')).Path
+$SourceCommit = & git -C $RepositoryRoot rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or $SourceCommit -notmatch '^[0-9a-f]{40}$') { throw 'Packaging needs an identified source commit.' }
+$SourceStatus = @(& git -C $RepositoryRoot status --porcelain --untracked-files=all)
+if (-not $PrepareOnly -and $SourceStatus.Count -ne 0) { throw 'Commit the reviewed source before producing a versioned package.' }
 $EngineRoot = (Resolve-Path -LiteralPath $UnrealRoot).Path
 $Build = Join-Path $EngineRoot 'Engine/Build/BatchFiles/Build.bat'
 $UAT = Join-Path $EngineRoot 'Engine/Build/BatchFiles/RunUAT.bat'
@@ -59,7 +73,7 @@ function Invoke-HiddenEditor([string[]]$Arguments, [string]$LogName) {
 
 Write-Host 'Building the actual Unreal editor target...'
 # Bound compiler memory while other applications are open.
-& $Build 'VibeCoasterEditor' 'Win64' 'Development' $Project '-WaitMutex' '-NoHotReloadFromIDE' '-MaxParallelActions=2' "-Log=$RunLogs/UnrealBuildTool.log" 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'EditorBuild.log')
+& $Build 'VibeCoasterEditor' 'Win64' 'Development' $Project '-WaitMutex' '-NoHotReloadFromIDE' "-MaxParallelActions=$MaxParallelActions" "-Log=$RunLogs/UnrealBuildTool.log" 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'EditorBuild.log')
 if ($LASTEXITCODE -ne 0) { throw "Unreal editor build failed ($LASTEXITCODE)." }
 
 Write-Host 'Creating the minimal cooked map and materials through Unreal editor APIs...'
@@ -67,7 +81,7 @@ $ContentScript = Join-Path $ProjectRoot 'scripts/create_content.py'
 # Full editor startup ensures the level subsystem is ready.
 Invoke-HiddenEditor -Arguments @("`"$Project`"", '/Engine/Maps/Entry', "-ExecutePythonScript=`"$ContentScript`"", '-unattended', '-nop4', '-NullRHI', '-nosplash', '-stdout', '-FullStdOutLogOutput') -LogName 'ContentBootstrap'
 if (-not (Test-Path -LiteralPath $Receipt -PathType Leaf)) { throw 'Editor did not produce its content bootstrap receipt. Inspect the bootstrap log.' }
-foreach ($Asset in @('Content/Maps/Ride.umap', 'Content/Materials/M_Rail.uasset', 'Content/Materials/M_Ground.uasset', 'Content/Materials/M_Ground_Plain.uasset', 'Content/Materials/M_Ground_Relief.uasset', 'Content/Materials/M_Structure.uasset', 'Content/Materials/M_Train.uasset', 'Content/Materials/M_Footing.uasset', 'Content/Art/V072/Import1/SM_TrainCar.uasset', 'Content/Art/V072/TrackWeb1/SM_TrackTieWeb.uasset', 'Content/Art/V072/Import1/SM_StationPlatformPanel.uasset', 'Content/Art/V072/Import1/SM_StationPlatformEndPanel.uasset', 'Content/Art/V072/Import1/SM_StationRoofPanel.uasset', 'Content/Art/V072/Import1/SM_StationPost.uasset')) {
+foreach ($Asset in @('Content/Maps/Ride.umap', 'Content/Materials/M_Rail.uasset', 'Content/Materials/M_LSM.uasset', 'Content/Materials/M_Brake.uasset', 'Content/Materials/M_Ground_Highlands.uasset', 'Content/Materials/M_Structure.uasset', 'Content/Materials/M_Train.uasset', 'Content/Materials/M_Footing.uasset', 'Content/Art/V072/Import1/SM_TrainCar.uasset', 'Content/Art/V072/TrackWeb1/SM_TrackTieWeb.uasset', 'Content/Art/V072/Import1/SM_StationPlatformPanel.uasset', 'Content/Art/V072/Import1/SM_StationPlatformEndPanel.uasset', 'Content/Art/V072/Import1/SM_StationRoofPanel.uasset', 'Content/Art/V072/Import1/SM_StationPost.uasset')) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $Asset))) { throw "Generated asset missing: $Asset" }
 }
 if (-not $SkipAutomation) {
@@ -83,9 +97,18 @@ if ($PrepareOnly) { Write-Host "Prepared Unreal project: $Project"; return }
 $RunArchive = Join-Path $OutputDirectory ('run-' + $RunId)
 if (Test-Path -LiteralPath $RunArchive) { throw 'Packaging archive must be fresh.' }
 Write-Host 'Building, cooking, staging, and packaging the native Win64 game...'
-& $UAT 'BuildCookRun' "-project=$Project" '-noP4' '-platform=Win64' "-clientconfig=$Configuration" '-build' '-ubtargs=-MaxParallelActions=2' '-cook' '-map=/Game/Maps/Ride' '-stage' '-pak' '-iostore' '-archive' "-archivedirectory=$RunArchive" '-prereqs' '-utf8output' 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'Package.log')
+& $UAT 'BuildCookRun' "-project=$Project" '-noP4' '-platform=Win64' "-clientconfig=$Configuration" '-build' "-ubtargs=-MaxParallelActions=$MaxParallelActions" '-cook' '-map=/Game/Maps/Ride' '-stage' '-pak' '-iostore' '-archive' "-archivedirectory=$RunArchive" '-prereqs' '-utf8output' 2>&1 | Tee-Object -FilePath (Join-Path $RunLogs 'Package.log')
 if ($LASTEXITCODE -ne 0) { throw "Unreal packaging failed ($LASTEXITCODE)." }
 $Executables = Get-ChildItem -LiteralPath $RunArchive -Filter 'VibeCoaster.exe' -File -Recurse
 if (-not $Executables) { throw 'BuildCookRun returned success but no packaged VibeCoaster.exe was found.' }
 $Executables | ForEach-Object { Write-Host "Packaged executable: $($_.FullName)" }
+$Manifest = [ordered]@{
+    SchemaVersion = 1; Release = $ReleaseVersion; Commit = $SourceCommit; Configuration = $Configuration
+    Engine = $Version; CompilerWorkers = $MaxParallelActions; CreatedUtc = [DateTime]::UtcNow.ToString('o')
+    BuildEvidence = $RunLogs
+    Executables = @($Executables | ForEach-Object {
+        [ordered]@{ Path = $_.FullName; Bytes = $_.Length; Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+    })
+}
+$Manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $RunArchive 'package-manifest.json') -Encoding utf8
 Write-Host 'Packaging does not verify rendering. Check the packaged game on the target GPU.'

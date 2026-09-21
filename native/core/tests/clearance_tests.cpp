@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "coaster/clearance.hpp"
 #include "coaster/track_hardware.hpp"
 #include <iostream>
 #include <stdexcept>
@@ -19,10 +20,10 @@ static void coverage(const Track& t,const ClearanceSweep& sweep,size_t stride=1)
             check(norm(q.position-m.position)<=f.arcLengthBound*.5+1e-9,"Exact position obeys parameter-interval arc bound");
             double theta=std::acos(std::clamp((dot(q.tangent,m.tangent)+dot(q.right,m.right)+dot(q.up,m.up)-1)*.5,-1.,1.));
             check(theta<=f.angularVariationBound*.5+1e-7,"Actual orthonormal frame obeys angular variation bound");
-            for(double x:{-1.275,1.275})for(double y:{-1.5,1.5})for(double z:{-.8,3.6}){
+            for(double x:{-1.275,1.275})for(double y:{-patronHalfWidth,patronHalfWidth})for(double z:{trainEnvelopeBottom,sweep.trainTop()}){
                 auto a=q.position+q.tangent*x+q.right*y+q.up*z,b=m.position+m.tangent*x+m.right*y+m.up*z;
                 check(norm(a-b)<=f.arcLengthBound*.5+norm(Vec3{x,y,z})*f.angularVariationBound*.5+1e-8,"All body corners obey the shared continuous displacement bound");
-                check(norm(a-b)<sweep.padding(),"Complete supported body remains inside the unchanged .20m pad");
+                check(norm(a-b)<sweep.padding(),"Complete supported body remains inside the computed swept-envelope pad");
             }
             for(const auto& web:trackWebsLocal())for(Vec3 v:trackWebCorners(web)){
                 check(norm(v)<.9,"New web corners preserve canonical hardware radius");
@@ -38,16 +39,36 @@ static void coverage(const Track& t,const ClearanceSweep& sweep,size_t stride=1)
     check(!first&&previousSpan+1==t.spans.size()&&end==1,"Coverage finishes at final canonical endpoint");
 }
 int main(){try{
+    // A foundation has a flat top, not a spherical cap. A shared point is an
+    // independent overlap oracle for the separating-direction optimisation.
+    const SupportMember footing{{0,0,-2},{0,0,0},1.3,1.3,SupportMemberKind::Footing,false};
+    StationBox above{{0,0,.4},{1,0,0},{0,1,0},{0,0,1},{.2,.2,.1},StationRole::Post};
+    check(memberSeparatedFromBox(footing,above,.05),"Actual flat cap stays separated where an inflated capsule would collide");
+    above.center.z=0;check(!memberSeparatedFromBox(footing,above,0),"Real contact with the footing cap is retained");
+    for(int i=0;i<400;++i){
+        const Vec3 axis=unit(Vec3{std::sin(i*.71),std::cos(i*.93),.2+std::sin(i*.33)});
+        const Vec3 right=unit(cross(axis,std::abs(axis.z)<.9?Vec3{0,0,1}:Vec3{0,1,0})),up=cross(axis,right);
+        SupportMember member{{2,-3,4},Vec3{2,-3,4}+axis*5,.8,.3,SupportMemberKind::Steel,false};
+        const double t=.2+.6*(.5+.5*std::sin(i));
+        const Vec3 common=member.base+(member.top-member.base)*t+right*((.8+(.3-.8)*t)*.6);
+        const Vec3 boxForward=rotate(axis,right,.41),boxRight=right,boxUp=cross(boxForward,boxRight);
+        StationBox intersecting{common+boxForward*.1,boxForward,boxRight,boxUp,{.2,.3,.4},StationRole::Post};
+        check(!memberSeparatedFromBox(member,intersecting,0),"A point inside both actual solids cannot be certified separated");
+    }
+
     for(const auto& web:trackWebsLocal())for(const auto corner:trackWebCorners(web))
         check(std::abs(corner.x)<=1.275&&std::abs(corner.y)<=1.5&&corner.z>=-spineDepth-spineRadius&&corner.z<=2.4,"Hardware rejection box encloses every canonical web corner before padding");
     std::vector<AuthoredPoint> points;for(int i=0;i<=100;++i){double a=.119*(i-50);points.push_back({{double(i),0,50},a,Element::Return,rotate({0,0,1},{1,0,0},a)});}Track t=compile(points,false);TrainConfig train;
     auto sweep=buildClearanceSweep(t,train);check(sweep.frames().size()>=2500,"Canonical cell coverage prepared");
+    auto verified=buildClearanceSweepVerified(t,train);check(verified.frames().size()==sweep.frames().size()&&verified.frames().back().distance==sweep.frames().back().distance,"Verified sweep reuse preserves canonical coverage");
+    const auto fullClearance=minimumSweptGroundClearance(t,Terrain{},train),reusedClearance=minimumSweptGroundClearance(sweep,Terrain{});
+    check(std::abs(fullClearance-reusedClearance)<1e-12,"Prepared sweep clearance agrees with the guarded wrapper");
     Support member;member.members={{{49.99,-1.49,52.39},{50.01,-1.49,52.39},.01,.01,SupportMemberKind::Steel,false}};
     bool sampled=false;for(double distance:{49.,51.}){auto p=t.sample(distance);auto local=[&](Vec3 a){a=a-p.position;return Vec3{dot(a,p.tangent),dot(a,p.right),dot(a,p.up)};};sampled|=hitBox(local(member.members[0].base),local(member.members[0].top),{-1.23,-1.68,-.18},{1.23,1.68,2.58});}
     check(!sampled,"Historical two-frame diagnostic reproduces missed intermediate corner");check(supportCollision(member,sweep)>=0,"Canonical sweep catches the rolled intermediate member");
     auto far=member;far.members[0].base.y=far.members[0].top.y=100;check(supportCollision(far,sweep)<0,"Spatial broad phase retains true distant misses");
     // Raising the configured POV seat also raises the conservative physical headroom.
-    train.seatHeight=3;auto high=buildClearanceSweep(t,train);check(high.trainTop()==3.6,"Configured headroom included");Support overhead;overhead.members={{{49.99,0,53.55},{50.01,0,53.55},.01,.01,SupportMemberKind::Steel,false}};check(supportCollision(overhead,high)>=0,"High rider headroom cannot be skipped");
+    train.seatHeight=3;auto high=buildClearanceSweep(t,train);check(std::abs(high.trainTop()-4.1714)<1e-12,"Configured headroom included");Support overhead;overhead.members={{{49.99,0,53.55},{50.01,0,53.55},.01,.01,SupportMemberKind::Steel,false}};check(supportCollision(overhead,high)>=0,"High rider headroom cannot be skipped");
     // Tiny-angle false zero caused by non-unit endpoint dot products.
     Track bad;bad.closed=false;bad.knots.resize(4);for(int i=0;i<4;++i)bad.knots[i]={{i*.0001,0,50},{1,0,0},{},rotate({0,0,1.000005},{1,0,0},i?.004:0),0,Element::Return};bad.rebuild();
     check(dot(bad.knots[0].up,bad.knots[1].up)>1,"Unnormalized-dot alias fixture is real");

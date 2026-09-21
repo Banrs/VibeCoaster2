@@ -14,12 +14,12 @@ SimulationResult result(){
     r.frames.push_back({0,0,0,{}});r.frames.push_back({120,5000,0,{}});return r;
 }
 }
-int main(){try{
-    Limits limits;Targets targets;targets.requireIntensity=false;
+int main(int argc,char** argv){try{
+    Limits limits;limits.maxLateralRateGps=NAN;limits.maxLongitudinalRateGps=NAN;Targets targets;targets.requireIntensity=false;
     auto a=result(),b=a;ConvergenceAssessment assessment;
     auto equal=compareSimulationConvergence(a,b,limits,assessment);
     require(equal.valid()&&assessment.performed&&assessment.passed,"Identical successful simulations do not converge");
-    require(assessment.metrics.size()==76,"Expected global and every-seat assessed fields are missing");
+    require(assessment.metrics.size()==93,"Expected global and every-seat assessed fields are missing");
     require(assessment.maxSpeedRelativeError==0&&assessment.maxForceRelativeError==0,"Equal metrics have nonzero error");
     b.metrics.seats[2].axes[0].maxG=4.2;
     require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Stable global peak masks changed rear peak");
@@ -35,7 +35,7 @@ int main(){try{
     b=a;b.metrics.seats[2].axes[2].maxRateGps=1e9;
     require(compareSimulationConvergence(a,b,limits,assessment).valid(),"Unassessed longitudinal rate silently gated");
     limits.maxLongitudinalRateGps=10;
-    require(!compareSimulationConvergence(a,b,limits,assessment).valid()&&assessment.metrics.size()==79,"Configured longitudinal rate not checked at every seat");
+    require(!compareSimulationConvergence(a,b,limits,assessment).valid()&&assessment.metrics.size()==96,"Configured longitudinal rate not checked at every seat");
     require(has(validateSimulationTargets(b,targets,limits),"LONGITUDINAL_FORCE_RATE"),"Configured fine rate gate omitted");
     limits={};b=a;b.metrics.seats[0].axes[2].mean10sMax=NAN;
     require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Missing required statistic accepted");
@@ -47,13 +47,24 @@ int main(){try{
     require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Fine numerical error accepted");
     b=a;b.metrics.maxLateralG=1.51;a.metrics.maxLateralG=1.49;
     require(compareSimulationConvergence(a,b,limits,assessment).valid(),"Small lateral change should converge independently of envelope");
-    require(has(validateSimulationTargets(b,targets,limits),"LATERAL_FORCE"),"Converged fine force breach accepted");
+    targets.speed=80;
+    auto slight=validateSimulationTargets(b,targets,limits);
+    require(!has(slight,"LATERAL_FORCE")&&!slight.warnings.empty(),"Sub-one-percent force exceedance must be reported and permitted");
+    b.metrics.maxLateralG=limits.maxLateralG*1.01;
+    require(has(validateSimulationTargets(b,targets,limits),"LATERAL_FORCE"),"Exactly one-percent force exceedance must fail");
+    b=a;b.metrics.minVerticalG=limits.minVerticalG*1.005;
+    require(!has(validateSimulationTargets(b,targets,limits),"VERTICAL_FORCE"),"Negative magnitude uses the same sub-one-percent allowance");
+    b.metrics.minVerticalG=limits.minVerticalG*1.01;
+    require(has(validateSimulationTargets(b,targets,limits),"VERTICAL_FORCE"),"Negative magnitude at exactly one percent must fail");
+    b=a;b.metrics.maxJerkGps=20.001;
+    require(has(validateSimulationTargets(b,targets,limits),"FORCE_TRANSITION"),"Force-peak allowance cannot relax the strict component-rate limit");
     a=result();b=a;b.metrics.launchTo180=1.401;
-    require(compareSimulationConvergence(a,b,limits,assessment).valid(),"Launch time is a target rather than a substituted force metric");
+    require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Launch event time must also converge independently of force extrema");
+    require(assessment.maxSpeedRelativeError==0&&assessment.maxForceRelativeError==0,"Time errors cannot be mislabeled as speed or force errors");
     require(has(validateSimulationTargets(b,targets,limits),"LAUNCH_TARGET"),"Fine launch target omitted");
     b=a;targets.requireIntensity=true;
     require(has(validateSimulationTargets(b,targets,limits),"REFERENCE_UNAVAILABLE"),"Missing real reference silently bypassed");
-    targets.referenceId="explicit-test-reference";targets.referenceExposure=37;
+    targets.referenceId="explicit-test-reference";targets.referenceExposure=41;
     require(has(validateSimulationTargets(b,targets,limits),"INTENSITY_TARGET"),"Fine intensity threshold omitted");
     targets.requireIntensity=false;b.metrics.maxVerticalG=NAN;
     require(has(validateSimulationTargets(b,targets,limits),"NONFINITE_METRIC"),"NaN comparison bypasses force validation");
@@ -66,13 +77,15 @@ int main(){try{
     verifyConvergence(design); // Empty canonical track cannot complete a finer replay.
     require(!design.accepted()&&!design.convergence.passed,"Invalid finer replay becomes accepted");
     require(design.simulation.frames.size()==2&&design.simulation.frames.back().distance==5000,"Failed verification replaces coarse presentation trace");
+    if(argc>1&&std::string(argv[1])=="--generation-cancel"){
     GenerationRequest request;request.targets.requireIntensity=false;request.maxCandidates=1;
     std::atomic<bool> replayStarted{false},overlap{false};std::atomic<int> polling{0};
     auto cancelled=generate(request,[&]{
         if(polling.fetch_add(1)!=0)overlap.store(true);
         const bool stop=replayStarted.load();polling.fetch_sub(1);return stop;
-    },[&](int,const std::string& stage){if(stage.find("Replaying final geometry")!=std::string::npos)replayStarted.store(true);});
+    },[&](const WorkProgress& stage){if(stage.phase==WorkPhase::Structures)replayStarted.store(true);});
     require(replayStarted&&!overlap&&polling==0,"Parallel validation serializes user cancellation callbacks and joins its workers");
     require(!cancelled.accepted()&&cancelled.simulation.cancelled,"Cancelling concurrent replays cannot accept a ride");
+    }
     std::cout<<"PASS "<<checks<<" convergence acceptance checks\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<"\n";return 1;}}

@@ -25,6 +25,9 @@ int main(int argc,char**argv){try{
     std::mt19937 random(7654321);std::uniform_real_distribution<double> dist(-100,100);
     for(int k=0;k<100;++k){std::array<double,8> p;for(double& c:p)c=dist(random);auto bounds=polynomialBounds(p);for(int j=0;j<=1000;++j){double u=j/1000.,v=0;for(int i=7;i>=0;--i)v=v*u+p[i];require(v>=bounds.first-1e-9&&v<=bounds.second+1e-9,"Polynomial bounds miss dense sample");}}
     auto t=fixture();auto dimensions=measureInversionDimensions(t);require(dimensions.size()==1,"Contiguous inversion split");auto d=dimensions[0];require(d.verticalMinimum==100&&d.verticalMaximum==101&&d.verticalExtent==1,"Vertical extent conflated with absolute height");require(d.forwardExtent==3&&d.lateralExtent==0&&d.pathLength==3,"Element dimensions incorrect");
+    const std::vector<RideSection> typed{{"loop-0",0,2,0,false,RideRole::Loop,"loop"},{"immelmann-0",2,3,0,false,RideRole::Immelmann,"immelmann"}};
+    const auto separated=measureInversionDimensions(t,typed);require(separated.size()==2&&separated[0].recipeId=="loop"&&separated[1].role==RideRole::Immelmann,"Adjacent inversion recipes remain independently measured without an artificial track gap");
+    require(separated[0].pathLength==2&&separated[1].pathLength==1&&separated[0].verticalMaximum==101,"Typed grouping retains analytic extrema and exact covered spans");
     t.closed=true;t.knots[1].element=Element::Return;dimensions=measureInversionDimensions(t);require(dimensions.size()==1&&dimensions[0].wrapsSeam&&dimensions[0].pathLength==2,"Seam wrapping inversion split");
     t.closed=false;dimensions=measureInversionDimensions(t);require(dimensions.size()==2&&!dimensions[0].wrapsSeam&&!dimensions[1].wrapsSeam,"Open inversion runs joined");
     for(auto& sp:t.spans)for(auto& c:sp.c)c=rotate(c,{0,0,1},.7);dimensions=measureInversionDimensions(t);require(std::abs(dimensions[0].forwardExtent-1)<1e-12&&dimensions[0].lateralExtent<1e-12,"Horizontal rotation changes dimensions");

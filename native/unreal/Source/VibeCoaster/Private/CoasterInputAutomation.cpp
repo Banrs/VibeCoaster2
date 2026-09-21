@@ -13,6 +13,7 @@ bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
     auto* Controller = World->SpawnActor<AVibeCoasterController>();
     if (!TestNotNull(TEXT("Controller without a ride or generation worker"), Controller)) return false;
     Controller->Settings.targets.requireIntensity = false;
+    TestFalse(TEXT("Default user flow leaves optional reference comparison disabled"), Controller->Settings.targets.requireIntensity);
 
     struct FValidSeed { const TCHAR* Text; uint64 Value; };
     for (const FValidSeed Seed : {FValidSeed{TEXT("0"), 0}, {TEXT("42"), 42},
@@ -55,21 +56,30 @@ bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
     Controller->SeedText = TEXT("123");
     Controller->Settings.targets.requireIntensity = true;
     Controller->RequestGeneration();
-    TestEqual(TEXT("Reference guard retains the entered seed"), Controller->Settings.seed, uint64(123));
+    TestEqual(TEXT("Optional-reference guard retains the entered seed"), Controller->Settings.seed, uint64(123));
     TestEqual(TEXT("Missing-reference guard remains explicit"), Controller->InputError,
-        FString(TEXT("ALL RECORDS unavailable: the measured I305/Pantherian force benchmark is missing.\nThis is not a failed seed search. PHYSICS-PROOF can test the other selected targets.")));
+        FString(TEXT("External reference comparison requested, but no verified reference metadata is configured.")));
     TestTrue(TEXT("Input validation never created a ride"), Controller->Ride == nullptr);
-    // Row 3 reads "Top speed", not "Maximum speed": the dial stopped being a floor
-    // the ride could exceed by whatever margin it liked and became a setpoint it
-    // lands on, so calling it a maximum in the menu would now be a lie.
-    const TCHAR* Prefixes[]={TEXT("Seed:"),TEXT("Mode:"),TEXT("Maximum track height"),TEXT("Top speed"),TEXT("Inversion height"),TEXT("Launch 0-180"),TEXT("Candidate search budget")};
-    for (int32 Row=0; Row<7; ++Row)
-        TestTrue(TEXT("Flat-only menu retains the correct row mapping"),Controller->RowText(Row).StartsWith(Prefixes[Row]));
-    Controller->SelectedRow=1;Controller->Settings.targets.requireIntensity=true;Controller->ChangeRow(1);
-    TestFalse(TEXT("Second row changes the mode"),Controller->Settings.targets.requireIntensity);
-    Controller->SelectedRow=6;Controller->Settings.maxCandidates=8;Controller->ChangeRow(1);
-    TestEqual(TEXT("Last row changes the candidate budget"),Controller->Settings.maxCandidates,9);
-    TestTrue(TEXT("Removed terrain row is not present"),Controller->RowText(7).IsEmpty());
+    const TCHAR* Prefixes[]={TEXT("Seed:"),TEXT("Maximum track height"),TEXT("Top speed"),TEXT("Inversion height"),TEXT("Launch 0-180"),TEXT("Candidate search budget"),TEXT("Airtime strength"),TEXT("Signature outward roll"),TEXT("Return composition"),TEXT("Trim brakes"),TEXT("Landscape:")};
+    for (int32 Row=0; Row<AVibeCoasterController::SetupRowCount; ++Row)
+        TestTrue(TEXT("Main menu retains the correct row mapping"),Controller->RowText(Row).StartsWith(Prefixes[Row]));
+    Controller->SelectedRow=1;const double Height=Controller->Settings.targets.height;Controller->ChangeRow(1);
+    TestEqual(TEXT("Height row remains editable"),Controller->Settings.targets.height,Height+5.);
+    Controller->SelectedRow=5;Controller->Settings.maxCandidates=8;Controller->ChangeRow(1);
+    TestEqual(TEXT("Budget row changes the candidate budget"),Controller->Settings.maxCandidates,9);
+    Controller->SelectedRow=6;Controller->ChangeRow(1);
+    TestEqual(TEXT("Airtime customization is exposed"),Controller->Settings.style.airtime,1.05);
+    Controller->SelectedRow=7;Controller->ChangeRow(1);
+    TestEqual(TEXT("Signature customization is exposed"),Controller->Settings.style.signatureRollDegrees,50.);
+    Controller->SelectedRow=8;Controller->ChangeRow(1);
+    TestEqual(TEXT("Return composition cycles from automatic"),Controller->Settings.style.returnStyle,0);
+    Controller->SelectedRow=9;Controller->ChangeRow(1);
+    TestFalse(TEXT("Automatic trim installation can be disabled"),Controller->Settings.style.automaticTrims);
+    Controller->SelectedRow=10;Controller->Settings.terrain.kind=coaster::TerrainKind::Highlands;Controller->ChangeRow(1);
+    TestTrue(TEXT("Landscape can be changed to the flat comparison"),Controller->Settings.terrain.kind==coaster::TerrainKind::Flat);
+    Controller->ChangeRow(-1);
+    TestTrue(TEXT("Landscape selection restores highlands"),Controller->Settings.terrain.kind==coaster::TerrainKind::Highlands);
+    TestTrue(TEXT("No hidden extra setup row"),Controller->RowText(AVibeCoasterController::SetupRowCount).IsEmpty());
     return true;
 }
 #endif

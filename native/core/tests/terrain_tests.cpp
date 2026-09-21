@@ -14,7 +14,7 @@ static Track circle(double height,double bank=0){std::vector<AuthoredPoint> p;co
 int main(){try{
     Terrain flat;TrackSample pose{{0,0,3},{1,0,0},{},{0,0,-1},{0,1,0},Element::Inversion};
     // Scoped geometry counterexample, NOT an old full-validator accepted ride:
-    // its extra1.6m reserve can independently reject it. Four old points are
+    // the historical extra gate could independently reject it. Four old points are
     // above ground while supported seatHeight3 +.6 headroom penetrates terrain.
     double old=1e100;for(double side:{-1.5,1.5})for(double up:{-.8,2.4})old=std::min(old,clear(pose.position+pose.right*side+pose.up*up,flat));
     check(old>0,"Old four sampled cross-section points miss the headroom penetration");
@@ -24,13 +24,13 @@ int main(){try{
     // Longitudinal chassis extent lowers a tilted body below its cross section.
     const double a=pi/4;pose.tangent={std::cos(a),0,-std::sin(a)};pose.up={std::sin(a),0,std::cos(a)};pose.right=cross(pose.tangent,pose.up);pose.position.z=1;
     old=1e100;for(double side:{-1.5,1.5})for(double up:{-.8,2.4})old=std::min(old,clear(pose.position+pose.right*side+pose.up*up,flat));
-    auto front=pose.position+pose.tangent*1.275-pose.up*.8;check(old>0&&front.z<0,"Longitudinal chassis can penetrate beneath clear cross-section points");check(terrain_validation::lowerBound(pose,flat,2.4,0)<=front.z+1e-12,"Longitudinal dimension included");
+    auto front=pose.position+pose.tangent*trainHalfLength+pose.up*trainEnvelopeBottom;check(old>0&&front.z<0,"Longitudinal chassis can penetrate beneath clear cross-section points");check(terrain_validation::lowerBound(pose,flat,2.4,0)<=front.z+1e-12,"Longitudinal dimension included");
     std::mt19937 rng(91827);std::uniform_real_distribution<double> angle(-pi,pi),place(-2000,2000),unitValue(-1,1),fraction(0,1);
     for(int n=0;n<80;++n){
         Vec3 axis=unit(Vec3{unitValue(rng),unitValue(rng),unitValue(rng)});double theta=angle(rng),top=2.4+1.2*fraction(rng);
         pose={{place(rng),place(rng),100},{},{}, {},{},Element::Return};pose.tangent=rotate({1,0,0},axis,theta);pose.up=rotate({0,0,1},axis,theta);pose.right=cross(pose.tangent,pose.up);
         double bound=terrain_validation::lowerBound(pose,flat,top,.2);
-        for(int k=0;k<100;++k){Vec3 p=pose.position+pose.tangent*(unitValue(rng)*1.275)+pose.right*(unitValue(rng)*1.5)+pose.up*(-.8+(top+.8)*fraction(rng));
+        for(int k=0;k<100;++k){Vec3 p=pose.position+pose.tangent*(unitValue(rng)*1.275)+pose.right*(unitValue(rng)*patronHalfWidth)+pose.up*(trainEnvelopeBottom+(top-trainEnvelopeBottom)*fraction(rng));
             Vec3 motion=unit(Vec3{unitValue(rng),unitValue(rng),unitValue(rng)})*(.2*fraction(rng));check(bound<=clear(p+motion,flat)+1e-9,"Full interior body plus Euclidean motion stays above certified lower bound");}
     }
     // Canonical interval endpoints on simultaneous up/bank rotation share the
@@ -46,7 +46,9 @@ int main(){try{
     check(chord_validation::validate(safe,safeSweep,nominal,{}).valid(),"Nominal chord domain certified");
     check(code(chord_validation::validate(safe,safeSweep,int(std::ceil(safe.length/3)),{}),"TRACK_SAMPLING_DOMAIN"),"Uncertified coarse chords fail the explicit domain gate");
     check(code(chord_validation::validate(safe,safeSweep,nominal,[]{return true;}),"CANCELLED"),"Chord certificate cancellation");
-    auto low=circle(3,pi);auto invalid=validateGeometry(low,flat,limits,train,{});check(code(invalid,"TERRAIN_CLEARANCE"),"Original terrain gate remains");check(code(invalid,"TERRAIN_SWEEP_CLEARANCE"),"Complete swept terrain certificate rejects low inverted headroom");
+    auto low=circle(3,pi);auto invalid=validateGeometry(low,flat,limits,train,{});check(code(invalid,"TERRAIN_SWEEP_CLEARANCE"),"Complete swept terrain certificate rejects low inverted headroom");
+    check(validateGeometry(circle(2),flat,limits,TrainConfig{},{}).valid(),"Near-ground upright ride accepted by complete envelope without duplicate height margin");
+    check(code(validateGeometry(circle(.7),flat,limits,TrainConfig{},{}),"TERRAIN_SWEEP_CLEARANCE"),"Near-ground contact remains rejected");
     limits.minClearance=30;check(!validateGeometry(safe,flat,limits,train,{}).valid(),"Configured clearance is never ignored");limits.minClearance=4;
     auto stale=safe;stale.spans[0].c[0].z+=1;check(code(validateGeometry(stale,flat,limits,train,{}),"SWEEP_DOMAIN"),"Empty support list cannot bypass canonical cache verification");
     auto malformed=safe;malformed.knots.clear();check(code(validateGeometry(malformed,flat,limits,train,{}),"GEOMETRY_DOMAIN"),"Malformed cardinality rejected before sampling");

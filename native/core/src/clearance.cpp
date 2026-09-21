@@ -65,22 +65,15 @@ bool intersectsBox(Vec3 a,Vec3 b,Vec3 lo,Vec3 hi){
     return true;
 }
 }
-ClearanceSweep buildClearanceSweep(const Track& source,const TrainConfig& train,Cancel cancel){
+ClearanceSweep buildClearanceSweepVerified(const Track& t,const TrainConfig& train,Cancel cancel){
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
     if(!std::isfinite(train.seatHeight)||train.seatHeight<0||train.seatHeight>3)throw std::runtime_error("Invalid clearance seat height");
-    Track t=source;t.rebuild();
-    if(t.spans.size()!=source.spans.size()||t.length!=source.length)throw std::runtime_error("Stale canonical span cache");
-    for(size_t i=0;i<t.spans.size();++i){
-        if((i&63)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");
-        if(t.spans[i].start!=source.spans[i].start||t.spans[i].length!=source.spans[i].length)throw std::runtime_error("Stale canonical arc cache");
-        for(size_t k=0;k<t.spans[i].c.size();++k){auto a=t.spans[i].c[k],b=source.spans[i].c[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z)throw std::runtime_error("Stale canonical polynomial cache");}
-        for(size_t k=0;k<t.spans[i].referenceUp.size();++k){auto a=t.spans[i].referenceUp[k],b=source.spans[i].referenceUp[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z||t.spans[i].bank[k]!=source.spans[i].bank[k])throw std::runtime_error("Stale canonical frame cache");}
-    }
-    ClearanceSweep out;out.top=std::max(2.4,train.seatHeight+.6);out.length=t.length;
+    ClearanceSweep out;out.top=patronTopHeight(train);out.length=t.length;out.radius=occupiedRadius(train);out.pad=arcCell*.5+angleCell*.5*out.radius+1e-8;
     // Each accepted canonical-u cell has true arc bound <=.04 m and frame
     // angular variation <=.08 rad. From its exact midpoint every body point
-    // moves <=.02+.04*4.2=.188 m; every hardware point <=.02+.04*.9=.056 m.
-    // The existing .20/.06 pads therefore cover the complete interval. This
+    // moves <=.02+.04*occupiedRadius(train); each hardware point moves
+    // <=.02+.04*.9=.056 m. The computed body and .06 hardware pads cover
+    // the complete interval. This
     // uses the actual cached raw frame/bank, with no nlerp rate premise.
     size_t visited=0;
     for(size_t i=0;i<t.spans.size();++i){
@@ -117,6 +110,18 @@ ClearanceSweep buildClearanceSweep(const Track& source,const TrainConfig& train,
     }
     return out;
 }
+ClearanceSweep buildClearanceSweep(const Track& source,const TrainConfig& train,Cancel cancel){
+    if(cancel&&cancel())throw std::runtime_error("CANCELLED");
+    Track rebuilt=source;rebuilt.rebuild();
+    if(rebuilt.spans.size()!=source.spans.size()||rebuilt.length!=source.length)throw std::runtime_error("Stale canonical span cache");
+    for(size_t i=0;i<rebuilt.spans.size();++i){
+        if((i&63)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");
+        if(rebuilt.spans[i].start!=source.spans[i].start||rebuilt.spans[i].length!=source.spans[i].length)throw std::runtime_error("Stale canonical arc cache");
+        for(size_t k=0;k<rebuilt.spans[i].c.size();++k){auto a=rebuilt.spans[i].c[k],b=source.spans[i].c[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z)throw std::runtime_error("Stale canonical polynomial cache");}
+        for(size_t k=0;k<rebuilt.spans[i].referenceUp.size();++k){auto a=rebuilt.spans[i].referenceUp[k],b=source.spans[i].referenceUp[k];if(a.x!=b.x||a.y!=b.y||a.z!=b.z||rebuilt.spans[i].bank[k]!=source.spans[i].bank[k])throw std::runtime_error("Stale canonical frame cache");}
+    }
+    return buildClearanceSweepVerified(source,train,cancel);
+}
 int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel cancel){
     // Legacy solids retain exactly their saved endpoints and historical radius.
     // They receive the same corrected sweep checks; no clearance grandfathering.
@@ -131,7 +136,7 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
         Vec3 a=member.base,b=member.top;double radius=std::max(member.radiusBase,member.radiusTop);
         // Every canonical solid is inside this maximum-radius capsule. Query only
         // occupied spatial cells intersecting its AABB expanded by the full body.
-        double broad=radius+4.2+sweep.padding();
+        double broad=radius+sweep.bodyRadius()+sweep.padding();
         ClearanceSweep::Key lo{int(std::floor((std::min(a.x,b.x)-broad)/cellSize)),int(std::floor((std::min(a.y,b.y)-broad)/cellSize)),int(std::floor((std::min(a.z,b.z)-broad)/cellSize))};
         ClearanceSweep::Key hi{int(std::floor((std::max(a.x,b.x)+broad)/cellSize)),int(std::floor((std::max(a.y,b.y)+broad)/cellSize)),int(std::floor((std::max(a.z,b.z)+broad)/cellSize))};
         auto inspect=[&](const std::vector<size_t>& indices){
@@ -139,12 +144,16 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
                 if((index&63)==0&&cancel&&cancel())return -2;
                 const auto& f=sweep.samples[index];const auto& p=f.sample;
                 auto local=[&](Vec3 v){v=v-p.position;return Vec3{dot(v,p.tangent),dot(v,p.right),dot(v,p.up)};};
+                const double bottom=-spineDepth-spineRadius;
+                const StationBox combined{p.position+p.up*((bottom+sweep.top)*.5),p.tangent,p.right,p.up,{trainHalfLength,patronHalfWidth,(sweep.top-bottom)*.5},StationRole::Post};
+                if(memberSeparatedFromBox(member,combined,sweep.padding()))continue;
                 Vec3 al=local(a),bl=local(b);double margin=radius+sweep.padding();
-                if(intersectsBox(al,bl,{-1.275-margin,-1.5-margin,-margin},{1.275+margin,1.5+margin,sweep.top+margin}))return int(index);
+                const StationBox rider{p.position+p.up*(sweep.top*.5),p.tangent,p.right,p.up,{trainHalfLength,patronHalfWidth,sweep.top*.5},StationRole::Post};
+                if(!memberSeparatedFromBox(member,rider,sweep.padding())&&intersectsBox(al,bl,{-trainHalfLength-margin,-patronHalfWidth-margin,-margin},{trainHalfLength+margin,patronHalfWidth+margin,sweep.top+margin}))return int(index);
                 // This box contains every hardware solid below and uses the
                 // larger train pad. A miss cannot reach any detailed web test.
-                if(!intersectsBox(al,bl,{-1.275-margin,-1.5-margin,-spineDepth-spineRadius-margin},
-                    {1.275+margin,1.5+margin,sweep.top+margin}))continue;
+                if(!intersectsBox(al,bl,{-trainHalfLength-margin,-patronHalfWidth-margin,-spineDepth-spineRadius-margin},
+                    {trainHalfLength+margin,patronHalfWidth+margin,sweep.top+margin}))continue;
                 // Track hardware has corner radius <.9 m, so midpoint motion is
                 // at most .02+.04*.9=.056 m. Keep the larger train pad above.
                 margin=radius+.06;
@@ -152,15 +161,23 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
                 // including an approved spine-contact endpoint. Euclidean capsule
                 // distance avoids falsely filling the diagonal OBB's corners.
                 for(const auto& web:trackWebsLocal())
-                    if(segmentWebDistanceSquared(al,bl,web)<=(margin+1e-9)*(margin+1e-9))return int(index);
+                    if(!memberSeparatedFromBox(member,trackWebWorld(web,p),.06)&&segmentWebDistanceSquared(al,bl,web)<=(margin+1e-9)*(margin+1e-9))return int(index);
                 double separation=std::abs(f.distance-support.trackDistance);separation=std::min(separation,sweep.length-separation);
                 Vec3 spineEnd=b;
                 if(member.spineContact&&member.kind==SupportMemberKind::Steel&&norm(b-support.attachment)<1e-5&&separation<2.5)
                     spineEnd=b+unit(a-b)*std::min(.85,norm(a-b));
-                if(intersectsBox(al,local(spineEnd),{-spineRadius-margin,-spineRadius-margin,-spineDepth-spineRadius-margin},{spineRadius+margin,spineRadius+margin,-spineDepth+spineRadius+margin})||
-                   intersectsBox(al,bl,{-.085-margin,-.735-margin,-.085-margin},{.085+margin,-.565+margin,.085+margin})||
-                   intersectsBox(al,bl,{-.085-margin,.565-margin,-.085-margin},{.085+margin,.735+margin,.085+margin})||
-                   intersectsBox(al,bl,{-.07-margin,-.825-margin,-.27-margin},{.07+margin,.825+margin,-.11+margin}))return int(index);
+                auto hitsHardware=[&](Vec3 end,Vec3 low,Vec3 high){
+                    if(norm(end-a)<1e-12)return false;
+                    SupportMember solid=member;solid.top=end;solid.radiusTop=member.radiusBase+(member.radiusTop-member.radiusBase)*norm(end-a)/norm(b-a);
+                    const Vec3 centre=(low+high)*.5;
+                    const StationBox box{p.position+p.tangent*centre.x+p.right*centre.y+p.up*centre.z,p.tangent,p.right,p.up,(high-low)*.5,StationRole::Post};
+                    if(memberSeparatedFromBox(solid,box,.06))return false;
+                    const Vec3 reserve{margin,margin,margin};return intersectsBox(al,local(end),low-reserve,high+reserve);
+                };
+                if(hitsHardware(spineEnd,{-spineRadius,-spineRadius,-spineDepth-spineRadius},{spineRadius,spineRadius,-spineDepth+spineRadius})||
+                   hitsHardware(b,{-.085,-.735,-.085},{.085,-.565,.085})||
+                   hitsHardware(b,{-.085,.565,-.085},{.085,.735,.085})||
+                   hitsHardware(b,{-.07,-.825,-.27},{.07,.825,-.11}))return int(index);
             }return -1;
         };
         size_t volume=size_t(hi.x-lo.x+1)*size_t(hi.y-lo.y+1)*size_t(hi.z-lo.z+1);

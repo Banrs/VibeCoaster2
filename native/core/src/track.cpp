@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "coaster/clearance.hpp"
 #include "arc_length.hpp"
 #include <stdexcept>
 #include <unordered_map>
@@ -19,30 +20,44 @@ void Track::rebuild(){
     std::vector<double> metric(count-1);
     for(size_t i=0;i<count;++i){tangent[i]=unit(knots[i].tangent);curvature[i]=knots[i].curvature-tangent[i]*dot(tangent[i],knots[i].curvature);}
     for(size_t i=0;i+1<count;++i){double h=norm(knots[i+1].position-knots[i].position);if(!std::isfinite(h)||h<1e-5||h>100)throw std::runtime_error("Invalid track knot or spacing");metric[i]=h*(1+(dot(curvature[i],curvature[i])+dot(curvature[i+1],curvature[i+1]))*h*h/48);}
+    std::vector<Vec3> curvatureFirst(count),curvatureSecond(count);
+    if(authoredGeometry) {
+        for(size_t i=0;i<count;++i) {
+            const auto& k=knots[i];
+            if(!finite(k.third)||!finite(k.fourth)||std::abs(dot(k.tangent,k.third)+dot(k.curvature,k.curvature))>1e-6||std::abs(dot(k.tangent,k.fourth)+3*dot(k.curvature,k.third))>1e-6)
+                throw std::runtime_error("Invalid authored arc-length derivatives");
+            curvatureFirst[i]=k.third;curvatureSecond[i]=k.fourth;
+        }
+    } else {
+        std::vector<double> coordinate(count);for(size_t i=1;i<count;++i)coordinate[i]=coordinate[i-1]+metric[i-1];
+        for(size_t i=0;i<unique;++i){
+            const int n=int(std::min<size_t>(7,unique));int first=int(i)-n/2;if(!closed)first=std::clamp(first,0,int(unique)-n);
+            std::array<size_t,7> index{};std::array<double,7> x{};double scale=0;
+            for(int j=0;j<n;++j){const int at=first+j,wrapped=(at%int(unique)+int(unique))%int(unique),lap=at<0?-1:at>=int(unique)?1:0;index[j]=size_t(wrapped);x[j]=coordinate[wrapped]+lap*coordinate.back()-coordinate[i];scale=std::max(scale,std::abs(x[j]));}
+            double matrix[7][9]{};for(int row=0;row<n;++row){for(int j=0;j<n;++j)matrix[row][j]=std::pow(x[j]/scale,row);matrix[row][n]=row==1?1:0;matrix[row][n+1]=row==2?2:0;}
+            for(int col=0;col<n;++col){int pivot=col;for(int row=col+1;row<n;++row)if(std::abs(matrix[row][col])>std::abs(matrix[pivot][col]))pivot=row;for(int j=col;j<n+2;++j)std::swap(matrix[col][j],matrix[pivot][j]);const double divisor=matrix[col][col];if(std::abs(divisor)<1e-12)throw std::runtime_error("Unresolved curvature derivative stencil");for(int j=col;j<n+2;++j)matrix[col][j]/=divisor;for(int row=0;row<n;++row)if(row!=col){const double factor=matrix[row][col];for(int j=col;j<n+2;++j)matrix[row][j]-=factor*matrix[col][j];}}
+            for(int j=0;j<n;++j){const Vec3 delta=curvature[index[j]]-curvature[i];curvatureFirst[i]=curvatureFirst[i]+delta*(matrix[j][n]/scale);curvatureSecond[i]=curvatureSecond[i]+delta*(matrix[j][n+1]/(scale*scale));}
+        }
+    }
     // Shared geometric third derivative. The tangential component is fixed by
     // d(T dot K)/ds=0. One identical value is used on both sides of every join.
     for(size_t i=0;i<unique;++i){
-        Vec3 change;
-        if(!closed&&i==0)change=(curvature[1]-curvature[0])/metric[0];
-        else if(!closed&&i+1==unique)change=(curvature[i]-curvature[i-1])/metric[i-1];
-        else{size_t lo=i?i-1:unique-1,hi=(i+1)%unique;double dl=metric[lo],dr=metric[i];change=((curvature[i]-curvature[lo])*(dr/dl)+(curvature[hi]-curvature[i])*(dl/dr))/(dl+dr);}
-        jerk[i]=change-tangent[i]*(dot(change,tangent[i])+dot(curvature[i],curvature[i]));
+        const Vec3 change=curvatureFirst[i];
+        jerk[i]=authoredGeometry?change:change-tangent[i]*(dot(change,tangent[i])+dot(curvature[i],curvature[i]));
         if(!finite(jerk[i]))throw std::runtime_error("Invalid derived curvature derivative");
     }
     if(closed)jerk.back()=jerk.front();
-    if(!legacyInterpolation){
+    {
         // A C3 rider frame needs a C3 tangent, hence a C4 centreline. Keep the
         // original position/tangent/curvature/jerk ports and share the next jet.
         for(size_t i=0;i<unique;++i){
-            Vec3 change;
-            if(!closed&&i==0)change=(jerk[1]-jerk[0])/metric[0];
-            else if(!closed&&i+1==unique)change=(jerk[i]-jerk[i-1])/metric[i-1];
-            else{size_t lo=i?i-1:unique-1,hi=(i+1)%unique;double dl=metric[lo],dr=metric[i];change=((jerk[i]-jerk[lo])*(dr/dl)+(jerk[hi]-jerk[i])*(dl/dr))/(dl+dr);}
-            snap[i]=change-tangent[i]*(dot(change,tangent[i])+3*dot(curvature[i],jerk[i]));
+            const Vec3 change=curvatureSecond[i];
+            snap[i]=authoredGeometry?change:change-tangent[i]*(dot(change,tangent[i])+3*dot(curvature[i],jerk[i]));
             if(!finite(snap[i]))throw std::runtime_error("Invalid derived fourth position derivative");
         }
         if(closed)snap.back()=snap.front();
     }
+    for(size_t i=0;i<count;++i){knots[i].third=jerk[i];knots[i].fourth=snap[i];}
     spans.clear();spans.reserve(count-1);length=0;
     for(size_t i=0;i+1<count;++i){
         const double h=metric[i],h2=h*h,h3=h2*h;
@@ -53,7 +68,7 @@ void Track::rebuild(){
         const Vec3 j=jerk[i+1]*h3-sp.c[3]*6;
         sp.c[4]=p*35-v*15+a*2.5-j/6;sp.c[5]=p*(-84)+v*39-a*7+j*.5;
         sp.c[6]=p*70-v*34+a*6.5-j*.5;sp.c[7]=p*(-20)+v*10-a*2+j/6;
-        if(!legacyInterpolation){
+        {
             Vec3 endFourth{};for(int k=4;k<=7;++k)endFourth=endFourth+sp.c[k]*double(k*(k-1)*(k-2)*(k-3));
             const Vec3 left=(snap[i]*(h2*h2)-sp.c[4]*24)/24;
             const Vec3 slope=(snap[i+1]*(h2*h2)-endFourth)/24-left;
@@ -144,32 +159,52 @@ static double segmentDistance(Vec3 p,Vec3 q,Vec3 a,Vec3 b){
 namespace terrain_validation {
 // Internal kernel exposed only to the focused validation tests. q comes from a
 // checked canonical sweep; trainTop is the supported headroom, never a render guess.
-double lowerBound(const TrackSample& q,const Terrain& terrain,double trainTop,double motionPadding){
-    constexpr double halfLength=1.275,halfWidth=1.5,bottom=-.8;
-    const double middle=(bottom+trainTop)*.5,halfHeight=(trainTop-bottom)*.5;
-    const Vec3 centre=q.position+q.up*middle;
-    double footprintRadius=0;
-    for(double x:{-halfLength,halfLength})for(double y:{-halfWidth,halfWidth})for(double z:{-halfHeight,halfHeight}){const Vec3 delta=q.tangent*x+q.right*y+q.up*z;footprintRadius=std::max(footprintRadius,std::hypot(delta.x,delta.y));}
-    const double slope=terrain.localSlopeBound(centre.x,centre.y,footprintRadius+motionPadding);
-    const double ground=terrain.height(centre.x,centre.y);
-    double bound=std::numeric_limits<double>::infinity();
-    if(slope==0){
-        bound=centre.z-ground-std::abs(q.tangent.z)*halfLength-std::abs(q.right.z)*halfWidth-std::abs(q.up.z)*halfHeight;
-    }else{
-        // H(x,y)<=H(centreXY)+L*horizontalDistance. The resulting clearance
-        // lower-bound function z-H(centreXY)-L*norm(xy-centreXY) is concave,
-        // so its minimum over the full convex OBB occurs at a vertex. This
-        // certifies its interior too, unlike terrain queries at corners alone.
-        for(double x:{-halfLength,halfLength})for(double y:{-halfWidth,halfWidth})for(double z:{-halfHeight,halfHeight}){
-            Vec3 delta=q.tangent*x+q.right*y+q.up*z;
-            bound=std::min(bound,centre.z+delta.z-ground-slope*std::hypot(delta.x,delta.y));
+double boxLowerBound(const StationBox& box,const Terrain& terrain,double motionPadding){
+    const Vec3 centre=box.center;const double halfLength=box.half.x,halfWidth=box.half.y,halfHeight=box.half.z;
+    if(terrain.kind==TerrainKind::Flat)
+        return centre.z-std::abs(box.forward.z)*halfLength-std::abs(box.right.z)*halfWidth-std::abs(box.up.z)*halfHeight-motionPadding;
+    // Expand each local box axis by the Euclidean sweep reserve. This contains
+    // every moving point without adding a world-space ground-height margin.
+    std::array<Vec3,8> corners;double minX=INFINITY,minY=INFINITY,maxX=-INFINITY,maxY=-INFINITY;
+    for(int i=0;i<8;++i){corners[i]=centre+box.forward*((i&1?1.:-1.)*(halfLength+motionPadding))+box.right*((i&2?1.:-1.)*(halfWidth+motionPadding))+box.up*((i&4?1.:-1.)*(halfHeight+motionPadding));
+        minX=std::min(minX,corners[i].x);maxX=std::max(maxX,corners[i].x);minY=std::min(minY,corners[i].y);maxY=std::max(maxY,corners[i].y);}
+    constexpr int faces[6][4]={{0,1,3,2},{4,5,7,6},{0,1,5,4},{2,3,7,6},{0,2,6,4},{1,3,7,5}};
+    double bound=INFINITY;const double step=Terrain::gridStep;
+    for(double x=std::floor(minX/step)*step;x<=maxX;x+=step)for(double y=std::floor(minY/step)*step;y<=maxY;y+=step){
+        const Vec3 a{x,y,terrain.vertexHeight(x,y)},b{x+step,y,terrain.vertexHeight(x+step,y)},c{x+step,y+step,terrain.vertexHeight(x+step,y+step)},e{x,y+step,terrain.vertexHeight(x,y+step)};
+        for(const std::array<Vec3,3>& triangle:{std::array<Vec3,3>{a,b,c},std::array<Vec3,3>{a,c,e}}){
+            const Vec3 normal=cross(triangle[1]-triangle[0],triangle[2]-triangle[0]);
+            for(const auto& face:faces){std::array<Vec3,12> polygon{},next{};int count=4;for(int j=0;j<4;++j)polygon[j]=corners[face[j]];
+                for(int edge=0;edge<3&&count;++edge){const Vec3 from=triangle[edge],line=triangle[(edge+1)%3]-from;int size=0;
+                    auto side=[&](Vec3 p){return line.x*(p.y-from.y)-line.y*(p.x-from.x);};
+                    for(int j=0;j<count;++j){const Vec3 u=polygon[j],v=polygon[(j+1)%count];const double du=side(u),dv=side(v);
+                        if(du>=0)next[size++]=u;if((du<0)!=(dv<0))next[size++]=u+(v-u)*(du/(du-dv));}
+                    polygon=next;count=size;
+                }
+                // Vertical separation from the affine terrain face is linear;
+                // its minimum on the clipped convex face occurs at a vertex.
+                for(int j=0;j<count;++j)bound=std::min(bound,dot(polygon[j]-triangle[0],normal)/normal.z);
+            }
         }
     }
-    // Clearance z-H(x,y) is sqrt(1+L^2)-Lipschitz in 3D. Every body point
-    // moves <.188 m from its exact midpoint pose under the shared sweep proof;
-    // .20 m is the unchanged conservative Euclidean motion reserve.
-    return bound-motionPadding*std::hypot(1.,slope);
+    return bound-1e-9;
 }
+double lowerBound(const TrackSample& q,const Terrain& terrain,double trainTop,double motionPadding){
+    const double middle=(trainEnvelopeBottom+trainTop)*.5;
+    const StationBox box{q.position+q.up*middle,q.tangent,q.right,q.up,{trainHalfLength,patronHalfWidth,(trainTop-trainEnvelopeBottom)*.5},StationRole::Post};
+    return boxLowerBound(box,terrain,motionPadding);
+}
+}
+double minimumSweptGroundClearance(const Track& track,const Terrain& terrain,const TrainConfig& train,Cancel cancel){
+    const auto sweep=buildClearanceSweep(track,train,cancel);return minimumSweptGroundClearance(sweep,terrain,cancel);
+}
+double minimumSweptGroundClearance(const ClearanceSweep& sweep,const Terrain& terrain,Cancel cancel){
+    double minimum=INFINITY;
+    for(const auto& cell:sweep.frames()){
+        if(cancel&&cancel())throw std::runtime_error("CANCELLED");
+        minimum=std::min(minimum,terrain_validation::lowerBound(cell.sample,terrain,sweep.trainTop(),sweep.padding()));
+    }
+    return minimum;
 }
 namespace chord_validation {
 // Integrate each already-certified M du bound between the ACTUAL parameters
@@ -206,7 +241,7 @@ ValidationReport validate(const Track& track,const ClearanceSweep& sweep,int cou
     return out;
 }
 }
-ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Limits& limits,const TrainConfig& train,const std::vector<Support>& supports,Cancel cancel){
+static ValidationReport validateGeometryImpl(const Track& t,const Terrain& terrain,const Limits& limits,const TrainConfig& train,const std::vector<Support>& supports,const ClearanceSweep* prepared,Cancel cancel){
     ValidationReport r;if(train.cars<1||train.cars>16||!std::isfinite(train.spacing)||train.spacing<=0||train.spacing>20){r.fail("TRAIN_CONFIG","Invalid train geometry settings");return r;}if(t.spans.empty()){r.fail("EMPTY_TRACK","Track is empty");return r;}
     if(t.knots.size()!=t.spans.size()+1||t.knots.size()<4||!std::isfinite(t.length)||t.length<=0){r.fail("GEOMETRY_DOMAIN","Invalid canonical track cardinality or length");return r;}
     if(!std::isfinite(limits.minClearance)||limits.minClearance<0||!terrain.valid()){r.fail("TERRAIN_CONFIG","Invalid terrain or configured minimum clearance");return r;}
@@ -222,13 +257,18 @@ ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Li
         double frameRate=angle/ds;
         if(bankRate>.12||frameRate>.12||angle>.2){r.fail("FRAME_RATE","Canonical orientation changes faster than the supported spatial resolution",t.spans[i].start,std::max(bankRate,frameRate),.12);return r;}
     }
-    std::optional<ClearanceSweep> sweep;
-    try{sweep.emplace(buildClearanceSweep(t,train,cancel));}
-    catch(const std::exception& e){r.fail((std::string(e.what())=="CANCELLED"||(cancel&&cancel()))?"CANCELLED":"SWEEP_DOMAIN",e.what());return r;}
-    TrackSample previous=t.sample(0);
+    std::optional<ClearanceSweep> ownedSweep;
+    const ClearanceSweep* sweep=prepared;
+    if(!sweep){
+        try{ownedSweep.emplace(buildClearanceSweep(t,train,cancel));sweep=&*ownedSweep;}
+        catch(const std::exception& e){r.fail((std::string(e.what())=="CANCELLED"||(cancel&&cancel()))?"CANCELLED":"SWEEP_DOMAIN",e.what());return r;}
+    }
+    size_t frameHint=t.spans.size();
+    auto sampleSequential=[&](double distance,size_t& hint){const auto where=t.locate(distance,hint);return t.sampleSpan(where.span,where.parameter);};
+    TrackSample previous=sampleSequential(0,frameHint);
     for(double s=.5;s<t.length;s+=.5){
         if(cancel&&cancel()){r.fail("CANCELLED","Frame validation cancelled");return r;}
-        auto current=t.sample(s);double rate=std::acos(std::clamp(dot(previous.up,current.up),-1.,1.))/.5;
+        auto current=sampleSequential(s,frameHint);double rate=std::acos(std::clamp(dot(previous.up,current.up),-1.,1.))/.5;
         if(!finite(current.curvature)||norm(current.curvature)>.2||rate>.25){r.fail("FRAME_DOMAIN","Canonical frame or curvature exceeds the supported spatial domain",s,std::max(rate,norm(current.curvature)),.25);return r;}
         previous=current;
     }
@@ -237,22 +277,22 @@ ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Li
     constexpr double step=2,cell=16;std::vector<Vec3> p;std::vector<double> ds;
     int count=int(std::ceil(t.length/step));
     auto chordReport=chord_validation::validate(t,*sweep,count,cancel);if(!chordReport.valid())return chordReport;
-    // True arc per chord <=2.1 m and continuous curvature <=.2 imply deviation
-    // <=.2*2.1^2/8=.11025 m from the straight chord. Against the unchanged6 m
-    // test, body radius4.2 + hardware radius.9 + two deviations leave>.679 m.
-    p.reserve(count+1);ds.reserve(count+1);
-    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=t.sample(s);p.push_back(q.position);ds.push_back(s);
-        for(double side:{-1.5,1.5})for(double height:{-.8,2.4}){Vec3 e=q.position+q.right*side+q.up*height;double clear=e.z-terrain.height(e.x,e.y);if(clear<limits.minClearance+1.6&&r.errors.size()<10)r.fail("TERRAIN_CLEARANCE","Train envelope intersects terrain clearance",s,clear,limits.minClearance);}
+    // A full rider-body bounding radius plus neighbouring hardware, both
+    // chord deviations and the requested free clearance. The sweep enforces
+    // the 4.2 m body-radius domain; support contacts use their separate model.
+    const double branchClearance=sweep->bodyRadius()+.9+2*(.2*2.1*2.1/8)+limits.minClearance;
+    p.reserve(count+1);ds.reserve(count+1);size_t chordHint=t.spans.size();
+    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=sampleSequential(s,chordHint);p.push_back(q.position);ds.push_back(s);
     }
     struct Key {int x,y,z;bool operator==(const Key&) const=default;};struct Hash{size_t operator()(Key k)const{return uint64_t(k.x)*73856093ull^uint64_t(k.y)*19349663ull^uint64_t(k.z)*83492791ull;}};
     std::unordered_map<Key,std::vector<int>,Hash> grid;
     for(int i=0;i<count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}Vec3 m=(p[i]+p[i+1])*.5;Key k{int(std::floor(m.x/cell)),int(std::floor(m.y/cell)),int(std::floor(m.z/cell))};
-        for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)for(int z=-1;z<=1;++z){auto it=grid.find({k.x+x,k.y+y,k.z+z});if(it==grid.end())continue;for(int j:it->second){double sep=std::abs(ds[i]-ds[j]);sep=std::min(sep,t.length-sep);if(sep<12)continue;double d=segmentDistance(p[i],p[i+1],p[j],p[j+1]);if(d<6&&r.errors.size()<10)r.fail("TRACK_CLEARANCE","Nonadjacent central clearance chords are closer than the required distance; other track distance="+std::to_string(ds[j])+" m",ds[i],d,6);}}
+        for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)for(int z=-1;z<=1;++z){auto it=grid.find({k.x+x,k.y+y,k.z+z});if(it==grid.end())continue;for(int j:it->second){double sep=std::abs(ds[i]-ds[j]);sep=std::min(sep,t.length-sep);if(sep<12)continue;double d=segmentDistance(p[i],p[i+1],p[j],p[j+1]);if(d<branchClearance&&r.errors.size()<10)r.fail("TRACK_CLEARANCE","Nonadjacent central clearance chords are closer than the required distance; other track distance="+std::to_string(ds[j])+" m",ds[i],d,branchClearance);}}
         grid[k].push_back(i);
     }
-    // Retain the original 2 m corner gate and its +1.6 m reserve above. This
-    // additional certificate covers every point of the full moving body and
-    // compares its conservative lower bound to the configured minClearance.
+    // One ground-contact certificate covers every point of the complete
+    // moving envelope. minClearance is an optional user separation outside
+    // that envelope; no additional centreline-height gate is imposed.
     // Reuse this same prepared sweep for all support-member checks below.
     size_t terrainFrame=0;
     for(const auto& f:sweep->frames()){
@@ -282,5 +322,11 @@ ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Li
         if(hit>=0&&r.errors.size()<10)r.fail("SUPPORT_CLEARANCE","Cannot certify support clearance from train or track hardware",sweep->frames()[hit].distance);
     }
     return r;
+}
+ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Limits& limits,const TrainConfig& train,const std::vector<Support>& supports,Cancel cancel){
+    return validateGeometryImpl(t,terrain,limits,train,supports,nullptr,cancel);
+}
+ValidationReport validateGeometry(const Track& t,const Terrain& terrain,const Limits& limits,const TrainConfig& train,const std::vector<Support>& supports,const ClearanceSweep& sweep,Cancel cancel){
+    return validateGeometryImpl(t,terrain,limits,train,supports,&sweep,cancel);
 }
 }

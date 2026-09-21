@@ -12,7 +12,7 @@ static bool code(const ValidationReport& r,const char* c){for(const auto& e:r.er
 static Targets synthetic(){Targets t;t.referenceExposure=11;t.referenceId="rf-v1:"+std::string(64,'a');auto& b=t.reference;b.processed=true;b.method="piecewise-linear-positive10s-v1";b.groupId=t.referenceId;b.ride="SYNTHETIC fixture, not I305";b.configuration="synthetic-cfg";b.seat="front";b.device="synthetic-device";b.calibrationId="synthetic-cal";b.minimum=10;b.median=11;b.maximum=12;
     for(int i=0;i<3;++i){ReferenceRecording r;r.recordingId="synthetic-"+std::to_string(i);r.rawSha256=std::string(64,char('a'+i));r.canonicalSha256=std::string(64,char('a'+i));r.analysisSha256=std::string(64,char('a'+i));r.source="SYNTHETIC fixture";r.notes="No measured data";r.sampleRateHz=r.sampleRateMinHz=r.sampleRateMaxHz=100;r.exposure=10+i;b.recordings.push_back(r);}return t;}
 static uint64_t hash(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
-static void write(const std::filesystem::path& p,const std::string& payload){std::ofstream f(p,std::ios::binary);f<<"COASTER 5 "<<payload.size()<<' '<<hash(payload)<<'\n'<<payload;}
+static void write(const std::filesystem::path& p,const std::string& payload){std::ofstream f(p,std::ios::binary);f<<"COASTER 6 "<<payload.size()<<' '<<hash(payload)<<'\n'<<payload;}
 static std::string bytes(const std::filesystem::path& p){std::ifstream f(p,std::ios::binary);return {std::istreambuf_iterator<char>(f),{}};}
 int main(){try{
     Targets unavailable;check(referenceStatus(unavailable)=="unavailable","Missing stays unavailable");Targets manual;manual.referenceExposure=11;manual.referenceId="SYNTHETIC manual";check(referenceStatus(manual)=="user-configured-unverified","Manual stays unverified");
@@ -28,8 +28,8 @@ int main(){try{
     // expanded canyon3 profile can fail the optional rate convergence gate.
     // Optional assessment must participate in candidate search. A proof ride
     // accepted with this axis unassessed need not converge after a later upgrade.
-    req.limits.maxLateralRateGps=1000;auto d=generate(req);check(d.accepted(),"Requested lateral assessment participates in generation and converges");
-    d.request.limits.maxLateralRateGps=std::numeric_limits<double>::quiet_NaN();
+    req.limits.maxLateralRateGps=20;auto d=generate(req);check(d.accepted(),"Requested lateral assessment participates in generation and converges");
+    d.request.limits.maxLateralRateGps=d.request.limits.maxLongitudinalRateGps=std::numeric_limits<double>::quiet_NaN();
     for(int seat=0;seat<3;++seat){const auto& st=d.simulation.metrics.seats[seat];check(st.axes[2].maxRateGps>0,"Longitudinal rates measured per seat");check(st.longestAbove2Seconds<=st.positiveAbove2Seconds&&st.longestAirtimeSeconds<=st.airtimeBelowZeroSeconds,"Longest bout cannot exceed cumulative duration");}
     near(d.simulation.metrics.maxJerkGps,std::max({d.simulation.metrics.seats[0].axes[0].maxRateGps,d.simulation.metrics.seats[1].axes[0].maxRateGps,d.simulation.metrics.seats[2].axes[0].maxRateGps}),1e-12,"Global and per-seat analytic vertical rates agree");
     auto constrained=d;constrained.request.limits.maxLongitudinalRateGps=.00001;constrained.report={};evaluateTargets(constrained);check(code(constrained.report,"LONGITUDINAL_FORCE_RATE"),"Explicit provisional longitudinal gate rejects");check(!code(d.report,"LONGITUDINAL_FORCE_RATE"),"Unset axis gate unassessed, no fabricated threshold");
@@ -42,7 +42,7 @@ int main(){try{
     check(!underresolved.accepted()&&underresolved.convergence.performed&&!underresolved.convergence.passed&&code(underresolved.report,"CONVERGENCE_METRIC"),"A discrepant coarse lateral rate cannot commit acceptance");
     check(std::any_of(underresolved.convergence.metrics.begin(),underresolved.convergence.metrics.end(),[](const auto& metric){return metric.name.find(".lateral.maxRateGps")!=std::string::npos&&metric.absoluteDifference>=metric.tolerance;}),"Explicit lateral assessment remains checked when its measured rate is unresolved");
     d.request.targets=t;d.request.targets.requireIntensity=false; // Synthetic metadata only; uncalibrated horizontal rates remain unassessed.
-    verifyConvergence(d);check(d.accepted(),"Typed metadata fixture retains actual half-step verification");
+    verifyConvergence(d);verifySpatialRefinement(d);check(d.accepted(),"Typed metadata fixture retains actual half-step verification");
     const auto folder=std::filesystem::current_path()/"reference-test-output";std::filesystem::create_directories(folder);auto good=folder/"typed.coaster",bad=folder/"bad.coaster";
     check(saveDesign(d,good.string(),error),"Typed design saves");Design loaded;check(loadDesign(good.string(),loaded,error),"Typed design loads");check(serializeReference(loaded.request.targets.reference)==serializeReference(t.reference),"Typed metadata persists exactly");check(std::isnan(loaded.request.limits.maxLateralRateGps)&&std::isnan(loaded.request.limits.maxLongitudinalRateGps),"Unset axes persist unassessed");check(reportJson(d)==reportJson(loaded),"Geometry replay and all report fields identical");
     const auto saved=bytes(good),payload=saved.substr(saved.find('\n')+1);const auto extension=payload.find("EXTENSIONS ");check(extension!=std::string::npos,"Extension tail present");

@@ -1,0 +1,15 @@
+{
+  "stage": "accepted-shape-checkpoint-before-landscape-integration",
+  "nativeAccepted": true,
+  "packageVerified": false,
+  "files": {
+    "native/build/evidence/camelback-final.coaster": "212d89e608aa360209049cdd66e03aae6e68b9d7d7680b79909701f62e0164a7",
+    "native/build/evidence/camelback-final.json": "5c44d72bb50ff50bbe6a7058857eb9c872df146690f71111632d399173ce964e",
+    "docs/references/camelback-original.png": "2a1cafa4c0c70a8e15382b5739998d6936d07977b48677b7ac0dfc9f79243295",
+    "docs/references/camelback-trace.json": "aa45bcc80c01b36e7366f57a38a037565f33cbbbde66a1c6ac4bb3e19f54ad74",
+    "docs/references/camelback-fvd-fit.json": "8ebb67e3566b304f79ca516a0175dba00279509da5a73dcf5e4d573b4d6aee6d",
+    "docs/references/fit-camelback.cpp": "3d58faa951e2aecf9afbad5c2f8e586a5a973f65325c61cee76abf06af416611",
+    "docs/references/fit-camelback.py": "0e9f178901502b2b258bcb37532012ab3513031e321d3d3cb219755d33a31274",
+    "docs/checkpoints/02-reference-trace.html": "ffbe7f699184e814f65adbb4473baf77fb1aaea05d23e109c0e17b66532c2437"
+  }
+}

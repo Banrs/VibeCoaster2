@@ -49,7 +49,8 @@ static void geometry(){
     check(validateGeometry(loop,terrain,limits,train,{}).valid(),"Closed clear circle");
     auto a=loop.sample(0),b=loop.sample(loop.length);near(norm(a.position-b.position),0,1e-12,"Canonical seam position");near(norm(a.tangent-b.tangent),0,1e-12,"Canonical seam tangent");near(norm(a.curvature-b.curvature),0,1e-12,"Canonical seam curvature");
     auto displaced=loop;displaced.knots.back().position.x+=1;bool seamRejected=false;try{displaced.rebuild();}catch(...){seamRejected=true;}check(seamRejected,"Open canonical seam rejected before rebuilding shared G3 jets");
-    auto low=loop;for(auto& k:low.knots)k.position.z=4;low.rebuild();check(code(validateGeometry(low,terrain,limits,train,{}),"TERRAIN_CLEARANCE"),"Terrain envelope clearance");
+    auto low=loop;for(auto& k:low.knots)k.position.z=2;low.rebuild();check(validateGeometry(low,terrain,limits,train,{}).valid(),"Two-metre rail height clears the actual full envelope without a blanket height gate");
+    for(auto& k:low.knots)k.position.z=.5;low.rebuild();check(code(validateGeometry(low,terrain,limits,train,{}),"TERRAIN_SWEEP_CLEARANCE"),"Actual spine/body penetration is rejected by full swept ground clearance");
     std::vector<AuthoredPoint> p;for(int i=0;i<=600;++i){double a=2*pi*i/600;p.push_back({{50*std::sin(a),30*std::sin(2*a),20},0,Element::Turn,{0,0,1}});}p.back()=p.front();auto crossing=compile(p);check(code(validateGeometry(crossing,terrain,limits,train,{}),"TRACK_CLEARANCE"),"Nonadjacent figure-eight crossing");
     auto enormous=train;enormous.cars=1;enormous.spacing=1e6;check(code(validateGeometry(crossing,terrain,limits,enormous,{}),"TRAIN_CONFIG"),"Irrelevant one-car spacing cannot disable collision checks");
     auto q=loop.sample(80);Support column{{q.position.x,q.position.y,0},{q.position.x,q.position.y,40},{},false,0};check(code(validateGeometry(loop,terrain,limits,train,{column}),"SUPPORT_CLEARANCE"),"Full support column collision");
@@ -60,7 +61,7 @@ static void geometry(){
 }
 static void persistence(const Design& d){
     auto folder=std::filesystem::temp_directory_path()/"coaster-foundation-core-tests";std::filesystem::create_directories(folder);auto path=(folder/"roundtrip.coaster").string();std::filesystem::remove(path);std::string error;
-    check(saveDesign(d,path,error),"Save accepted canonical geometry: "+error);check(saveDesign(d,path,error),"Atomic replacement of an existing save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Load/revalidate geometry: "+error);check(loaded.accepted(),"Loaded design accepted");check(loaded.request.seed==d.request.seed&&loaded.track.knots.size()==d.track.knots.size(),"Persisted identity and exact geometry");near(loaded.track.length,d.track.length,1e-10,"Roundtrip canonical length");near(loaded.simulation.metrics.maxVerticalG,d.simulation.metrics.maxVerticalG,1e-10,"Roundtrip independent physics");
+    check(saveDesign(d,path,error),"Save accepted canonical geometry: "+error);check(saveDesign(d,path,error),"Atomic replacement of an existing save: "+error);Design loaded;check(loadDesign(path,loaded,error),"Load/revalidate geometry: "+error);check(loaded.accepted(),"Loaded design accepted");check(authorshipPayload(loaded)==authorshipPayload(d),"Saved source programmes are preserved exactly");check(loaded.request.seed==d.request.seed&&loaded.track.knots.size()==d.track.knots.size(),"Persisted identity and exact geometry");near(loaded.track.length,d.track.length,1e-10,"Roundtrip canonical length");near(loaded.simulation.metrics.maxVerticalG,d.simulation.metrics.maxVerticalG,1e-10,"Roundtrip independent physics");
     for(size_t i=0;i<d.track.knots.size();i+=37)near(norm(loaded.track.knots[i].position-d.track.knots[i].position),0,0,"Exact double geometry roundtrip");
     auto rejected=d;rejected.report.fail("TEST","Rejected");check(!saveDesign(rejected,(folder/"rejected.coaster").string(),error),"Rejected save refused");
     auto tampered=d;for(auto& k:tampered.track.knots)k.position.z-=1000;check(!saveDesign(tampered,(folder/"tampered.coaster").string(),error),"Stale cached spans cannot bypass canonical save validation");
@@ -91,26 +92,14 @@ static void provenance(const Design& current){
     check(saveDesign(current,newPath.string(),error),"Save new provenance: "+error);const auto currentBytes=readBytes(newPath);
     auto writeVersion=[&](const std::filesystem::path& path,const std::string& version){
         auto payload=currentBytes.substr(currentBytes.find('\n')+1);const auto end=payload.find('"',1);check(end!=std::string::npos,"Canonical provenance field exists");payload.replace(1,end-1,version);
-        std::ofstream file(path,std::ios::binary);file<<"COASTER 5 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;check(bool(file),"Write checksummed provenance fixture");
+        std::ofstream file(path,std::ios::binary);file<<"COASTER 6 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;check(bool(file),"Write checksummed provenance fixture");
     };
-    // Reuse accepted geometry to test the version gate without storing a bulky
-    // fixture. Historical geometry is loaded as authored, never regenerated.
-    for(const std::string version:{"0.8.0-immelmann.2","0.8.1-linear.1","0.8.2-graded.1","0.8.3-flow.1"}){
-        writeVersion(oldPath,version);const auto originalBytes=readBytes(oldPath);Design loaded;
-        check(loadDesign(oldPath.string(),loaded,error),"Original provenance independently validates: "+error);
-        check(loaded.generationVersion==version&&loaded.accepted()&&loaded.convergence.passed,"Original provenance survives full replay validation");
-        auto expected=current;expected.generationVersion=version;expected.track.legacyInterpolation=version!="0.8.3-flow.1";expected.track.rebuild();
-        expected.inversionDimensions=measureInversionDimensions(expected.track);expected.report={};expected.convergence={};
-        expected.simulation=simulate(expected.track,expected.operations,expected.request.train,expected.request.simulationStep);evaluateTargets(expected);verifyConvergence(expected);
-        check(loaded.track.legacyInterpolation==expected.track.legacyInterpolation&&reportJson(loaded)==reportJson(expected),"Historical provenance replays with its original interpolation");
-        check(saveDesign(loaded,resavedPath.string(),error),"Resave original provenance: "+error);Design reloaded;
-        check(loadDesign(resavedPath.string(),reloaded,error),"Reload resaved original provenance: "+error);
-        check(reportJson(reloaded)==reportJson(expected)&&readBytes(resavedPath)==originalBytes,"Original provenance and complete authored payload survive resave");
-        check(readBytes(oldPath)==originalBytes,"Loading and resaving leaves the original file untouched");
-        auto invalid=loaded;for(auto& knot:invalid.track.knots)knot.position.z-=1000;
-        check(!saveDesign(invalid,resavedPath.string(),error),"Original provenance cannot bypass canonical geometry validation");check(readBytes(resavedPath)==originalBytes,"Rejected legacy save leaves prior bytes intact");
-    }
-    for(const std::string version:{"0.5.0-geometry.1-work","0.8.0-immelmann.1","0.8.1-linear.2","0.8.2-graded.2","unsupported"}){
+    writeVersion(oldPath,"2.0.0-motion.1");Design compatible;
+    const bool loaded=loadDesign(oldPath.string(),compatible,error);
+    check(loaded,"Compatible V2 motion save is replayed without regeneration: "+error);
+    check(compatible.generationVersion=="2.0.0-motion.1"&&compatible.track.knots.size()==current.track.knots.size(),"Loading preserves the original provenance and geometry");
+    check(saveDesign(compatible,resavedPath.string(),error)&&readBytes(resavedPath)==readBytes(oldPath),"Resaving a compatible V2 design preserves its exact canonical bytes");
+    for(const std::string version:{"0.9.0-flight.1","0.8.0-immelmann.1","0.8.1-linear.2","0.8.2-graded.2","unsupported"}){
         writeVersion(badPath,version);auto unchanged=current;
         check(!loadDesign(badPath.string(),unchanged,error)&&error.find("Unsupported generator version")!=std::string::npos,"Unrecognized provenance is explicitly rejected");
         check(reportJson(unchanged)==reportJson(current),"Unsupported provenance preserves the accepted design");
@@ -118,19 +107,19 @@ static void provenance(const Design& current){
     for(const auto& path:{newPath,oldPath,resavedPath,badPath})std::filesystem::remove(path);
 }
 static void writeBadProfile(const std::filesystem::path& out,const std::string& good,size_t knotCount,const std::string& decel,const std::string& offset,const std::string& fade=""){
-    auto lines=payloadLines(good);auto values=tokens(lines.at(5+knotCount));check(values.size()==10,"Schema5 work2 operation has ten explicit fields");
+    auto lines=payloadLines(good);auto values=tokens(lines.at(5+knotCount));check(values.size()==10,"Schema6 work2 operation has ten explicit fields");
     values[7]=decel;values[8]=offset;if(!fade.empty())values[9]=fade;std::string replacement;
     for(size_t i=0;i<values.size();++i)replacement+=(i?" ":"")+values[i];lines[5+knotCount]=replacement;
     std::string payload;for(const auto& line:lines)payload+=line+"\n";
-    std::ofstream f(out,std::ios::binary);f<<"COASTER 5 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;
+    std::ofstream f(out,std::ios::binary);f<<"COASTER 6 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;
     check(bool(f),"Write correctly checksummed malformed profile");
 }
 static void migration(const Design& current){
-    const auto folder=std::filesystem::temp_directory_path()/"coaster-geometry-schema5-tests";std::filesystem::create_directories(folder);
+    const auto folder=std::filesystem::temp_directory_path()/"coaster-geometry-schema6-tests";std::filesystem::create_directories(folder);
     const auto newPath=folder/"current.coaster",badPath=folder/"bad-profile.coaster";
     std::string error;Design replay;
-    check(saveDesign(current,newPath.string(),error),"Save current explicit profile: "+error);const auto currentBytes=readBytes(newPath);check(currentBytes.rfind("COASTER 5 ",0)==0,"New canonical semantics use COASTER5");
-    for(int schema:{1,2,3,4}){
+    check(saveDesign(current,newPath.string(),error),"Save current explicit profile: "+error);const auto currentBytes=readBytes(newPath);check(currentBytes.rfind("COASTER 6 ",0)==0,"New canonical semantics use COASTER6");
+    for(int schema:{1,2,3,4,5}){
         const auto original="COASTER "+std::to_string(schema)+currentBytes.substr(9);
         {std::ofstream file(badPath,std::ios::binary);file<<original;check(bool(file),"Write obsolete schema fixture");}
         auto unchanged=current;
@@ -141,13 +130,14 @@ static void migration(const Design& current){
     }
     check(loadDesign(newPath.string(),replay,error),"Reload current explicit profile: "+error);
     check(reportJson(current)==reportJson(replay),"Current profile physics/provenance roundtrip");
-    auto rejectedSurface=[&](std::vector<std::string> lines){
+    auto rejectedSurface=[&](std::vector<std::string> lines,const std::string& expected="profile"){
         std::string payload;for(const auto& line:lines)payload+=line+"\n";
-        {std::ofstream file(badPath,std::ios::binary);file<<"COASTER 5 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;}
-        auto unchanged=current;check(!loadDesign(badPath.string(),unchanged,error)&&error.find("flat")!=std::string::npos,"Checksummed non-flat save is explicitly refused");
+        {std::ofstream file(badPath,std::ios::binary);file<<"COASTER 6 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;}
+        auto unchanged=current;const bool loaded=loadDesign(badPath.string(),unchanged,error);
+        check(!loaded&&error.find(expected)!=std::string::npos,"Checksummed unsupported or mismatched terrain is explicitly refused: "+error);
         check(reportJson(unchanged)==reportJson(current),"Unsupported ground leaves the accepted design intact");
     };
-    for(int kind:{1,2}){auto lines=payloadLines(currentBytes);auto fields=tokens(lines[0]);fields[2]=std::to_string(kind);lines[0].clear();for(const auto& field:fields){if(!lines[0].empty())lines[0]+=' ';lines[0]+=field;}rejectedSurface(lines);}
+    for(int kind:{1,2}){auto lines=payloadLines(currentBytes);auto fields=tokens(lines[0]);fields[2]=std::to_string(kind);lines[0].clear();for(const auto& field:fields){if(!lines[0].empty())lines[0]+=' ';lines[0]+=field;}rejectedSurface(lines,kind==1?"profile":"terrain");}
     for(const std::string profile:{"2 1 0 0 0 0 600","1 1 0 0 0 5 600"}){auto lines=payloadLines(currentBytes);bool found=false;for(size_t i=0;i+1<lines.size();++i)if(lines[i].starts_with("TERRAIN_PROFILE ")){lines[i]="TERRAIN_PROFILE 1 "+std::to_string(profile.size()+1);lines[i+1]=profile;found=true;break;}check(found,"Saved flat-profile extension exists");rejectedSurface(lines);}
 
     check(current.operations.size()==replay.operations.size(),"Current operation count roundtrip");bool station=false;
@@ -155,7 +145,8 @@ static void migration(const Design& current){
         near(replay.operations[i].stopDeceleration,current.operations[i].stopDeceleration,0,"Explicit deceleration roundtrip");
         near(replay.operations[i].stopOffset,current.operations[i].stopOffset,0,"Explicit offset roundtrip");
         near(replay.operations[i].exitFadeMeters,current.operations[i].exitFadeMeters,0,"Explicit exit fade roundtrip");
-        near(current.operations[i].exitFadeMeters,std::max(1.,current.operations[i].targetSpeed*current.operations[i].rampSeconds),0,"Generator authors a speed-scaled exit fade");
+        if(current.operations[i].kind!=DriveKind::Trim)near(current.operations[i].exitFadeMeters,std::max(1.,current.operations[i].targetSpeed*current.operations[i].rampSeconds),0,"Propulsion and station author their speed-scaled exit fade");
+        else {near(replay.operations[i].trimPeakSpeed,current.operations[i].trimPeakSpeed,0,"Trim magnetic characteristic roundtrip");near(replay.operations[i].trimSensorLead,current.operations[i].trimSensorLead,0,"Trim detector distance roundtrip");}
         if(current.operations[i].kind==DriveKind::Station){station=true;near(replay.operations[i].stopDeceleration,6,0,"Packed station preferred deceleration");near(replay.operations[i].stopOffset,1.5,0,"Packed station stop offset");near(replay.operations[i].exitFadeMeters,1,0,"Station physical endpoint fade remains beyond its stopped train");}
     }
     check(station,"Current design has an explicit station operation");

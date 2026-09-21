@@ -24,10 +24,6 @@ template<size_t N>VectorJet polynomialJet(const std::array<Vec3,N>& c,double u){
 template<size_t N>ScalarJet polynomialJet(const std::array<double,N>& c,double u){ScalarJet p{c.back(),0,0,0};for(size_t i=N-1;i-->0;){p.third=p.third*u+3*p.second;p.second=p.second*u+2*p.first;p.first=p.first*u+p.value;p.value=p.value*u+c[i];}return p;}
 VectorJet positionDerivative(const Span& span,double u){std::array<Vec3,9> c;for(size_t i=0;i<c.size();++i)c[i]=span.c[i+1]*double(i+1);return polynomialJet(c,u);}
 
-template<class T>std::array<T,8> quintic(T a,T b,T a1,T b1,T a2,T b2){
-    T c2=a2*.5,p=b-a-a1-c2,v=b1-a1-c2*2,acc=b2-c2*2;
-    return {a,a1,c2,p*10-v*4+acc*.5,p*(-15)+v*7-acc,p*6-v*3+acc*.5};
-}
 template<class T>std::array<T,8> septic(T a,T b,T a1,T b1,T a2,T b2,T a3,T b3){
     T c2=a2*.5,c3=a3/6,p=b-a-a1-c2-c3,v=b1-a1-c2*2-c3*3,acc=b2-c2*2-c3*6,j=b3-c3*6;
     return {a,a1,c2,c3,p*35-v*15+acc*2.5-j/6,p*(-84)+v*39-acc*7+j*.5,p*70-v*34+acc*6.5-j*.5,p*(-20)+v*10-acc*2+j/6};
@@ -36,11 +32,11 @@ template<class T>std::vector<std::array<T,3>> sharedDerivatives(const Track& tra
     const size_t unique=values.size()-(track.closed?1:0);std::vector<std::array<T,3>> out(values.size());
     std::vector<double> coordinate(values.size());for(size_t i=1;i<coordinate.size();++i)coordinate[i]=coordinate[i-1]+track.spans[i-1].length;
     for(size_t i=0;i<unique;++i){
-        const int count=int(std::min<size_t>(5,unique));int first=int(i)-count/2;if(!track.closed)first=std::clamp(first,0,int(unique)-count);
-        std::array<size_t,5> index{};std::array<double,5> xs{};double scale=0;
+        const int count=int(std::min<size_t>(7,unique));int first=int(i)-count/2;if(!track.closed)first=std::clamp(first,0,int(unique)-count);
+        std::array<size_t,7> index{};std::array<double,7> xs{};double scale=0;
         for(int j=0;j<count;++j){int at=first+j,wrapped=(at%int(unique)+int(unique))%int(unique),lap=at<0?-1:at>=int(unique)?1:0;index[j]=size_t(wrapped);xs[j]=coordinate[wrapped]+lap*track.length-coordinate[i];scale=std::max(scale,std::abs(xs[j]));}
         if(!(scale>0))throw std::runtime_error("Degenerate frame derivative stencil");
-        double matrix[5][8]{};for(int row=0;row<count;++row){for(int j=0;j<count;++j)matrix[row][j]=std::pow(xs[j]/scale,row);matrix[row][count]=row==1?1:0;matrix[row][count+1]=row==2?2:0;matrix[row][count+2]=row==3?6:0;}
+        double matrix[7][10]{};for(int row=0;row<count;++row){for(int j=0;j<count;++j)matrix[row][j]=std::pow(xs[j]/scale,row);matrix[row][count]=row==1?1:0;matrix[row][count+1]=row==2?2:0;matrix[row][count+2]=row==3?6:0;}
         for(int col=0;col<count;++col){int pivot=col;for(int row=col+1;row<count;++row)if(std::abs(matrix[row][col])>std::abs(matrix[pivot][col]))pivot=row;
             for(int k=col;k<count+3;++k)std::swap(matrix[col][k],matrix[pivot][k]);double divisor=matrix[col][col];if(std::abs(divisor)<1e-12)throw std::runtime_error("Unresolved frame derivative stencil");
             for(int k=col;k<count+3;++k)matrix[col][k]/=divisor;for(int row=0;row<count;++row)if(row!=col){double factor=matrix[row][col];for(int k=col;k<count+3;++k)matrix[row][k]-=factor*matrix[col][k];}}
@@ -55,17 +51,18 @@ void rebuildFramePolynomials(Track& track){
     std::vector<Vec3> up;std::vector<double> bank;up.reserve(track.knots.size());bank.reserve(track.knots.size());
     for(const auto& k:track.knots){up.push_back(k.up);bank.push_back(k.bank);}
     auto upD=sharedDerivatives(track,up);auto bankD=sharedDerivatives(track,bank);
+    if(track.authoredFrame)for(size_t i=0;i<track.knots.size();++i) {
+        const auto& k=track.knots[i];
+        if(k.bank!=0||!finite(k.upFirst)||!finite(k.upSecond)||!finite(k.upThird))throw std::runtime_error("Invalid authored physical frame derivatives");
+        upD[i]={k.upFirst,k.upSecond,k.upThird};
+    }
     for(size_t i=0;i<track.spans.size();++i){
         auto& span=track.spans[i];auto a=positionDerivative(span,0),b=positionDerivative(span,1);
         double qa=norm(a.value),qb=norm(b.value);if(!(qa>0&&qb>0))throw std::runtime_error("Zero endpoint metric in frame cache");
         double qau=dot(a.value,a.first)/qa,qbu=dot(b.value,b.first)/qb;
         // Parameter jets use actual endpoint metric, not quadrature span length.
         // Shared arc derivatives therefore agree even on unequal curved spans.
-        span.referenceUp=quintic(up[i],up[i+1],upD[i][0]*qa,upD[i+1][0]*qb,
-            upD[i][1]*(qa*qa)+upD[i][0]*qau,upD[i+1][1]*(qb*qb)+upD[i+1][0]*qbu);
-        span.bank=quintic(bank[i],bank[i+1],bankD[i][0]*qa,bankD[i+1][0]*qb,
-            bankD[i][1]*(qa*qa)+bankD[i][0]*qau,bankD[i+1][1]*(qb*qb)+bankD[i+1][0]*qbu);
-        if(!track.legacyInterpolation){
+        {
             const double qauu=(dot(a.first,a.first)+dot(a.value,a.second)-qau*qau)/qa;
             const double qbuu=(dot(b.first,b.first)+dot(b.value,b.second)-qbu*qbu)/qb;
             span.referenceUp=septic(up[i],up[i+1],upD[i][0]*qa,upD[i+1][0]*qb,
@@ -82,12 +79,29 @@ void rebuildFramePolynomials(Track& track){
     }
 }
 
+void captureCanonicalDerivatives(Track& track) {
+    // Freeze the physical frame, including all jets, in a single gauge. A
+    // reload or spatial subdivision must not estimate different derivatives.
+    for(size_t i=0;i<track.knots.size();++i) {
+        const auto q=i<track.spans.size()?sampleSpanKinematics(track,i,0):sampleSpanKinematics(track,track.spans.size()-1,1);
+        auto& k=track.knots[i];k.up=q.sample.up;k.bank=0;
+        k.third=q.curvatureS;k.fourth=q.curvatureSS;
+        k.upFirst=q.upS;k.upSecond=q.upSS;k.upThird=q.upSSS;
+    }
+    if(track.closed)track.knots.back()=track.knots.front();
+    track.authoredGeometry=track.authoredFrame=true;track.rebuild();
+}
+
 TrackSample Track::sampleSpan(size_t i,double u) const{
     checkParameter(*this,i,u);const auto& span=spans[i];auto d=positionDerivative(span,u);double q=norm(d.value);Vec3 tangent=d.value/q;
     Vec3 raw=value(span.referenceUp,u),projected=raw-tangent*dot(raw,tangent);double magnitude=norm(projected);
     if(!std::isfinite(q)||q<=0||!std::isfinite(magnitude)||magnitude<1e-10)throw std::runtime_error("Degenerate canonical frame");
     Vec3 up=rotate(projected/magnitude,tangent,value(span.bank,u));
     return {value(span.c,u),tangent,(d.first-tangent*dot(tangent,d.first))/(q*q),up,unit(cross(tangent,up)),knots[i].element};
+}
+Vec3 Track::position(double distance,size_t& hint) const{
+    const auto at=locate(distance,hint);
+    return value(spans[at.span].c,at.parameter);
 }
 Vec3 Track::tangent(double distance) const{
     size_t hint=spans.size();return tangent(distance,hint);

@@ -45,11 +45,23 @@ FString GeometryIdentity(const coaster::Design& D)
     std::ostringstream S; S.imbue(std::locale::classic()); S << std::setprecision(17);
     auto V = [&](coaster::Vec3 P) { S << P.x << ',' << P.y << ',' << P.z << ';'; };
     S << D.generationVersion << ';' << D.request.seed << ';' << int(D.request.terrain.kind) << ';' << D.track.closed << ';';
-    S << "1;1;0;0;0;0;600;";
+    const auto& Terrain = D.request.terrain;
+    S << Terrain.centerX << ';' << Terrain.centerY << ';' << Terrain.heightMeters << ';' << Terrain.radiusX << ';' << Terrain.radiusY << ';' << Terrain.bend << ';';
+    S << Terrain.ridge.spineCount << ';' << Terrain.ridge.width << ';' << Terrain.ridge.curvature << ';';
+    for(const auto& P : Terrain.ridge.points) S << P.x << ';' << P.y << ';' << P.height << ';' << P.gx << ';' << P.gy << ';';
+    S << Terrain.plateau << ';' << Terrain.cliffX << ';' << Terrain.cliffY << ';' << Terrain.cliffHeading << ';' << Terrain.cliffWidth << ';' << Terrain.cliffCurvature << ';';
+    if(Terrain.backSlope){const auto& B=*Terrain.backSlope;S << "back:" << B.x << ';' << B.y << ';' << B.height << ';' << B.gradeX << ';' << B.gradeY << ';';}
+    for (const auto& R : Terrain.ravines) S << R.x0 << ';' << R.y0 << ';' << R.x1 << ';' << R.y1 << ';' << R.depth0 << ';' << R.depth1 << ';' << R.width0 << ';' << R.width1 << ';';
+    S << coaster::recipePayload(D.request.recipe);
+    for (const auto& Section : D.sections) S << int(Section.role) << ';' << Section.recipeId << ';' << Section.start << ';' << Section.end << ';';
+    for (const auto& Landmark : D.landmarks) S << int(Landmark.kind) << ';' << Landmark.distance << ';';
+    for (const auto& R : Terrain.ramps) S << R.x0 << ';' << R.y0 << ';' << R.x1 << ';' << R.y1 << ';' << R.h0 << ';' << R.h1 << ';' << R.grade0 << ';' << R.grade1 << ';' << R.width << ';';
+    for (const auto& K : Terrain.knolls) S << K.x << ';' << K.y << ';' << K.height << ';' << K.radius << ';';
+    for (const auto& K : Terrain.foothills) S << K.x << ';' << K.y << ';' << K.height << ';' << K.radius << ';';
     const auto& T = D.request.train;
     S << T.cars << ';' << T.carMass << ';' << T.spacing << ';' << T.seatHeight << ';' << T.dragCdA << ';' << T.rollingResistance << ';' << T.airDensity << ';';
-    for (const auto& K : D.track.knots) { V(K.position); V(K.tangent); V(K.curvature); V(K.up); S << K.bank << ';' << int(K.element) << ';'; }
-    for (const auto& O : D.operations) S << O.start << ';' << O.end << ';' << int(O.kind) << ';' << O.targetSpeed << ';' << O.maxForce << ';' << O.maxPower << ';' << O.rampSeconds << ';' << O.stopDeceleration << ';' << O.stopOffset << ';' << O.exitFadeMeters << ';';
+    for (const auto& K : D.track.knots) { V(K.position); V(K.tangent); V(K.curvature); V(K.third); V(K.fourth); V(K.up); V(K.upFirst); V(K.upSecond); V(K.upThird); S << K.bank << ';' << int(K.element) << ';'; }
+    for (const auto& O : D.operations) S << O.start << ';' << O.end << ';' << int(O.kind) << ';' << O.targetSpeed << ';' << O.maxForce << ';' << O.maxPower << ';' << O.rampSeconds << ';' << O.stopDeceleration << ';' << O.stopOffset << ';' << O.exitFadeMeters << ';' << O.trimPeakSpeed << ';' << O.trimSensorLead << ';';
     for (const auto& P : D.supports) { V(P.base); V(P.top); V(P.attachment); S << P.hasAttachment << ';' << P.trackDistance << ';'; for (const auto& M : P.members) { V(M.base); V(M.top); S << M.radiusBase << ';' << M.radiusTop << ';' << int(M.kind) << ';' << M.spineContact << ';'; } }
     S << coaster::stationPayload(D.station);
     const std::string Text = S.str(); return FSHA1::HashBuffer(Text.data(), Text.size()).ToString();
@@ -60,7 +72,7 @@ struct FCoasterRuntimeVerification::FState
 {
     enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, Finish, Done } Stage = Init;
     FString Output, Profile, SavePath, Error, Identity, SaveHash, PendingShot, FrameRows = TEXT("wall_seconds,ride_seconds,distance_m,speed_ms,wall_frame_ms,engine_delta_ms\n");
-    FString Seed = TEXT("42"), Terrain = TEXT("flat");
+    FString Seed = TEXT("42"), Terrain = TEXT("highlands");
     uint64 CommittedRevision = 0;
     int32 PoseProbeIndex = 0;
     int32 Seat = 0, ShotIndex = 0, NextShot = 0, ObservedWidth = 0, ObservedHeight = 0;
@@ -135,7 +147,7 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (FPaths::IsRelative(S.Output) || IFileManager::Get().DirectoryExists(*S.Output) || IFileManager::Get().FileExists(*S.Output)) { FatalBeforeOutput(TEXT("CoasterVerify must name a fresh absolute output directory")); return; }
         if (!FParse::Value(FCommandLine::Get(), TEXT("UserDir="), S.Profile) || FPaths::IsRelative(S.Profile)) { FatalBeforeOutput(TEXT("An explicit absolute isolated -UserDir is mandatory")); return; }
         S.Output = FPaths::ConvertRelativePathToFull(S.Output); S.Profile = FPaths::ConvertRelativePathToFull(S.Profile);
-        S.SavePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Designs/Accepted.vcdesign"));
+        S.SavePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("VibeCoaster2/Designs/Accepted.vcdesign"));
         if (!FPaths::IsUnderDirectory(S.SavePath, S.Profile)) { FatalBeforeOutput(TEXT("Resolved save is outside the selected profile")); return; }
         S.LoadOnly = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyLoad"));
         const FString Marker = S.Profile / TEXT("coaster-verification-profile.txt");
@@ -154,9 +166,9 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeed="), S.Seed);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifyTerrain="), S.Terrain);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeat="), S.Seat);
-        if (S.Seat < 0 || S.Seat > 2 || S.Terrain != TEXT("flat")) { S.Fail(TEXT("Only flat ground is available; seat must be 0 front, 1 middle or 2 rear")); return; }
+        if (S.Seat < 0 || S.Seat > 2 || (S.Terrain != TEXT("flat") && S.Terrain != TEXT("highlands"))) { S.Fail(TEXT("Terrain must be flat/highlands; seat must be 0 front, 1 middle or 2 rear")); return; }
         S.Write(TEXT("environment.json"), TEXT("{\"utc\":") + Q(FDateTime::UtcNow().ToIso8601()) + TEXT(",\"engine\":") + Q(FEngineVersion::Current().ToString()) + TEXT(",\"cpu\":") + Q(FPlatformMisc::GetCPUBrand()) + TEXT(",\"os\":") + Q(FPlatformMisc::GetOSVersion()) + TEXT(",\"executable\":") + Q(FPlatformProcess::ExecutablePath()) + TEXT(",\"profile\":") + Q(S.Profile) + TEXT(",\"save\":") + Q(S.SavePath) + TEXT(",\"screenshots_enabled\":") + (S.Screenshots ? TEXT("true") : TEXT("false")) + TEXT("}\n"));
-        S.Event(TEXT("begin"), TEXT(",\"app_version\":") + Q(VibeCoasterAppVersion) + TEXT(",\"geometry_version\":") + Q(UTF8_TO_TCHAR(coaster::generatorVersion))); S.Advance(FState::DefaultView); return;
+        S.Event(TEXT("begin"), TEXT(",\"app_version\":") + Q(VibeCoasterAppVersion) + TEXT(",\"build_commit\":") + Q(UTF8_TO_TCHAR(COASTER_BUILD_COMMIT)) + TEXT(",\"geometry_version\":") + Q(UTF8_TO_TCHAR(coaster::generatorVersion))); S.Advance(FState::DefaultView); return;
     }
     if (!PC.Ride) { if (Now - S.Started > 30) S.Fail(TEXT("Runtime world did not become available")); else return; }
     if (S.Stage != FState::Finish && !S.Error.IsEmpty()) S.Advance(FState::Finish);
@@ -195,6 +207,7 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
     {
     case FState::DefaultView:
         PC.SeedText = S.Seed;
+        PC.Settings.targets.requireIntensity = true; // Exercise the unavailable-reference gate independently of the startup preset.
         if (PC.Settings.targets.requireIntensity && !std::isfinite(PC.Settings.targets.referenceExposure))
         {
             PC.RequestGeneration();
@@ -206,6 +219,7 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
     case FState::StartRequest:
         PC.Settings.targets.requireIntensity = false;
         PC.Settings.terrain = coaster::Terrain{};
+        PC.Settings.terrain.kind = S.Terrain == TEXT("highlands") ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat;
         if (S.LoadOnly) { S.SaveHash = HashFile(S.SavePath); PC.Ride->Load(); S.Event(TEXT("cross-process-load-requested")); }
         else { PC.RequestGeneration(); S.Event(TEXT("generation-requested"), TEXT(",\"seed\":") + Q(S.Seed) + TEXT(",\"terrain\":") + Q(S.Terrain)); }
         if (!S.LoadOnly && !PC.InputError.IsEmpty()) { S.Fail(PC.InputError); break; }
@@ -267,6 +281,33 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             {
                 for (double Offset : {-1., 0., 1.}) S.ShotTimes.Add(FMath::Clamp(LowPassTime + Offset, 0., S.Duration));
                 S.Event(TEXT("low-pass-landmark"), TEXT(",\"time_s\":") + N(LowPassTime) + TEXT(",\"centerline_ground_m\":") + N(LowPassHeight));
+            }
+            // Capture the actual new terrain chapters and visible physical hardware.
+            for (const auto& Section : D.sections)
+                if (Section.role == coaster::RideRole::Opening || Section.role == coaster::RideRole::CliffApproach || Section.role == coaster::RideRole::CliffDrop || Section.role == coaster::RideRole::Wave || Section.role == coaster::RideRole::Signature)
+                {
+                    const double Distance = (Section.start + Section.end) * .5;
+                    const auto Frame = std::lower_bound(D.simulation.frames.begin(), D.simulation.frames.end(), Distance,
+                        [](const coaster::Frame& F, double S) { return F.distance < S; });
+                    if (Frame != D.simulation.frames.end()) S.ShotTimes.Add(Frame->time);
+                }
+            for (const auto& Operation : D.operations)
+                if (Operation.kind == coaster::DriveKind::Boost || Operation.kind == coaster::DriveKind::Trim)
+                {
+                    const auto Frame = std::lower_bound(D.simulation.frames.begin(), D.simulation.frames.end(), (Operation.start + Operation.end) * .5,
+                        [](const coaster::Frame& F, double S) { return F.distance < S; });
+                    if (Frame != D.simulation.frames.end()) S.ShotTimes.Add(Frame->time);
+                }
+            for (const auto& Landmark : D.landmarks)
+            {
+                const double Distance = Landmark.distance - coaster::seatDistanceOffset(D.request.train, S.Seat);
+                const auto Frame = std::lower_bound(D.simulation.frames.begin(), D.simulation.frames.end(), Distance,
+                    [](const coaster::Frame& F, double At) { return F.distance < At; });
+                if (Frame != D.simulation.frames.end())
+                {
+                    S.ShotTimes.Add(Frame->time);
+                    S.Event(TEXT("authored-landmark"), TEXT(",\"name\":") + Q(UTF8_TO_TCHAR(coaster::landmarkName(Landmark.kind))) + TEXT(",\"time_s\":") + N(Frame->time) + TEXT(",\"distance_m\":") + N(Landmark.distance));
+                }
             }
             S.ShotTimes.Sort();
             for (int32 I = S.ShotTimes.Num() - 1; I > 0; --I) if (S.ShotTimes[I] - S.ShotTimes[I - 1] < .25) S.ShotTimes.RemoveAt(I);

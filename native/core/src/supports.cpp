@@ -3,20 +3,15 @@
 #include <queue>
 
 namespace coaster {
+namespace terrain_validation {double boxLowerBound(const StationBox&,const Terrain&,double);}
 namespace {
 struct FootingGeometry {Vec3 base,top;double radius;};
 FootingGeometry footing(Vec3 p,const Terrain& terrain,double broadRadius,double legRadius,bool shortBent){
-    const double ground=terrain.height(p.x,p.y);
-    double radius=broadRadius,slope=terrain.localSlopeBound(p.x,p.y,radius+2);
-    Vec3 base{p.x,p.y,ground-slope*radius-(shortBent?1.2:1.5)};
-    Vec3 top=shortBent?Vec3{p.x,p.y,ground+slope*radius+legRadius*(1+slope)+slope+.35}:
-        Vec3{p.x,p.y,ground+slope*radius+legRadius+.35};
+    double radius=broadRadius;auto ground=terrain.heightRange(p.x,p.y,radius);
+    Vec3 base{p.x,p.y,ground[0]-(shortBent?1.2:1.5)},top{p.x,p.y,terrain.heightRange(p.x,p.y,legRadius)[1]+.2};
     if(top.z-base.z>12){
-        // Narrow the footing if its calculated embedment exceeds 12 m.
-        radius=std::min(broadRadius,std::max(.9,legRadius*1.65));
-        slope=terrain.localSlopeBound(p.x,p.y,radius+2);
-        base.z=ground-slope*radius-1.5;
-        top.z=ground+std::max(slope*radius+.2,legRadius*(1+slope)+slope+.35);
+        radius=std::min(broadRadius,std::max(.9,legRadius*1.65));ground=terrain.heightRange(p.x,p.y,radius);
+        base.z=ground[0]-1.5;top.z=terrain.heightRange(p.x,p.y,legRadius)[1]+.2;
     }
     return {base,top,radius};
 }
@@ -25,20 +20,12 @@ Support compactBent(const TrackSample& q,Vec3 right,double distance,const Terrai
     const Vec3 attachment=q.position-q.up*(spineDepth+spineRadius);
     const double localHeight=attachment.z-terrain.height(attachment.x,attachment.y);
     // Short piers use shorter rail joints.
-    double standoff=paired?2.:std::clamp(localHeight-3.,.6,2.);
+    double standoff=paired?2.:std::clamp(localHeight*.15,.18,2.);
     Vec3 cap=attachment-q.up*standoff;
-    if(!paired&&standoff>.6&&cap.z-terrain.height(cap.x,cap.y)<3){
-        // Tilt moves the cap onto different terrain. Shorten the neck at its
-        // actual ground location instead of relaxing the pier-height minimum.
-        double lower=.6,upper=standoff;
-        for(int i=0;i<32;++i){double mid=(lower+upper)*.5;Vec3 trial=attachment-q.up*mid;
-            if(trial.z-terrain.height(trial.x,trial.y)>=3)lower=mid;else upper=mid;}
-        standoff=lower;cap=attachment-q.up*standoff;
-    }
     const Vec3 centre{cap.x,cap.y,terrain.height(cap.x,cap.y)};
     Support s{centre,cap,attachment,true,distance,{}};
     const double height=cap.z-centre.z;
-    if(height<3||height>(paired?90.:22.)||q.up.z<(paired?.65:.92)||std::abs(q.tangent.z)>(paired?.65:.35))return s;
+    if(height<=0||height>(paired?90.:22.)||q.up.z<=0)return s;
     const double radiusBase=paired?.28+height*.004:.24+height*.009;
     const double radiusTop=paired?.20+height*.001:.18+height*.002;
     const double footingRadius=.85+radiusBase*1.8;
@@ -49,7 +36,7 @@ Support compactBent(const TrackSample& q,Vec3 right,double distance,const Terrai
     for(int side=0;side<(paired?2:1);++side){
         const Vec3 p=centre+right*(side?halfWidth:-halfWidth);
         const auto foundation=footing(p,terrain,footingRadius,radiusBase,true);
-        if(cap.z-foundation.top.z<1)return Support{centre,cap,attachment,true,distance,{}};
+        if(cap.z-foundation.top.z<=.05)return Support{centre,cap,attachment,true,distance,{}};
         add(foundation.base,foundation.top,foundation.radius,foundation.radius,SupportMemberKind::Footing);
         add(foundation.top,cap,radiusBase,radiusTop);
     }
@@ -127,31 +114,34 @@ ValidationReport validateSupportMembers(const Support& support,const Terrain& te
             if(m.kind!=SupportMemberKind::Steel||norm(m.top-support.attachment)>1e-5||m.radiusTop>supportRadius+1e-9||radius>.35||length>100){r.fail("SUPPORT_JOINT","Only a bounded steel endpoint may meet the verified own spine contact");return r;}
         }
         if(m.kind==SupportMemberKind::Footing){
-            ++footings;const double ground=terrain.height(m.base.x,m.base.y);
+            ++footings;const auto ground=terrain.heightRange(m.base.x,m.base.y,radius+std::hypot(m.top.x-m.base.x,m.top.y-m.base.y));
             const double horizontalDrift=std::hypot(m.top.x-m.base.x,m.top.y-m.base.y);
             // Include the accepted tiny axis tilt in both the entire XY query
             // disk and each cap's vertical extent. Exactly vertical generated
             // footings retain precisely their former enclosure and tolerance.
-            const double footprintRadius=radius+horizontalDrift;
-            const double slope=terrain.localSlopeBound(m.base.x,m.base.y,footprintRadius);
             const double baseCapRise=m.radiusBase*horizontalDrift/length;
             const double topCapFall=m.radiusTop*horizontalDrift/length;
-            // Only footings may intersect terrain; their full solid must anchor.
+            // Foundations may be partly buried on a slope. Their full lower cap
+            // anchors below soil; exposed steel is checked independently.
             if(m.spineContact||horizontalDrift>1e-6||m.top.z<=m.base.z||length>12||radius<.5||
-               m.base.z+baseCapRise>ground-slope*footprintRadius-.5+1e-6||
-               m.top.z-topCapFall<ground+slope*footprintRadius+.2-1e-6){r.fail("SUPPORT_FOOTING","Footing full shape is not terrain anchored within its supported domain");return r;}
+               m.base.z+baseCapRise>ground[0]-.5+1e-6||
+               m.top.z-topCapFall<terrain.height(m.top.x,m.top.y)-1e-6){r.fail("SUPPORT_FOOTING","Footing full shape is not terrain anchored within its supported domain");return r;}
         }else{
             if(radius>2){r.fail("SUPPORT_MEMBER_CONFIG","Steel member radius exceeds the prototype bound");return r;}
-            int count=std::max(1,int(std::ceil(length/2)));
-            // A max-radius capsule conservatively encloses the tapered solid. The
-            // slope bound covers terrain between probes and across the full radius.
-            for(int k=0;k<=count;++k){
+            const int count=std::max(1,int(std::ceil(length/2)));
+            for(int k=0;k<count;++k){
                 if((k&31)==0&&cancel&&cancel()){r.fail("CANCELLED","Steel terrain validation cancelled");return r;}
-                Vec3 p=m.base+(m.top-m.base)*(double(k)/count);
-                const double slope=terrain.localSlopeBound(p.x,p.y,radius+length/count*.5);
-                double interpolationMargin=slope*length/count*.5;
-                if(p.z-terrain.height(p.x,p.y)<radius*(1+slope)+interpolationMargin-1e-6){r.fail("SUPPORT_TERRAIN","Steel solid intersects the conservative terrain envelope");return r;}
+                const Vec3 a=m.base+(m.top-m.base)*(double(k)/count),b=m.base+(m.top-m.base)*(double(k+1)/count),middle=(a+b)*.5;
+                const double footprint=radius+std::hypot(b.x-a.x,b.y-a.y)*.5;
+                const double radialZ=radius*std::hypot(m.top.x-m.base.x,m.top.y-m.base.y)/length;
+                const auto ground=terrain.heightRange(middle.x,middle.y,footprint);
+                if(std::min(a.z,b.z)-radialZ<ground[1]-1e-6){
+                    const Vec3 axis=unit(b-a),right=unit(cross(axis,std::abs(axis.z)<.9?Vec3{0,0,1}:Vec3{0,1,0})),up=cross(axis,right);
+                    const StationBox box{middle,axis,right,up,{norm(b-a)*.5,radius,radius},StationRole::Post};
+                    if(terrain_validation::boxLowerBound(box,terrain,0)<-1e-6){r.fail("SUPPORT_TERRAIN","Steel solid intersects the terrain enclosure");return r;}
+                }
             }
+
         }
     }
     if(contacts!=1||footings<1||footings>8){r.fail("SUPPORT_CONNECTIVITY","Explicit support needs exactly one spine joint and one to eight footings");return r;}
@@ -173,43 +163,70 @@ void buildSupportLayout(Design& d,Cancel cancel){
     size_t totalMembers=0;
     for(double distance=0;distance<d.track.length;){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
-        const auto q=d.track.sample(distance);Vec3 right=unit({q.right.x,q.right.y,0});
-        if(norm(right)<.5)right=unit(Vec3{q.tangent.y,-q.tangent.x,0});
-        Vec3 attachment=q.position-q.up*(spineDepth+spineRadius);bool placed=false;
-        const auto tryPlace=[&](Support support){
-            if(cancel&&cancel())throw std::runtime_error("CANCELLED");
-            if(support.members.empty())return false;
-            auto valid=validateSupportMembers(support,d.request.terrain,cancel);
-            if(!valid.valid())return false;
-            if(supportStationCollision(support,d.station,cancel))return false;
-            int hit=supportCollision(support,sweep,cancel);if(hit==-2)throw std::runtime_error("CANCELLED");
-            if(hit>=0)return false;
-            totalMembers+=support.members.size();
-            if(totalMembers>maxTotalSupportMembers)throw std::runtime_error("SUPPORT_MEMBER_BUDGET");
-            d.supports.push_back(std::move(support));return true;
+        double blockedAt=0;std::string failure;
+        auto placeAt=[&](double site){
+            const auto q=d.track.sample(site);Vec3 right=unit({q.right.x,q.right.y,0});
+            if(norm(right)<.5)right=unit(Vec3{q.tangent.y,-q.tangent.x,0});
+            Vec3 attachment=q.position-q.up*(spineDepth+spineRadius);bool placed=false;
+            const auto tryPlace=[&](Support support){
+                if(cancel&&cancel())throw std::runtime_error("CANCELLED");
+                if(support.members.empty()){failure="empty support";return false;}
+                auto valid=validateSupportMembers(support,d.request.terrain,cancel);
+                if(!valid.valid()){failure=valid.errors.front().code;return false;}
+                if(supportStationCollision(support,d.station,cancel)){failure="station";return false;}
+                int hit=supportCollision(support,sweep,cancel);if(hit==-2)throw std::runtime_error("CANCELLED");
+                if(hit>=0){failure="swept member collision";blockedAt=sweep.frames()[size_t(hit)].distance;return false;}
+                totalMembers+=support.members.size();
+                if(totalMembers>maxTotalSupportMembers)throw std::runtime_error("SUPPORT_MEMBER_BUDGET");
+                d.supports.push_back(std::move(support));return true;
+            };
+            // Try a single post, then a paired bent, before taller supports.
+            placed=tryPlace(compactBent(q,right,site,d.request.terrain,false));
+            if(!placed)placed=tryPlace(compactBent(q,right,site,d.request.terrain,true));
+            // Try centred and nearby towers before larger cantilever offsets.
+            if(!placed&&q.up.z>.65){
+                const double height=attachment.z-d.request.terrain.height(attachment.x,attachment.y);
+                const double nearOffset=std::clamp(height*.025,3.,8.);
+                for(double offset:{0.,nearOffset,-nearOffset}){
+                    if(tryPlace(tower(attachment,right,q.up,q.right,offset,site,d.request.terrain,d.station.enabled))){placed=true;break;}
+                }
+            }
+            if(!placed)for(double offset:{12.,-12.,18.,-18.,26.,-26.,36.,-36.,48.,-48.}){
+                if(tryPlace(tower(attachment,right,q.up,q.right,offset,site,d.request.terrain,d.station.enabled))){placed=true;break;}
+            }
+            // A cliff face may leave no lateral foundation site. Fore/aft
+            // cantilevers move the foundations onto real level ground while
+            // preserving exactly the same solid and rider checks.
+            if(!placed){const Vec3 longitudinal=unit(Vec3{q.tangent.x,q.tangent.y,0});
+                for(double offset:{12.,-12.,18.,-18.,26.,-26.,36.,-36.,48.,-48.})
+                    if(tryPlace(tower(attachment,longitudinal,q.up,longitudinal,offset,site,d.request.terrain,d.station.enabled))){placed=true;break;}}
+            // On a cliff, move both away from the face and sideways from the
+            // lower track. These candidates use the same full solid checks.
+            if(!placed){const Vec3 longitudinal=unit(Vec3{q.tangent.x,q.tangent.y,0});
+                for(double offset:{18.,26.,36.,48.}){for(double side:{-1.,1.})for(double forward:{-1.,1.})for(double standoff:{2.,6.,10.}){
+                    const Vec3 outward=unit(right*side+longitudinal*forward);
+                    if(!placed&&tryPlace(tower(attachment,right,q.up,outward,offset,site,d.request.terrain,d.station.enabled,standoff)))placed=true;
+                }if(placed)break;}}
+            // Larger under-spine standoffs provide additional rider clearance during rolls.
+            if(!placed)for(double standoff:{6.,10.}){
+                for(double offset:{12.,-12.,18.,-18.,26.,-26.,36.,-36.,48.,-48.}){
+                    if(tryPlace(tower(attachment,right,q.up,q.right,offset,site,d.request.terrain,d.station.enabled,standoff))){placed=true;break;}
+                }
+                if(placed)break;
+            }
+            return placed;
         };
-        // Try a single post, then a paired bent, before taller supports.
-        placed=tryPlace(compactBent(q,right,distance,d.request.terrain,false));
-        if(!placed)placed=tryPlace(compactBent(q,right,distance,d.request.terrain,true));
-        // Try centred and nearby towers before larger cantilever offsets.
-        if(!placed&&q.up.z>.65){
-            const double height=attachment.z-d.request.terrain.height(attachment.x,attachment.y);
-            const double nearOffset=std::clamp(height*.025,3.,8.);
-            for(double offset:{0.,nearOffset,-nearOffset}){
-                if(tryPlace(tower(attachment,right,q.up,q.right,offset,distance,d.request.terrain,d.station.enabled))){placed=true;break;}
-            }
+        bool placed=placeAt(distance);
+        // Attachment stations are a placement corridor, not an immutable grid.
+        // Move at most four metres, retaining the maximum structural span and
+        // checking the same complete rider, rail, footing and station envelopes.
+        if(!placed)for(double shift:{-1.,1.,-2.,2.,-3.,3.,-4.,4.}) {
+            const double site=distance+shift,previous=d.supports.empty()?0:d.supports.back().trackDistance;
+            if(site<=previous+1||site>=d.track.length||site-previous>40)continue;
+            if(placeAt(site)){distance=site;placed=true;break;}
         }
-        if(!placed)for(double offset:{12.,-12.,18.,-18.,26.,-26.,36.,-36.,48.,-48.}){
-            if(tryPlace(tower(attachment,right,q.up,q.right,offset,distance,d.request.terrain,d.station.enabled))){placed=true;break;}
-        }
-        // Larger under-spine standoffs provide additional rider clearance during rolls.
-        if(!placed)for(double standoff:{6.,10.}){
-            for(double offset:{12.,-12.,18.,-18.,26.,-26.,36.,-36.,48.,-48.}){
-                if(tryPlace(tower(attachment,right,q.up,q.right,offset,distance,d.request.terrain,d.station.enabled,standoff))){placed=true;break;}
-            }
-            if(placed)break;
-        }
-        if(!placed)throw std::runtime_error("No validated connected tower placement at distance "+std::to_string(distance)+", rail height "+std::to_string(q.position.z-d.request.terrain.height(q.position.x,q.position.y))+", up.z "+std::to_string(q.up.z));
+        const auto q=d.track.sample(distance);const auto attachment=q.position-q.up*(spineDepth+spineRadius);
+        if(!placed)throw std::runtime_error("No validated support placement near "+std::to_string(distance)+"; last conflicting track station="+std::to_string(blockedAt)+"; last reason="+failure+"; rail="+std::to_string(q.position.z)+"; ground="+std::to_string(d.request.terrain.height(q.position.x,q.position.y)));
         // Curvature and frame-rate look-ahead set support spacing, capped at 40 m.
         double curvature=0,frameRate=0;
         for(double ahead:{0.,10.,20.,30.,40.}){

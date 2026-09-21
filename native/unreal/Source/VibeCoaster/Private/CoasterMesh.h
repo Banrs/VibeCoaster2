@@ -26,13 +26,18 @@ struct FStationInstance
     EStationInstanceKind Kind = EStationInstanceKind::CubeSteel;
     int32 SourceBoxIndex = INDEX_NONE;
 };
+struct FTrimFin {size_t Operation{};int32 Instance{};FTransform Retracted;FVector Travel;double Presented = -1;};
 struct FPreparedRide
 {
     std::shared_ptr<const coaster::Design> Design;
     TArray<FChunk> Chunks;
-    TArray<FTransform> Ties, Supports;
+    TArray<FTransform> Ties, Supports, LSMHardware, BrakeHardware;
     TArray<FStationInstance> Station;
+    TArray<FTrimFin> TrimFins;
     FBox Bounds{ForceInit};
+    // SI XY rectangle retaining exact 8m source triangles for highlands. All
+    // track, occupied-envelope, support and station interaction lies inside.
+    std::array<double,4> GroundExactBounds{};
     FString Error;
     uint64 Revision = 0;
 };

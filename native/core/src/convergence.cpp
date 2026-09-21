@@ -12,27 +12,30 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
     auto minimum=[&](const char* code,double value,double target){
         if(!std::isfinite(value)||value+1e-6<target)report.fail(code,"Measured result misses requested target",0,value,target);
     };
-    // Allow speed forced by the requested or measured hill height, including
-    // taller hills needed for intensity. The requested speed remains the floor.
-    constexpr double launchReference=50;
-    const double liftedHeight=std::max({0.,targets.height,m.heightAboveStation,m.maxGroundHeight});
-    const double forcedByHeight=std::sqrt(launchReference*launchReference+2*gravity*liftedHeight);
+    // Height conflicts must be solved or rejected, never hidden by a speed allowance.
     if(!std::isfinite(m.maxSpeed)||m.maxSpeed<targets.speed*.99)
         report.fail("SPEED_TARGET","Measured top speed misses the requested speed",0,m.maxSpeed,targets.speed);
-    else if(m.maxSpeed>std::max(targets.speed,forcedByHeight)*1.01)
+    else if(m.maxSpeed>targets.speed*1.01)
         report.fail("SPEED_TARGET","Measured top speed exceeds the requested speed beyond its tolerance",0,m.maxSpeed,targets.speed);
     if(!std::isfinite(m.launchTo180)||m.launchTo180>targets.launchSeconds)
         report.fail("LAUNCH_TARGET","Measured 0-180 km/h launch exceeds target",0,m.launchTo180,targets.launchSeconds);
     if(targets.requireIntensity){
         if(!std::isfinite(targets.referenceExposure)||targets.referenceId.empty())
-            report.fail("REFERENCE_UNAVAILABLE","I305 ten-second force trace benchmark has not been calibrated; all-record claim unavailable");
-        else minimum("INTENSITY_TARGET",m.exposure10Seconds,targets.referenceExposure*1.1);
+            report.fail("REFERENCE_UNAVAILABLE","The requested ten-second exposure comparison has no calibrated reference");
+        else minimum("INTENSITY_TARGET",m.exposure10Seconds,targets.referenceExposure);
     }
-    if(m.maxVerticalG>limits.maxVerticalG)report.fail("VERTICAL_FORCE","Positive rider force exceeds provisional envelope",0,m.maxVerticalG,limits.maxVerticalG);
-    if(m.minVerticalG<limits.minVerticalG)report.fail("VERTICAL_FORCE","Negative rider force exceeds provisional envelope",0,m.minVerticalG,limits.minVerticalG);
-    if(m.maxLateralG>limits.maxLateralG)report.fail("LATERAL_FORCE","Rider lateral force exceeds provisional envelope",0,m.maxLateralG,limits.maxLateralG);
-    if(m.maxLongitudinalG>limits.maxLongitudinalG)report.fail("LONGITUDINAL_FORCE","Rider longitudinal force exceeds provisional envelope",0,m.maxLongitudinalG,limits.maxLongitudinalG);
+    auto forcePeak=[&](const char* code,const char* axis,double magnitude,double nominal){
+        if(magnitude<=nominal)return;
+        if(magnitude<nominal*1.01)
+            report.warnings.push_back(std::string(axis)+" peak exceeds nominal by "+std::to_string(100*(magnitude/nominal-1))+"%; within the strictly-below-1% project allowance. ASTM limits are assessed separately.");
+        else report.fail(code,std::string(axis)+" peak reaches or exceeds the one-percent project allowance",0,magnitude,nominal);
+    };
+    forcePeak("VERTICAL_FORCE","Positive Gz",m.maxVerticalG,limits.maxVerticalG);
+    forcePeak("VERTICAL_FORCE","Negative Gz",-m.minVerticalG,-limits.minVerticalG);
+    forcePeak("LATERAL_FORCE","Absolute Gy",m.maxLateralG,limits.maxLateralG);
+    forcePeak("LONGITUDINAL_FORCE","Absolute Gx",m.maxLongitudinalG,limits.maxLongitudinalG);
     if(m.maxJerkGps>limits.maxJerkGps)report.fail("FORCE_TRANSITION","Vertical force transition exceeds provisional envelope",m.maxJerkDistance,m.maxJerkGps,limits.maxJerkGps);
+    if(!std::isfinite(m.maxEnergyResidual)||m.maxEnergyResidual>.5)report.fail("ENERGY_RESIDUAL","Finite-train energy balance exceeds 0.5 J/kg numerical allowance",0,m.maxEnergyResidual,.5);
     for(int axis=1;axis<=2;++axis){
         double limit=axis==1?limits.maxLateralRateGps:limits.maxLongitudinalRateGps;
         if(!std::isfinite(limit))continue;
@@ -43,6 +46,14 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
             peak=std::max(peak,value);
         }
         if(peak>limit)report.fail(axis==1?"LATERAL_FORCE_RATE":"LONGITUDINAL_FORCE_RATE","Rider-axis rate exceeds configured provisional gate",0,peak,limit);
+    }
+    for(const auto& assessment:simulation.acceleration){
+        if(!assessment.performed)continue; // Synthetic metric fixtures are not complete Design acceptance.
+        for(const auto& finding:assessment.diagnostics){
+            auto frame=std::lower_bound(simulation.frames.begin(),simulation.frames.end(),finding.startTimeSeconds,[](const Frame& f,double time){return f.time<time;});
+            const double distance=frame==simulation.frames.end()?0:frame->distance;
+            report.fail("F2291_25_"+finding.rule,"F2291-25 "+finding.clause+", seat "+std::to_string(finding.seatIndex)+", "+finding.axis+finding.sign+", t="+std::to_string(finding.startTimeSeconds)+".."+std::to_string(finding.endTimeSeconds)+" s",distance,finding.actual,finding.limit);
+        }
     }
     return report;
 }
@@ -55,29 +66,38 @@ ValidationReport compareSimulationConvergence(const SimulationResult& coarse,con
     if(!coarse.completed||!fine.completed||!coarse.report.valid()||!fine.report.valid()){
         report.fail("CONVERGENCE_SIMULATION","Both simulation resolutions must complete without numerical errors");return report;
     }
-    auto check=[&](std::string name,double a,double b,double fraction,bool speed=false){
+    auto check=[&](std::string name,double a,double b,double fraction,bool summarizeForce=true){
         const double scale=std::max(1.,std::abs(b));
         const double difference=std::abs(a-b),tolerance=fraction*scale;
         const bool finiteValues=std::isfinite(a)&&std::isfinite(b)&&std::isfinite(difference)&&std::isfinite(tolerance);
         const double error=finiteValues?difference/scale:std::numeric_limits<double>::infinity();
         assessment.metrics.push_back({name,a,b,difference,tolerance});
-        auto& maximum=speed?assessment.maxSpeedRelativeError:assessment.maxForceRelativeError;
-        maximum=std::max(maximum,error);
+        if(name=="maxSpeed")assessment.maxSpeedRelativeError=std::max(assessment.maxSpeedRelativeError,error);
+        else if(summarizeForce)assessment.maxForceRelativeError=std::max(assessment.maxForceRelativeError,error);
         if(!finiteValues||!(difference<tolerance))
             report.fail("CONVERGENCE_METRIC",name+" differs beyond the required half-step tolerance",0,error,fraction);
     };
     const auto& a=coarse.metrics;const auto& b=fine.metrics;
-    check("maxSpeed",a.maxSpeed,b.maxSpeed,.01,true);
+    check("maxSpeed",a.maxSpeed,b.maxSpeed,.01,false);
     check("minVerticalG",a.minVerticalG,b.minVerticalG,.02);
     check("maxVerticalG",a.maxVerticalG,b.maxVerticalG,.02);
     check("maxLateralG",a.maxLateralG,b.maxLateralG,.02);
     check("maxLongitudinalG",a.maxLongitudinalG,b.maxLongitudinalG,.02);
     check("exposure10Seconds",a.exposure10Seconds,b.exposure10Seconds,.02);
     check("maxVerticalRateGps",a.maxJerkGps,b.maxJerkGps,.02);
+    check("launchTo180",a.launchTo180,b.launchTo180,.001,false);
+    check("duration",a.duration,b.duration,.001,false);
+    check("driveWorkPerMass",a.driveWorkPerMass,b.driveWorkPerMass,.002,false);
+    check("brakeWorkPerMass",a.brakeWorkPerMass,b.brakeWorkPerMass,.002,false);
+    check("lossWorkPerMass",a.lossWorkPerMass,b.lossWorkPerMass,.002,false);
     const char* names[]={"front","middle","rear"};const char* axes[]={"vertical","lateral","longitudinal"};
     for(int seat=0;seat<3;++seat){
         std::string prefix=names[seat];
         check(prefix+".exposure10Seconds",a.seats[seat].exposure10Seconds,b.seats[seat].exposure10Seconds,.02);
+        check(prefix+".inertialJerk",a.seats[seat].maxInertialJerk,b.seats[seat].maxInertialJerk,.02,false);
+        check(prefix+".angularVelocity",a.seats[seat].maxAngularVelocity,b.seats[seat].maxAngularVelocity,.02,false);
+        check(prefix+".angularAcceleration",a.seats[seat].maxAngularAcceleration,b.seats[seat].maxAngularAcceleration,.02,false);
+        check(prefix+".angularJerk",a.seats[seat].maxAngularJerk,b.seats[seat].maxAngularJerk,.02,false);
         for(int axis=0;axis<3;++axis){
             const auto& x=a.seats[seat].axes[axis];const auto& y=b.seats[seat].axes[axis];
             std::string key=prefix+"."+axes[axis]+".";

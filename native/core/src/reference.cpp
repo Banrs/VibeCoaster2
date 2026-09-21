@@ -98,7 +98,7 @@ bool ComparisonHistory::commit(const Design& d){if(!d.accepted())return false;pr
 std::vector<std::string> comparisonLines(const Design& d,const RideSummary* previous){
     const auto& m=d.simulation.metrics;const auto& t=d.request.targets;std::vector<std::string> out={"Current accepted: seed "+std::to_string(d.request.seed)+" / "+d.request.terrain.name()};auto reference=referenceLines(t);out.insert(out.end(),reference.begin(),reference.end());
     out.push_back("Generated exposure: maximum of physical front/middle/rear seats; reference seat shown above.");
-    if(std::isfinite(t.referenceExposure)){double target=t.referenceExposure*1.1;out.push_back("10s exposure "+fixed(m.exposure10Seconds)+" / target "+fixed(target)+" g*s | margin "+fixed(m.exposure10Seconds-target)+" ("+fixed((m.exposure10Seconds/target-1)*100)+"%)");}
+    if(std::isfinite(t.referenceExposure)){double target=t.referenceExposure;out.push_back("10s exposure "+fixed(m.exposure10Seconds)+" / selected reference "+fixed(target)+" g*s | difference "+fixed(m.exposure10Seconds-target)+" ("+fixed((m.exposure10Seconds/target-1)*100)+"%)");}
     else out.push_back("10s exposure "+fixed(m.exposure10Seconds)+" g*s | reference comparison unavailable");
     out.push_back("Height above ground "+fixed(m.maxGroundHeight)+" / "+fixed(t.height)+" m | inversion apex above ground "+fixed(m.inversionGroundHeight)+" / "+fixed(t.inversionHeight)+" m");
     for(size_t i=0;i<std::min<size_t>(8,d.inversionDimensions.size());++i){const auto& x=d.inversionDimensions[i];

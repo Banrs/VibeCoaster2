@@ -32,7 +32,7 @@ template<size_t N>static std::pair<double,double> bounds(const std::array<double
     return {lo,hi};
 }
 std::pair<double,double> polynomialBounds(const std::array<double,8>& coefficients){return bounds(coefficients);}
-std::vector<InversionDimensions> measureInversionDimensions(const Track& track,Cancel cancel){
+static std::vector<InversionDimensions> measureDimensions(const Track& track,const std::vector<RideSection>* sections,Cancel cancel){
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
     size_t n=track.spans.size();
     if(!n||n>200000||track.knots.size()!=n+1||!std::isfinite(track.length)||track.length<=0||track.length>150000)throw std::runtime_error("Invalid canonical dimension input");
@@ -41,16 +41,26 @@ std::vector<InversionDimensions> measureInversionDimensions(const Track& track,C
         for(auto c:sp.c)if(!finite(c))throw std::runtime_error("Nonfinite canonical dimension span");end=sp.start+sp.length;
     }
     if(std::abs(end-track.length)>1e-6)throw std::runtime_error("Invalid canonical dimension length");
-    size_t start=0;if(track.closed)for(size_t i=0;i<n;++i)if(track.knots[i].element!=Element::Inversion){start=(i+1)%n;break;}
+    std::vector<const RideSection*> owners(n);
+    if(sections){
+        double prior=0;for(const auto& s:*sections){if(!std::isfinite(s.start)||!std::isfinite(s.end)||std::abs(s.start-prior)>1e-6||s.end<=s.start||s.end>track.length+1e-6||!validIdentifier(s.recipeId))throw std::runtime_error("Invalid typed dimension sections");prior=s.end;}
+        if(std::abs(prior-track.length)>1e-6)throw std::runtime_error("Typed dimension sections do not cover the track");
+        size_t j=0;for(size_t i=0;i<n;++i){while(j+1<sections->size()&&track.spans[i].start>=(*sections)[j].end-1e-8)++j;owners[i]=&(*sections)[j];}
+    }
+    auto inverted=[&](size_t i){return sections?(owners[i]->role==RideRole::Loop||owners[i]->role==RideRole::Immelmann):track.knots[i].element==Element::Inversion;};
+    size_t start=0;if(track.closed)for(size_t i=0;i<n;++i)if(!inverted(i)){start=(i+1)%n;break;}
     std::vector<InversionDimensions> result;bool active=false;std::array<double,3> low{},high{};size_t lastIndex=0;
     auto finish=[&](){auto& d=result.back();d.verticalMinimum=low[2];d.verticalMaximum=high[2];d.verticalExtent=high[2]-low[2];d.forwardExtent=high[0]-low[0];d.lateralExtent=high[1]-low[1];};
     for(size_t k=0;k<n;++k){if((k&127)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");size_t i=(start+k)%n;const auto& sp=track.spans[i];
-        if(track.knots[i].element!=Element::Inversion){if(active)finish();active=false;continue;}
-        if(!active){InversionDimensions d;d.startDistance=sp.start;d.horizontalForward=unit(Vec3{sp.c[1].x,sp.c[1].y,0});d.horizontalAxisFallback=norm(d.horizontalForward)<.5;if(d.horizontalAxisFallback)d.horizontalForward={1,0,0};d.horizontalRight=cross(d.horizontalForward,{0,0,1});result.push_back(d);low.fill(INFINITY);high.fill(-INFINITY);active=true;}
+        if(!inverted(i)){if(active)finish();active=false;continue;}
+        if(active&&sections&&owners[i]->recipeId!=result.back().recipeId){finish();active=false;}
+        if(!active){InversionDimensions d;if(sections){d.role=owners[i]->role;d.recipeId=owners[i]->recipeId;}d.startDistance=sp.start;d.horizontalForward=unit(Vec3{sp.c[1].x,sp.c[1].y,0});d.horizontalAxisFallback=norm(d.horizontalForward)<.5;if(d.horizontalAxisFallback)d.horizontalForward={1,0,0};d.horizontalRight=cross(d.horizontalForward,{0,0,1});result.push_back(d);low.fill(INFINITY);high.fill(-INFINITY);active=true;}
         auto& d=result.back();if(d.pathLength>0&&i<lastIndex)d.wrapsSeam=true;lastIndex=i;d.pathLength+=sp.length;d.endDistance=sp.start+sp.length;
         std::array<Vec3,3> axes{d.horizontalForward,d.horizontalRight,Vec3{0,0,1}};
         for(size_t a=0;a<3;++a){std::array<double,10> c;for(size_t j=0;j<c.size();++j)c[j]=dot(sp.c[j],axes[a]);auto [lo,hi]=bounds(c);low[a]=std::min(low[a],lo);high[a]=std::max(high[a],hi);}
     }
     if(active)finish();return result;
 }
+std::vector<InversionDimensions> measureInversionDimensions(const Track& track,Cancel cancel){return measureDimensions(track,nullptr,cancel);}
+std::vector<InversionDimensions> measureInversionDimensions(const Track& track,const std::vector<RideSection>& sections,Cancel cancel){return measureDimensions(track,&sections,cancel);}
 }

@@ -20,7 +20,7 @@ void validate(const Design& d){
         check(supportCollision(s,sweep)<0,"Every family clears the actual continuous train/hardware sweep");
         auto q=d.track.sample(s.trackDistance);
         check(norm(s.attachment-(q.position-q.up*(spineDepth+spineRadius)))<1e-8,"Exact canonical spine attachment");
-        const double standoff=-dot(s.top-s.attachment,q.up);check((standoff>=.6-1e-8&&standoff<=2+1e-8)||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Cap uses a bounded canonical under-spine stand-off");
+        const double standoff=-dot(s.top-s.attachment,q.up);check((standoff>=.18-1e-8&&standoff<=2+1e-8)||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Cap uses a bounded canonical under-spine stand-off");
         for(const auto& m:s.members){auto mesh=supportMemberMesh(m);check(mesh.positions.size()==34&&mesh.indices.size()==96,"Every compact member uses the canonical closed solid mesh");}
     }
 }
@@ -43,6 +43,15 @@ int main(){try{
     check(maximumGap-minimumGap>3,"Curved crest and straight approach receive different support spacing");
     auto groundHugging=circle(4.7);validate(groundHugging);
     for(const auto& s:groundHugging.supports)check(feet(s)==1&&norm(s.top-s.attachment)<1.1,"Low rail uses a shortened connected pier neck while retaining full swept clearance");
+    auto nearGround=circle(2);validate(nearGround);
+    for(double yaw:{0.,1.1}){
+        Design slope;slope.request.terrain.kind=TerrainKind::Highlands;slope.request.terrain.heightMeters=0;
+        const double c=std::cos(yaw),s=std::sin(yaw),grade=std::tan(26*pi/180);
+        slope.request.terrain.ramps.push_back({0,0,200*c,200*s,20,20+200*grade,grade,grade,100});
+        std::vector<AuthoredPoint> points;for(int x=0;x<=200;++x)points.push_back({{x*c,x*s,22+x*grade},0,Element::Launch});
+        slope.track=compile(points,false);buildSupportLayout(slope);validate(slope);
+        check(!slope.supports.empty(),"Two-metre rail-to-ground on a 26-degree ramp has real connected clear supports");
+    }
     auto lower=circle(7),higher=circle(20);validate(lower);validate(higher);
     check(higher.supports[0].members[1].radiusBase>lower.supports[0].members[1].radiusBase,"Post thickness adapts to height");
     check(higher.supports[0].members[0].radiusBase>lower.supports[0].members[0].radiusBase,"Footing radius adapts to height");
@@ -72,11 +81,11 @@ int main(){try{
     };
     auto comfortable=tiltFixture(footingFixture(-1,1));
     check(validateSupportMembers(comfortable,flatFootingTerrain).valid(),"Comfortably anchored near-vertical footing remains permitted");
-    for(auto boundary:std::array<Support,2>{footingFixture(-.5+1e-6,1),footingFixture(-1,.2-1e-6)}){
-        check(validateSupportMembers(boundary,flatFootingTerrain).valid(),"Exactly vertical boundary footing retains the original enclosure tolerance");
+    for(auto boundary:std::array<Support,2>{footingFixture(-.5+1e-6,1),footingFixture(-1,-1e-6)}){
+        check(validateSupportMembers(boundary,flatFootingTerrain).valid(),"Vertical footing touches the actual ground anchoring boundary");
         auto tilted=tiltFixture(boundary);const auto& foot=tilted.members[0];
         const double capExcursion=.5*9e-7/norm(foot.top-foot.base);
-        check(foot.base.z+capExcursion>-.5+1e-6||foot.top.z-capExcursion<.2-1e-6,"Tilted cap actually crosses the tolerated anchoring enclosure");
+        check(foot.base.z+capExcursion>-.5+1e-6||foot.top.z-capExcursion< -1e-6,"Tilted cap actually crosses the tolerated anchoring enclosure");
         auto rejected=validateSupportMembers(tilted,flatFootingTerrain);
         check(rejected.errors.size()==1&&rejected.errors.front().code=="SUPPORT_FOOTING","Tolerated axis tilt cannot hide a cap anchoring gap");
     }

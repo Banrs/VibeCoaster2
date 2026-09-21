@@ -29,13 +29,13 @@ int main(int argc,char** argv){try{
  Design d;std::string error;
  if(argc>1)check(loadDesign(argv[1],d,error),"Accepted fixture loads");
  else{GenerationRequest r;r.targets.requireIntensity=false;d=generate(r);check(d.accepted(),"Proof fixture generates");}
- const fs::path folder=argc>2?fs::path(argv[2]):fs::temp_directory_path()/"coaster-persistence-cancel-tests";
+ const fs::path folder=argc>2?fs::path(argv[2]):fs::current_path()/"persistence-cancel-test-output";
  fs::create_directories(folder);const auto dest=folder/"existing.coaster",tmp=folder/"existing.coaster.tmp",other=folder/"unrelated.tmp";
  const std::string sentinel="PREVIOUS SAVE MUST SURVIVE\n",unrelated="UNRELATED TEMP MUST SURVIVE\n";
  // Learn the final checkpoints from a successful control. Inspect the actual
  // temporary at the final callback, without scanning disk during every physics step.
- int totalCalls=0;check(saveDesign(d,dest.string(),error,[&]{++totalCalls;return false;}),"Uncancelled save commits");
- const auto committed=read(dest);check(committed.rfind("COASTER 5 ",0)==0,"Committed save retains COASTER5 format");check(totalCalls>=2,"Both final checkpoints were polled");
+ int totalCalls=0;const bool initialSaved=saveDesign(d,dest.string(),error,[&]{++totalCalls;return false;});if(!initialSaved)std::cerr<<error<<"\n";check(initialSaved,"Uncancelled save commits");
+ const auto committed=read(dest);check(committed.rfind("COASTER 6 ",0)==0,"Committed save retains COASTER6 format");check(totalCalls>=2,"Both final checkpoints were polled");
  // This targets the real late boundary without sleeps or thread scheduling.
  write(dest,sentinel);write(other,unrelated);fs::remove(tmp);bool sawTemp=false;int lateCalls=0;
  const bool cancelled=saveDesign(d,dest.string(),error,[&]{if(++lateCalls!=totalCalls)return false;const auto files=temporaries(dest);sawTemp=!files.empty();check(files.size()==1&&fs::file_size(files.front())>0,"Late cancellation observes a written temp file");return true;});
@@ -55,10 +55,10 @@ int main(int argc,char** argv){try{
  check(calls==totalCalls,"No cancellation callback runs after commit");
  check(read(dest)==committed,"Successful serialized bytes remain identical");check(temporaries(dest).empty(),"Successful rename leaves no temporary file");
  // Hold A after it writes, then B after it writes. Releasing A first must
- // commit A's bytes, followed by B's bytes when B is allowed to commit.
- // The old shared .tmp implementation falsely reports A succeeded with B's
- // payload and then fails B's rename. No sleep or write-speed race is needed.
- auto second=d;++second.request.seed;CommitGate gateA,gateB;int countA=0,countB=0;
+ // commit independently. The old shared .tmp implementation consumes B's
+ // temporary during A's rename and then fails B's rename. One unchanged
+ // accepted revision is sufficient to reproduce that ownership race.
+ auto second=d;CommitGate gateA,gateB;int countA=0,countB=0;
  std::string errorA,errorB;
  auto a=std::async(std::launch::async,[&]{return saveDesign(d,dest.string(),errorA,[&]{return ++countA==totalCalls?gateA.hold():false;});});
  const bool readyA=gateA.await();
@@ -69,7 +69,7 @@ int main(int argc,char** argv){try{
  check(readyA&&readyB,"Both writers reach the actual final commit boundary");
  check(pending==2,"Concurrent writers exclusively own distinct temporary files");
  check(savedA&&afterA==committed,"First writer succeeds with its own exact payload");
- check(savedB&&afterB!=afterA,"Second writer independently commits its different payload");
+ check(savedB&&afterB==committed,"Second writer independently commits the accepted revision");
  auto payloadStart=afterB.find('\n');std::istringstream row(afterB.substr(payloadStart+1));std::string version;uint64_t seed=0;row>>std::quoted(version)>>seed;
  check(bool(row)&&seed==second.request.seed,"Last writer wins with the requested saved identity");
  check(temporaries(dest).empty(),"Both successful commits clean only their own temporaries");

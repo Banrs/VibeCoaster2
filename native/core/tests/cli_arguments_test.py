@@ -36,6 +36,15 @@ class CliArguments(unittest.TestCase):
         self.assertIn("REQUEST_RANGE", [item["code"] for item in report["errors"]])
         return report
 
+    def test_ride_style_arguments(self):
+        self.assertEqual(self.parsed("--airtime", "1.15")["style"]["airtime"], 1.15)
+        self.assertEqual(self.parsed("--signature-roll", "55")["style"]["signatureRollDegrees"], 55)
+        for text, value in (("auto", -1), ("flowing", 0), ("airtime", 1)):
+            self.assertEqual(self.parsed("--return-style", text)["style"]["returnStyle"], value)
+        self.invalid("--return-style", "unknown")
+        self.invalid("--airtime", "1.1junk")
+        self.invalid("--signature-roll", "45degrees")
+
     def test_seed_requires_unsigned_decimal_digits(self):
         for text in ("-1", "+1", "", " 42", "42 ", "42junk", "0x2a", "18446744073709551616"):
             with self.subTest(text=text):
@@ -54,8 +63,9 @@ class CliArguments(unittest.TestCase):
                     self.assertIn("generate", result.stderr)
                     self.assertEqual(result.stdout, "")
 
-    def test_only_flat_terrain_is_available(self):
+    def test_supported_terrain_names_reach_validation(self):
         self.assertEqual(self.parsed("--terrain", "flat")["terrain"], "flat")
+        self.assertEqual(self.parsed("--terrain", "highlands")["terrain"], "highlands")
         with tempfile.TemporaryDirectory() as folder:
             for terrain in ("hills", "canyon"):
                 with self.subTest(terrain=terrain):

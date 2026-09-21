@@ -1,0 +1,500 @@
+{
+  "version": "2.0.0-escarpment.1",
+  "utc": "2026-09-21T11:37:34.855424+10:00",
+  "package": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-escarpment.1\\run-20260921-005352-688\\Windows\\VibeCoaster\\Binaries\\Win64\\VibeCoaster.exe",
+  "executableSha256": "397DF917F27129F2A33ADD25552669D3303F457D563182ABFFBD10EACA204408",
+  "nativeTests": 21,
+  "engineTests": 6,
+  "corpusPassed": true,
+  "corpus": "D:\\Coding\\Codex\\Vibecoaster2\\native\\build\\evidence\\escarpment-corpus-3\\summary.json",
+  "front": {
+    "status": "automated-smoke-passed",
+    "error": "",
+    "mode": "PHYSICS-PROOF; intensity untested",
+    "geometry_sha1": "5D91E21834F674A6FB5C174D508F9BC2C06D64BB",
+    "save_sha1": "02CF8C99018F85D5A337B151FE0FDF1A67DDA4E8",
+    "full_traversal": true,
+    "ride_duration_s": 201.26979166750374,
+    "final_distance_m": 8795.163958489156,
+    "seat": 0,
+    "pause_checked": true,
+    "restart_checked": true,
+    "save_checked": true,
+    "load_checked": true,
+    "missing_reference_refusal_checked": true,
+    "viewport_width": 2560,
+    "viewport_height": 1440,
+    "paused_pose_checked": true,
+    "save_cancel_checked": true,
+    "human_visual_review": "pending",
+    "keyboard_input": "untested",
+    "cancellation_phases": "see save_cancel_checked; other phases untested",
+    "performance": "raw wall-frame samples; no FPS or GPU acceptance claim"
+  },
+  "rear": {
+    "status": "automated-smoke-passed",
+    "error": "",
+    "mode": "PHYSICS-PROOF; intensity untested",
+    "geometry_sha1": "5D91E21834F674A6FB5C174D508F9BC2C06D64BB",
+    "save_sha1": "02CF8C99018F85D5A337B151FE0FDF1A67DDA4E8",
+    "full_traversal": true,
+    "ride_duration_s": 201.26979166750374,
+    "final_distance_m": 8795.163958489156,
+    "seat": 2,
+    "pause_checked": true,
+    "restart_checked": true,
+    "save_checked": false,
+    "load_checked": true,
+    "missing_reference_refusal_checked": true,
+    "viewport_width": 2560,
+    "viewport_height": 1440,
+    "paused_pose_checked": true,
+    "save_cancel_checked": true,
+    "human_visual_review": "pending",
+    "keyboard_input": "untested",
+    "cancellation_phases": "see save_cancel_checked; other phases untested",
+    "performance": "raw wall-frame samples; no FPS or GPU acceptance claim"
+  },
+  "nativeRuntimeMetricsEqual": true,
+  "ordinaryWindingMeanMeters": 3.061338707291494,
+  "entireRidgeActMeanMeters": 3.6103098613649554,
+  "wholeRideMeanMeters": 39.7018396360728,
+  "baselineMetrics": {
+    "maxSpeed": 83.4834599842724,
+    "heightAboveStation": 284.99981429309105,
+    "maxGroundHeight": 229.58956445530492,
+    "verticalRelief": 284.99981429309105,
+    "inversionGroundHeight": 176.81903674820458,
+    "launchTo180": 1.3970000020687403,
+    "exposure10Seconds": 38.419823623556134,
+    "minVerticalG": -1.0780438042767404,
+    "maxVerticalG": 4.710511391506231,
+    "maxLateralG": 1.3104866685095533,
+    "maxLongitudinalG": 4.296297446973072,
+    "maxJerkGps": 9.647699917697821,
+    "maxJerkDistance": 6862.016542113896,
+    "duration": 201.26979166750374,
+    "minGroundClearance": 0.5134321943562519,
+    "driveWorkPerMass": 6823.02111412901,
+    "brakeWorkPerMass": 1505.8210827487144,
+    "lossWorkPerMass": 5317.2000313810195,
+    "maxEnergyResidual": 2.2018689094238653E-09,
+    "peakDrivePowerWatts": 19919267.771294724,
+    "peakBrakePowerWatts": 1955785.2518357516
+  },
+  "boosterSections": [
+    {
+      "name": "ridge-LSM-ascent",
+      "start": 907.379397317,
+      "end": 1238.33915534,
+      "beginTime": 17.3292975308,
+      "endTime": 23.1046121825,
+      "entrySpeed": 50.5737027854,
+      "exitSpeed": 56.5014125119,
+      "minimumSpeed": 48.7981952656,
+      "maximumSpeed": 59.9829547599,
+      "minimumHeight": 32.0000000009,
+      "maximumHeight": 157,
+      "meanRailGroundHeight": 2.02313916039,
+      "minimumRailGroundHeight": 1.81831034752,
+      "maximumRailGroundHeight": 2.63756773077,
+      "passiveExitSpeedUpperBound": 10.2979740467,
+      "maximumActuatorAcceleration": 16,
+      "maximumNetAcceleration": 12.3372464237,
+      "maximumPitchRadians": 0.453785605519,
+      "headingChangeRadians": 2.24968044193E-10,
+      "driveWorkPerMass": 1781.03454928,
+      "brakeWorkPerMass": 0,
+      "lossWorkPerMass": 237.853586317,
+      "energyResidual": 3.82145039098E-11,
+      "heightReversals": 0,
+      "pitchExtrema": 0
+    },
+    {
+      "name": "descending-cliff-LSM",
+      "start": 2684.38017179,
+      "end": 2863.91520589,
+      "beginTime": 76.7597518335,
+      "endTime": 79.523074182,
+      "entrySpeed": 55.48302119,
+      "exitSpeed": 71.3865395544,
+      "minimumSpeed": 55.48302119,
+      "maximumSpeed": 71.3865395544,
+      "minimumHeight": 15.5329139105,
+      "maximumHeight": 61.9999999995,
+      "meanRailGroundHeight": 2.00010705222,
+      "minimumRailGroundHeight": 2,
+      "maximumRailGroundHeight": 2.02967170331,
+      "passiveExitSpeedUpperBound": 63.1643746798,
+      "maximumActuatorAcceleration": 15.999997058,
+      "maximumNetAcceleration": 17.6438593855,
+      "maximumPitchRadians": 0.261799387801,
+      "headingChangeRadians": 2.47064591008E-11,
+      "driveWorkPerMass": 718.907515003,
+      "brakeWorkPerMass": 0,
+      "lossWorkPerMass": 165.757633904,
+      "energyResidual": 1.53193962569E-10,
+      "heightReversals": 0,
+      "pitchExtrema": 0
+    },
+    {
+      "name": "main-speed-launch",
+      "start": 4384.50838643,
+      "end": 4665.60236775,
+      "beginTime": 106.303567634,
+      "endTime": 110.222276318,
+      "entrySpeed": 55.6616815722,
+      "exitSpeed": 82.7699915272,
+      "minimumSpeed": 55.4229197814,
+      "maximumSpeed": 83.4834239822,
+      "minimumHeight": 4.00000165978,
+      "maximumHeight": 4.00000165978,
+      "meanRailGroundHeight": 4.00000165978,
+      "minimumRailGroundHeight": 4.00000165978,
+      "maximumRailGroundHeight": 4.00000165978,
+      "passiveExitSpeedUpperBound": 55.6616813541,
+      "maximumActuatorAcceleration": 16,
+      "maximumNetAcceleration": 15.1729169081,
+      "maximumPitchRadians": 0,
+      "headingChangeRadians": 5.98303628863E-11,
+      "driveWorkPerMass": 2203.59293141,
+      "brakeWorkPerMass": 0,
+      "lossWorkPerMass": 327.268513872,
+      "energyResidual": 1.82784531298E-12,
+      "heightReversals": 0,
+      "pitchExtrema": 0
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "native/core/include/coaster/coaster.hpp",
+      "sha256": "FDADB5BD398CA795B736FA4E8DD7BC2F8B25B46A2AE6F9AA6819CE31AB2A5F1C"
+    },
+    {
+      "path": "native/core/include/coaster/fvd.hpp",
+      "sha256": "44022A203B9D24BFD596C9A5A951EBBFBA1DD2D54B6F96E018E1E222369AD43F"
+    },
+    {
+      "path": "native/core/include/coaster/math.hpp",
+      "sha256": "EDEDF2D01A282E8FC6C756135F2E86C52B7AD5BBE2562CE3AE33736904B93523"
+    },
+    {
+      "path": "native/core/include/coaster/operation_hardware.hpp",
+      "sha256": "0F7E2B8C98B440733E15CC48898DC572C3FD01DA70C8DA8D4420E25578FAEE78"
+    },
+    {
+      "path": "native/core/include/coaster/program.hpp",
+      "sha256": "2741647A109960EC4EAC496E2019F5F207683F13C9ED025CAE5E884A34A0AAFE"
+    },
+    {
+      "path": "native/core/include/coaster/support_mesh.hpp",
+      "sha256": "75B6D0FC9F0925DC7674725B116D380A763B76EA08FA664B653C0E127E003217"
+    },
+    {
+      "path": "native/core/include/coaster/terrain.hpp",
+      "sha256": "27259DE83829A64CCA00C876E6611405024B5E5DD505E85FC4AF9A3CECEB17CD"
+    },
+    {
+      "path": "native/core/include/coaster/track_hardware.hpp",
+      "sha256": "116139CCAAECB23B265FE0D9F599C5CDC146C01CAA501FF0D8A7B19B294C5B14"
+    },
+    {
+      "path": "native/core/include/coaster/trim_brake.hpp",
+      "sha256": "7DCD6DDCF2223E94F1B699EBD4858147539AB0F7A4611A3C6DB5388011FE06E9"
+    },
+    {
+      "path": "native/core/src/arc_length.hpp",
+      "sha256": "9891A53DC5516C5F96F080F734628E3DB06CD0EA347D2CCE2AA12BF0948244B1"
+    },
+    {
+      "path": "native/core/src/authoring.cpp",
+      "sha256": "8FA51195226A2D84F1058630CE2F0E3BFB351B201069CFD6CDE0B88718726999"
+    },
+    {
+      "path": "native/core/src/authoring.hpp",
+      "sha256": "E50830C22743DBDFA9192FC46FD1647B69457D59BA9821AE77E7A66B6588DD5C"
+    },
+    {
+      "path": "native/core/src/authorship.cpp",
+      "sha256": "7A8150FFDC9972833F487AF3F3944CAF68432175239E7AF4A3C09AD7897D8DCF"
+    },
+    {
+      "path": "native/core/src/banking.cpp",
+      "sha256": "4439E68FC8FCCBFC3C9012DFD788BEE1AB0B0B549A593E8C6DC863E6113E6A61"
+    },
+    {
+      "path": "native/core/src/banking.hpp",
+      "sha256": "233ED551E6C07E01061DD9ED75C534E2EC43686EEEB03968BD7DBFD5C9097D01"
+    },
+    {
+      "path": "native/core/src/clearance.cpp",
+      "sha256": "96DE845869306844DA4DEC43236FFE8B83023507546152AC532A208CACF0D0CB"
+    },
+    {
+      "path": "native/core/src/convergence.cpp",
+      "sha256": "8EEC4E079EC11C3347ACA79ECA491EDC69DA181E40365BD2FE2A18EFA8B9FCE0"
+    },
+    {
+      "path": "native/core/src/convergence_main.cpp",
+      "sha256": "87AAE78AC0AE5B230066A6FCA80AE21B026BDAA89A33A027EBC4ACF2864C5887"
+    },
+    {
+      "path": "native/core/src/dimensions.cpp",
+      "sha256": "613892F514E53D64BD62D7CFDD45C7E0132381A60B188149CC438A9E132E548C"
+    },
+    {
+      "path": "native/core/src/drive_profile.cpp",
+      "sha256": "ABE3B410EF2963902ACC25B6A2A33FF2D8079B24D6F266F6C016508F2A6D51C6"
+    },
+    {
+      "path": "native/core/src/frame.cpp",
+      "sha256": "E6A1C64947D240AFA05FB2D6F72D5183DEB2B274704A4C287A40B104D027C749"
+    },
+    {
+      "path": "native/core/src/fvd.cpp",
+      "sha256": "D10C23D9EF17761611FCAAACD634E3D8F985E1ABB21E55AB75E8C1A4CC02DEBB"
+    },
+    {
+      "path": "native/core/src/generation.cpp",
+      "sha256": "FD3F657EF5F71708ACECA9BEFE1243B2BAE7A1DDB265A9EEF08D3A5E114D74AE"
+    },
+    {
+      "path": "native/core/src/main.cpp",
+      "sha256": "F830537A5B8B2041A34BD3ABFA03A6BD2C315379323A7A7FC0EBF8A42F96FE82"
+    },
+    {
+      "path": "native/core/src/motion_audit.cpp",
+      "sha256": "3107266D25F061C621BD9EA8223C1DF49839F6379A7FDAB58A75FBBFCB7EFFB4"
+    },
+    {
+      "path": "native/core/src/motion_program.cpp",
+      "sha256": "259FFF9EE983DC12F95320AF9753A20C0B332BE0EDEC9DDEC051B4FC2EC9A920"
+    },
+    {
+      "path": "native/core/src/motion_program.hpp",
+      "sha256": "119BD81865CC99001BA4A4723D506027395C258343D9BC56DA8A2D4A7C7C09CB"
+    },
+    {
+      "path": "native/core/src/motion_spline.hpp",
+      "sha256": "7705E04D650EBF22A79CCE8CDD9341ABECBBFD5390BB54C21C83F67E934ED729"
+    },
+    {
+      "path": "native/core/src/persistence.cpp",
+      "sha256": "2781159D5C6000884DBAE22F4ABA494E78891C2FBBCB8668F89917995A84BAC1"
+    },
+    {
+      "path": "native/core/src/reference.cpp",
+      "sha256": "000FD6CB533247E83D89BE5A40D62C1A23D5D27DB72655389843FA34F0C7321D"
+    },
+    {
+      "path": "native/core/src/simulation.cpp",
+      "sha256": "CF62294E3C024A23C4BA8F4D7A5A926C79586FD0318C4BDB89D8DF861C323105"
+    },
+    {
+      "path": "native/core/src/simulation_internal.hpp",
+      "sha256": "2CC1DCF1A78DC0F66E6CFD4661799D424F7C89F9372E099CA0F8A13E8B0B3B8A"
+    },
+    {
+      "path": "native/core/src/station.cpp",
+      "sha256": "86027A882C9DDEC3D2D338365D590A4B29B03917417C6AA5F71863D6140967EF"
+    },
+    {
+      "path": "native/core/src/structures.cpp",
+      "sha256": "97F3AE9B15DE322EAF4B0CD56BBA6ECE33BFD0E2F7D29528488244A9077FC0A1"
+    },
+    {
+      "path": "native/core/src/supports.cpp",
+      "sha256": "CA711094C0392E8DFC3BD2EF1BB255562C547E711D8AC2C11728E441A989C438"
+    },
+    {
+      "path": "native/core/src/track.cpp",
+      "sha256": "32B2B0DC05BA54D896A416FDD7C8051ED69158B74FFADEDBCB0F9266401E611F"
+    },
+    {
+      "path": "native/core/src/trim_layout.hpp",
+      "sha256": "ED9DA49CE6E03155DBAF40E3C2F3EFD318D98B31472505D817FE60B074CF3CBA"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoasterAutomation.cpp",
+      "sha256": "46A1D041F8175375E6099C97CF23A5E0C23B62C927BAD1E6A7067456F80B2557"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoasterInputAutomation.cpp",
+      "sha256": "7FD2ACF9ABB982DB6CA560CC3C3D97C4602540095D4CC1FA0BCCAB178B536921"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoasterMesh.cpp",
+      "sha256": "474284178F17210793030DDD296FF00C60E3D83381A13BC4CA6E1B42170A6E81"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoasterMesh.h",
+      "sha256": "0E7A400E7D4DE68F053D0470E5ACBFEBA3FB9F2F0D0847E38A6C012EF0D383A1"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoasterRuntimeVerification.cpp",
+      "sha256": "06CB5E29981A3E6D5592B678D76D7211F975B2C3AAF11E8AF57BAAD606300CE0"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoasterRuntimeVerification.h",
+      "sha256": "738FDB5E2BBF5A8DD8919C435F6BCB8B0A78513CDC1BD1AD3BD2EF41357E36E2"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreAuthoring.cpp",
+      "sha256": "80559748D17CC311F2DAE2EF18C3E14DA67F5A95450E1BCDFD7CBE51F33E4EB5"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreAuthorship.cpp",
+      "sha256": "271967C8BB46EAE574E4621E24ECE447FA5C470AD904B7C64D3E69BC0D356564"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreBanking.cpp",
+      "sha256": "4B8527D21D09A91670EC47B1D477923AE1424953B1862D585BCAC428483099D1"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreClearance.cpp",
+      "sha256": "5E4A66AC4E0CF38A78EB1F6EB554736FD48E7F86C3150A4D5E2EDDDAAA289B6C"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreConvergence.cpp",
+      "sha256": "C01C05420432142E385E8A6690BE5F627640BAE382C7E574BD9A845D8BAD1DF0"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreDimensions.cpp",
+      "sha256": "BA2912664D69F39526BFC25D1B657A9A9E3D5AC72312283CF8FD676F12732693"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreDriveProfile.cpp",
+      "sha256": "C7367549731D1430E379CF39F9BD58993F3D779F6F45D8281CC275DB84F51207"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreFrame.cpp",
+      "sha256": "59D9E03CF4CF44C8F859103458E3A62894E2F8241B5250A4A9F69C0133E40E66"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreFvd.cpp",
+      "sha256": "3C67AFC2B8924671911A83EE2891BE98B341893EEE54FB1DF9D9222A311C0295"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreGeneration.cpp",
+      "sha256": "5EF669BDE04512C5DCE5EC3C162B70446D59D174616C1BB782CB1704E31EB34D"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreMotionAudit.cpp",
+      "sha256": "811B1588FAD6613FBBAABBC3C8679E2EC483A233276DB943C8EDE21ABCAB86D1"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreMotionProgram.cpp",
+      "sha256": "A248388153ED74F4045FDF988A042485294A8DC94F209DE0737E9B28DDB22639"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CorePersistence.cpp",
+      "sha256": "E0B5FC3A0202C5DCD43031414BC2FB51C271AA8187D2F5950BCE71FF5006E898"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreReference.cpp",
+      "sha256": "7BF2C88EA51D9122E9D6259D262BAF1F004C514478B84BC2A2BC5E6CB023073D"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreSimulation.cpp",
+      "sha256": "D6FFA43E715B3EE9BB4F133B958CAB7A553A31047FCDC282906813DE7CD6B1F2"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreStation.cpp",
+      "sha256": "6753C9F1D3A0A61AE97A60EC03699E6401726E3F46C9D27B4E9792F6502C37BF"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreStructures.cpp",
+      "sha256": "1F2E4AE82A73FDDA049F3EE4382596D2187098CC1AAC1CE6A25F758366CCFD5D"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreSupports.cpp",
+      "sha256": "4891FD022437353E8366831E623CF7B06359AC699944E3D2CFD6F3EBC3F1D7C2"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/CoreTrack.cpp",
+      "sha256": "F449434911FF98B51964ADD114B00E2C1DD88EACBD4CEB2DA7B26FD8DB824276"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/VibeCoaster.cpp",
+      "sha256": "077640874018CC3ECFDEBF44E9CFEA0B2B9D84030D1FE17BD56658291E2EC8E6"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/VibeCoasterGame.cpp",
+      "sha256": "10210FFC513570ED30B10B201E89BDE5F9939AF06CDD9C385D2AA4734F478C4F"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Private/VibeCoasterWorld.cpp",
+      "sha256": "865824858654846CCF9190481A49160072885264AB2A4CF1D555A9696A2B39A0"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Public/CoasterBuildVersion.h",
+      "sha256": "C81CFE7DC2A9C652F452E5564DF97684D0978733C109C8287FFC4EFA46FF04F4"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Public/CoordinateContract.h",
+      "sha256": "666E878B365510A6256FF95F6AD22ADBCD8F0F465CAA6504D7438ED2D5ADDDD6"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Public/VibeCoasterGame.h",
+      "sha256": "6309841CCF22888E81717EEEF5FD302E92E945141388613831906A2D261D3B61"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/Public/VibeCoasterWorld.h",
+      "sha256": "D03533BF00AC972AE8A835A128794A87070C0467F3E93647D93D8813A136FF14"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster/VibeCoaster.Build.cs",
+      "sha256": "6C45F89FA466F78E49030416D8D2EC25835A6BB26E69DFF45F5A88D5767CEED3"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoaster.Target.cs",
+      "sha256": "6102F343B2B7FC233892151096442EA952ACC5AE233D6C7E3A26B0ECA6648812"
+    },
+    {
+      "path": "native/unreal/Source/VibeCoasterEditor.Target.cs",
+      "sha256": "09CC8FD8B51D1870C8E28C65ED4C5077AE2568BC6DE5C4C87A485163740B4D93"
+    },
+    {
+      "path": "native/unreal/Config/DefaultEngine.ini",
+      "sha256": "C1BB4650F461AE4B9E01B1D806350FE3764C1B34B00AC17EF2CF88E4B952225B"
+    },
+    {
+      "path": "native/unreal/Config/DefaultGame.ini",
+      "sha256": "E4E055DE587C60A7B41AD70DCA2E1725D22238645194E39EF7D375297F59BF00"
+    },
+    {
+      "path": "native/unreal/Config/DefaultGameUserSettings.ini",
+      "sha256": "571FA9F4CA077E3648FC697ACF675A40446189F3A063B8407304574135CA2A7E"
+    },
+    {
+      "path": "native/unreal/Config/DefaultInput.ini",
+      "sha256": "E1B7A60E4DA1ACCA28B8540ED7B2746551DF9AE1DDC0056EB45A0932ED82EA78"
+    }
+  ],
+  "screenshotsReviewedByAssistant": [
+    "01-overview.png",
+    "11-pov-8.png",
+    "17-pov-14.png",
+    "18-pov-15.png",
+    "20-pov-17.png",
+    "43-pov-40.png",
+    "26-pov-23.png",
+    "48-pov-45.png"
+  ],
+  "userRideFeelReview": "pending",
+  "forceCapsChanged": false,
+  "clearanceOutsideReachEnvelopeMeters": 0,
+  "shortcut": {
+    "target": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-escarpment.1\\run-20260921-005352-688\\Windows\\VibeCoaster\\Binaries\\Win64\\VibeCoaster.exe",
+    "arguments": "-UserDir=\"D:\\Coding\\Codex\\Vibecoaster2\\UserData-Escarpment\"",
+    "workingDirectory": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-escarpment.1\\run-20260921-005352-688\\Windows",
+    "executableSha256": "397DF917F27129F2A33ADD25552669D3303F457D563182ABFFBD10EACA204408",
+    "shortcutSha256": "FF34829BEA610156C3B7A2955B56AE0057BFD651278417231F394504117C2325",
+    "saveSha1": "02CF8C99018F85D5A337B151FE0FDF1A67DDA4E8",
+    "fallbackShortcut": "D:\\Coding\\Codex\\Vibecoaster2\\Play VibeCoaster2 Highlands.lnk",
+    "fallbackShortcutSha256": "55137C7E21B00ABF9666088EAC661D452BC9FCA9B7E51F8BF31CD3BD7A217F7C",
+    "originalShortcutSha256": "1CE6B41E593ED5DED4C8A9DA2CF3F5F6CC0D3DD43C6DE5890E7B6589F690F451",
+    "preservedHighlandsSaveSha1": "09325B6DF0E9D22B0F3451FC2378B1B4FA1F19D7"
+  },
+  "reviewPageChecked": "Rendered; rear-seat selector and rear SVG image confirmed"
+}
