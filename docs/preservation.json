@@ -47,5 +47,23 @@
     "Files": 58,
     "Bytes": 966479897,
     "Verified": true
+  },
+  "FinalGeneratorPreservation": {
+    "Archive": "D:\\Coding\\Codex\\vibecoasterlegacy\\final-generator-preservation-20260921-183443",
+    "Manifest": "D:\\Coding\\Codex\\vibecoasterlegacy\\final-generator-preservation-20260921-183443\\preservation-manifest.json",
+    "ManifestSha256": "ECB382C503A6D7FDE02903F92C2EB25311EE77D345ECC3A21917C275BD59D097",
+    "Files": 167,
+    "Bytes": 2883091511,
+    "Verified": true,
+    "RetainedLive": [
+      "dist\\2.0.0-rift.1\\run-20260921-181214-655",
+      "UserData-Rift-Verified",
+      "Play VibeCoaster2.lnk"
+    ],
+    "ArchivedAndRemoved": [
+      "dist\\2.0.0-rift.1\\run-20260921-175109-373",
+      "dist\\2.0.0-rift.1\\run-20260921-180734-165",
+      "UserData-Rift"
+    ]
   }
 }

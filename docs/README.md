@@ -2,7 +2,7 @@
 
 The active design and acceptance contract is [NEXT_SESSION.md](../NEXT_SESSION.md). It is the only source for the replacement ride, recipe foundation, terrain/loading work, F2291-25 dynamic checks, and final verification requirements.
 
-Play runs the verified Rift checkpoint; [its evidence](checkpoints/06-rift.json) identifies the build. Foundation, Escarpment and Highlands are preserved fallbacks. Historical reports and screenshots remain evidence of their own builds:
+Play runs the verified final default generator; [its delivery report](checkpoints/07-default.md) and [evidence](checkpoints/07-default.json) identify the build. Rift, Foundation, Escarpment and Highlands are preserved fallbacks. Historical reports and screenshots remain evidence of their own builds:
 
 - [Escarpment fallback report](verification.md) and [machine-readable evidence](verification.json)
 - [Highlands fallback report](verification-highlands.md) and [machine-readable evidence](verification-highlands.json)
