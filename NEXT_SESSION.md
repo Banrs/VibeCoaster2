@@ -36,7 +36,7 @@ This file is the sole active design and acceptance contract. Work in `D:\Coding\
 
 ## Current implementation evidence
 
-The revised seed42 baseline now passes native acceptance: continuous all-seat F2291-25 and project caps, C3 geometry/orientation, retained-source replay, finite-train energy, complete swept clearance, temporal convergence and independent spatial refinement. **No replacement checkpoint package, CI or GPU delivery is complete yet. Play still targets Escarpment.**
+The revised seed42 baseline now passes native acceptance: continuous all-seat F2291-25 and project caps, C3 geometry/orientation, retained-source replay, finite-train energy, complete swept clearance, temporal convergence and independent spatial refinement. **Checkpoint1 is delivered as2.0.0-foundation.1. Code commit39cdba3 passed focused GitHub CI, packaging and actual GPU front/rear traversal. Play targets that exact verified executable. Final generator acceptance remains incomplete.** See `docs/checkpoints/05-foundation.json` and `05-play-target.json`.
 
 Latest accepted generation/save evidence: `native/build/evidence/foundation-baseline-42`.
 
@@ -53,13 +53,17 @@ The protected camelback's isolated reference result retains crest height224.6547
 
 Paused FF daylight frame inspection places the banked crest around6:38 and first lip departure around6:58: about20s including braking/holding, with roughly1s visual landmark uncertainty. The earlier25–26s estimate included ascent and is superseded. Native clifftop cap:20.5s. Exact FF wave dimensions remain unverified. Source: `https://www.youtube.com/watch?v=0vgRPSZv1Gg`.
 
-The initial restricted .NET build stalled before compilation. The authorized toolchain-permission retry succeeded: Unreal editor build and all6 coordinate/mesh/ground/art/input contracts pass. Trims off/full also pass native operating checks;20% lower drag exposes |Gy|1.60205G and remains unresolved. No new packaged GPU result is claimed.
+The initial restricted .NET build stalled before compilation. The authorized toolchain-permission retry succeeded: Unreal editor build and all6 coordinate/mesh/ground/art/input contracts pass. Trims off/full also pass native operating checks;20% lower drag exposes |Gy|1.60205G, Gy/Gx rates29.996/25.145g/s and rapid Gy reversal1.5385G against1.5G, localized to late station-return, and remains unresolved.
+
+Both packaged GPU runs passed traversal, pause/restart, load, paused-pose and save cancellation; front also saved. Generation/mesh cancellation and actual OS keyboard input remain untested. GPU request-to-ready observations were26.058685s generation and9.108182s saved loading. Screenshot readbacks contaminate frame tails; no controlled performance acceptance is claimed. The package is `dist/2.0.0-foundation.1/run-20260921-152726-964`, actual executable SHA256 `AD4AFFBF22719D8495C573EFC26EA477B42DDCC7D2344B4BCFC1C29EDF30DF44`, profile `UserData-Foundation`.
+
+FF opening paused frames show rounded crown around5:51, descent commitment5:53, banked descent5:55, late descent5:57 and low recovery5:59 (about1s landmark uncertainty). Current V2 preserves this composition but is taller and appears less steep; exact equivalence is unclaimed.
 
 ## Playable fallbacks and prototype provenance
 
 **Delivered fallback:**2.0.0-escarpment.1. F9 loads, Space rides. Its original21 native suites,6 Unreal contracts,8-case corpus and front/rear GPU traversal passed under its original acceptance. It fails the newly added F2291 temporal assessment; do not claim it passes the new standard checks. See `docs/verification.md` and `docs/checkpoints/04-escarpment.html`.
 
-Current executable:
+Preserved Escarpment executable (`Play VibeCoaster2 Escarpment.lnk`):
 `dist\2.0.0-escarpment.1\run-20260921-005352-688\Windows\VibeCoaster\Binaries\Win64\VibeCoaster.exe`
 
 SHA256:`397DF917F27129F2A33ADD25552669D3303F457D563182ABFFBD10EACA204408`. Profile:`UserData-Escarpment`. Preserve the Highlands shortcut/package/profile too.
@@ -72,7 +76,7 @@ Useful prototype fixes were centralized FVD/spline commits, live derivative jets
 
 ## Git and preservation
 
-V2 owns `.git` on **`codex/default-generator`**, with origin `https://github.com/Banrs/VibeCoaster2.git`. It retains the remote main ancestor and imports11 unpublished original-project commits without rewriting them. Before the first new checkpoint, HEAD is `49c318029c0fa0baaba81c5df8af3cc7b3339817`. Do not reset, stage or rewrite parent-repository or `D:\Coding\Codex\Vibecoasterjs` work.
+V2 owns `.git` on **`codex/default-generator`**, with origin `https://github.com/Banrs/VibeCoaster2.git`. It retains the remote main ancestor and imports11 unpublished original-project commits without rewriting them. Checkpoint1 code commit is `39cdba3a7515372f6f7ef4a5a495a26fbf456368`; later verification-only commits do not change packaged code identity. Do not reset, stage or rewrite parent-repository or `D:\Coding\Codex\Vibecoasterjs` work.
 
 Starting source/evidence/references/packages/profiles were copied and SHA-256 verified in `D:\Coding\Codex\vibecoasterlegacy\default-generator-start-20260921-111813`:2203 files,10027106656 bytes, complete parent/Vibecoasterjs Git bundles, working/index patches and manifests.
 
@@ -80,7 +84,7 @@ Historical generated notes and duplicate status/restart documents are preserved 
 
 ## Tools and references
 
-- Follow `AGENTS.md`. C++20 and Unreal5.8.2; one compiler worker. Canonical version: `native/core/include/coaster/version.hpp`. `foundation.1` remains unshipped until checkpoint verification.
+- Follow `AGENTS.md`. C++20 and Unreal5.8.2; one compiler worker. Canonical version: `native/core/include/coaster/version.hpp`. `foundation.1` is the verified first engineering checkpoint.
 - Python:`C:\Users\danie\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe`. Always specify UTF-8 when reading/writing repository text with Python on Windows; use atomic replacement for handoff files.
 - VS:`D:\Toolchains\VS2022\VC\Auxiliary\Build\vcvars64.bat`; UE:`D:\Games\Epic Games\UE_5.8`.
 - CMake:`D:\Coding\Codex\vibecoasterlegacy\archive-2026-09-13\removed\native\build\tools\cmake\data\bin\cmake.exe`. Ignored helper:`native/build/build-native.ps1` (`-Configure`, optional `-Targets`).

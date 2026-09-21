@@ -1,6 +1,6 @@
 {
   "checkpoint": "engineering foundation",
-  "status": "native accepted; CI, versioned package and GPU verification pending",
+  "status": "Checkpoint 1 delivered: native baseline, focused CI, packaged Unreal, front/rear GPU smoke and exact Play target verified; final generator gates remain open",
   "release": "2.0.0-foundation.1",
   "native": {
     "accepted": true,
@@ -900,7 +900,12 @@
       "passed": false,
       "minimumGz": -1.50826,
       "maximumGz": 4.39709,
-      "maximumAbsGy": 1.60205
+      "maximumAbsGy": 1.60205,
+      "maximumLateralRateGps": 29.995888,
+      "maximumLongitudinalRateGps": 25.14549,
+      "maximumRapidReversalGy": 1.53849,
+      "rapidReversalLimitGy": 1.5,
+      "localizedTo": "late station-return corridor"
     }
   },
   "remaining": [
@@ -908,7 +913,8 @@
     "Complete eight-case corpus and lower-drag correction",
     "Recipe editing/reordering demonstration",
     "Further terrain and reference/POV refinement",
-    "Checkpoint CI, package, actual GPU and shortcut verification"
+    "Generation and mesh-stage GPU cancellation; actual OS keyboard input",
+    "Final controlled runtime performance and all final acceptance gates"
   ],
   "files": {
     "foundation-baseline-42.coaster": {
@@ -927,5 +933,216 @@
       "bytes": 27140653,
       "sha256": "de11f8150fa99f1d5eddd9144a0fb4da0507fef3ad73fdbeab3940a51ad4016d"
     }
+  },
+  "codeCommit": "39cdba3a7515372f6f7ef4a5a495a26fbf456368",
+  "ci": {
+    "status": "success",
+    "run": "https://github.com/Banrs/VibeCoaster2/actions/runs/35618755933",
+    "commit": "39cdba3a7515372f6f7ef4a5a495a26fbf456368",
+    "scope": "component suites and fresh seed42 acceptance; full integration/corpus not dispatched"
+  },
+  "package": {
+    "SchemaVersion": 1,
+    "Release": "2.0.0-foundation.1",
+    "Commit": "39cdba3a7515372f6f7ef4a5a495a26fbf456368",
+    "Configuration": "Development",
+    "Engine": {
+      "MajorVersion": 5,
+      "MinorVersion": 8,
+      "PatchVersion": 2,
+      "Changelist": 56702186,
+      "CompatibleChangelist": 55116800,
+      "IsLicenseeVersion": 0,
+      "IsPromotedBuild": 1,
+      "BranchName": "++UE5+Release-5.8"
+    },
+    "CompilerWorkers": 1,
+    "CreatedUtc": "2026-09-21T15:32:56.0028057Z",
+    "BuildEvidence": "D:\\Coding\\Codex\\Vibecoaster2\\native\\unreal\\Saved\\BuildRuns\\20260921-152726-964",
+    "Executables": [
+      {
+        "Path": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-foundation.1\\run-20260921-152726-964\\Windows\\VibeCoaster.exe",
+        "Bytes": 171520,
+        "Sha256": "1800266141868A922F44981DA83D9B2ED261A4369D1D922583855ABE1C61D283"
+      },
+      {
+        "Path": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-foundation.1\\run-20260921-152726-964\\Windows\\VibeCoaster\\Binaries\\Win64\\VibeCoaster.exe",
+        "Bytes": 333206016,
+        "Sha256": "AD4AFFBF22719D8495C573EFC26EA477B42DDCC7D2344B4BCFC1C29EDF30DF44"
+      }
+    ]
+  },
+  "play": {
+    "schemaVersion": 1,
+    "verifiedUtc": "2026-09-21T16:04:04.4176254Z",
+    "codeCommit": "39cdba3a7515372f6f7ef4a5a495a26fbf456368",
+    "release": "2.0.0-foundation.1",
+    "targetPath": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-foundation.1\\run-20260921-152726-964\\Windows\\VibeCoaster\\Binaries\\Win64\\VibeCoaster.exe",
+    "sha256": "AD4AFFBF22719D8495C573EFC26EA477B42DDCC7D2344B4BCFC1C29EDF30DF44",
+    "arguments": "-UserDir=\"D:\\Coding\\Codex\\Vibecoaster2\\UserData-Foundation\"",
+    "workingDirectory": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-foundation.1\\run-20260921-152726-964\\Windows",
+    "shortcutSha256": "9756FE4A2F9DF0D51CAE932414D0C03243437E2521D6D67864165DBEEFB7CB9B",
+    "fallbackShortcut": "D:\\Coding\\Codex\\Vibecoaster2\\Play VibeCoaster2 Escarpment.lnk",
+    "fallbackExecutableSha256": "397DF917F27129F2A33ADD25552669D3303F457D563182ABFFBD10EACA204408",
+    "gpuFront": "automated-smoke-passed",
+    "gpuRear": "automated-smoke-passed",
+    "gpuEvidence": "native/build/evidence/gpu-foundation-{front,rear}",
+    "finalGeneratorAcceptance": false
+  },
+  "gpu": {
+    "front": {
+      "result": {
+        "status": "automated-smoke-passed",
+        "error": "",
+        "mode": "PHYSICS-PROOF; intensity untested",
+        "geometry_sha1": "A99BC51BE86F77AD95151E075455F288CC1EBE6B",
+        "save_sha1": "9554B9E93CFADF3D2520510872F89AB24BEDBED5",
+        "full_traversal": true,
+        "ride_duration_s": 208.48437500092894,
+        "final_distance_m": 8941.805312278548,
+        "seat": 0,
+        "pause_checked": true,
+        "restart_checked": true,
+        "save_checked": true,
+        "load_checked": true,
+        "missing_reference_refusal_checked": true,
+        "viewport_width": 2560,
+        "viewport_height": 1440,
+        "paused_pose_checked": true,
+        "save_cancel_checked": true,
+        "human_visual_review": "pending",
+        "keyboard_input": "untested",
+        "cancellation_phases": "see save_cancel_checked; other phases untested",
+        "performance": "raw wall-frame samples; no FPS or GPU acceptance claim"
+      },
+      "environment": {
+        "utc": "2026-09-21T15:36:22.273Z",
+        "engine": "5.8.2-56702186+++UE5+Release-5.8",
+        "cpu": "AMD Ryzen 9 5900X 12-Core Processor            ",
+        "os": "10.0.26340.1.256.64bit",
+        "executable": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-foundation.1\\run-20260921-152726-964\\Windows\\VibeCoaster\\Binaries\\Win64\\VibeCoaster.exe",
+        "profile": "D:/Coding/Codex/Vibecoaster2/UserData-Foundation",
+        "save": "D:/Coding/Codex/Vibecoaster2/UserData-Foundation/Saved/VibeCoaster2/Designs/Accepted.vcdesign",
+        "screenshots_enabled": true
+      },
+      "frameRows": 12304,
+      "evidenceFiles": {
+        "accepted-report.json": {
+          "bytes": 64908,
+          "sha256": "c1e02deed37be3ecbf1c8d5c2f04b20113c1a9433a17a15f184971521282197b"
+        },
+        "environment.json": {
+          "bytes": 510,
+          "sha256": "3db8fbcc1200bfdb96b0f52888f57a9c00fd59981fabce122e572d8d1f0c7789"
+        },
+        "events.jsonl": {
+          "bytes": 33888,
+          "sha256": "9aca9f0e3a1ae1f2cdd19d48bde6d4bc87d8737b4c309caf8c90890fa2b2c8ca"
+        },
+        "result.json": {
+          "bytes": 736,
+          "sha256": "c952954f3703890208b706c811495f46c400c06b351905ffd36c7ebf5f5f791d"
+        },
+        "wall-frames.csv": {
+          "bytes": 1396276,
+          "sha256": "4849158cf0af0bd870b6417635e9689d32d727f2f450bbf65a9f0d538950d8fe"
+        }
+      }
+    },
+    "rear": {
+      "result": {
+        "status": "automated-smoke-passed",
+        "error": "",
+        "mode": "PHYSICS-PROOF; intensity untested",
+        "geometry_sha1": "A99BC51BE86F77AD95151E075455F288CC1EBE6B",
+        "save_sha1": "9554B9E93CFADF3D2520510872F89AB24BEDBED5",
+        "full_traversal": true,
+        "ride_duration_s": 208.48437500092894,
+        "final_distance_m": 8941.805312278548,
+        "seat": 2,
+        "pause_checked": true,
+        "restart_checked": true,
+        "save_checked": false,
+        "load_checked": true,
+        "missing_reference_refusal_checked": true,
+        "viewport_width": 2560,
+        "viewport_height": 1440,
+        "paused_pose_checked": true,
+        "save_cancel_checked": true,
+        "human_visual_review": "pending",
+        "keyboard_input": "untested",
+        "cancellation_phases": "see save_cancel_checked; other phases untested",
+        "performance": "raw wall-frame samples; no FPS or GPU acceptance claim"
+      },
+      "environment": {
+        "utc": "2026-09-21T15:44:23.981Z",
+        "engine": "5.8.2-56702186+++UE5+Release-5.8",
+        "cpu": "AMD Ryzen 9 5900X 12-Core Processor            ",
+        "os": "10.0.26340.1.256.64bit",
+        "executable": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\2.0.0-foundation.1\\run-20260921-152726-964\\Windows\\VibeCoaster\\Binaries\\Win64\\VibeCoaster.exe",
+        "profile": "D:/Coding/Codex/Vibecoaster2/UserData-Foundation",
+        "save": "D:/Coding/Codex/Vibecoaster2/UserData-Foundation/Saved/VibeCoaster2/Designs/Accepted.vcdesign",
+        "screenshots_enabled": true
+      },
+      "frameRows": 12304,
+      "evidenceFiles": {
+        "accepted-report.json": {
+          "bytes": 64883,
+          "sha256": "61921f7ae11b28fd49c321a1f86f0d6fad457131cbb7a752a74c62eab671c4d1"
+        },
+        "environment.json": {
+          "bytes": 510,
+          "sha256": "e673dfc5dcc0022cb91b2e5528f58b54584d5a564a867653595a31436a7c4d0e"
+        },
+        "events.jsonl": {
+          "bytes": 33523,
+          "sha256": "fdd77be8a12aa4177eb75d7f5c405db29f09acf3a5fb3d578a62c0433c19278e"
+        },
+        "result.json": {
+          "bytes": 737,
+          "sha256": "8e321623a68dc2dfb5e239481db6449e744d38a2ce1bc133bda15a1ed5d1f8f3"
+        },
+        "wall-frames.csv": {
+          "bytes": 1396049,
+          "sha256": "1b66f5cf1ba13aa37a95c70b29a082ce79c7228c49614239f6260f19db9e6b32"
+        }
+      }
+    },
+    "observations": {
+      "hardware": "RTX 5070 Ti / Ryzen 9 5900X",
+      "rendering": "D3D12, 2560x1440, offscreen real GPU, maximum 60fps",
+      "generationRequestToReadySeconds": 26.058685,
+      "savedReadinessSeconds": 9.108182,
+      "frameMedianMs": 16.6663,
+      "frontMeanMs": 17.7467,
+      "rearMeanMs": 17.6993,
+      "frontMaxMs": 381.4388,
+      "rearMaxMs": 356.8702,
+      "qualification": "Screenshot readbacks and concurrent diagnostics contaminate frame tails. These are observations, not controlled performance acceptance."
+    },
+    "visualReview": {
+      "reviewer": "Codex screenshot inspection",
+      "status": "engineering issues identified; final visual acceptance pending",
+      "observations": [
+        "Opening crest and physical descending twist are present",
+        "Lower landscape is too flat and the cliff front too regular",
+        "Clifftop outbank requires an actual exposed terrain edge",
+        "Detailed art and subjective ride feel remain later work"
+      ]
+    }
+  },
+  "ffOpening": {
+    "source": "https://www.youtube.com/watch?v=0vgRPSZv1Gg",
+    "method": "Paused player, period/comma frame stepping and decoded screenshots; no URL timestamp substitutions",
+    "landmarksSeconds": {
+      "climbing": 348.633,
+      "roundedCrown": 351.133,
+      "downwardCommitment": 353.133,
+      "bankedDescent": 355.133,
+      "lateDescent": 357.133,
+      "lowRecovery": 359.133
+    },
+    "landmarkUncertaintySeconds": 1,
+    "comparison": "The rounded crown / twisted descending turn / low recovery composition is present. Current V2 is taller and appears less steep; exact shape/angle equivalence is unclaimed."
   }
 }
