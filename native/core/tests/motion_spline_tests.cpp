@@ -62,6 +62,9 @@ int main(){try{
     }
     auto a=planarJet({0,0,8},0,0),b=planarJet({600,0,225},0,0,-.006);
     const MotionIntent force{83.5,gravity*.004,.0002,0};
+    int cancelCalls=0;bool cancelledSolve=false;
+    try{solveMotion(a,b,680,force,[&]{return ++cancelCalls>=3;});}catch(const std::runtime_error& error){cancelledSolve=std::string(error.what())=="CANCELLED";}
+    check(cancelledSolve&&cancelCalls<=4,"Cancellation interrupts the inner placement solve without retrying another initialization");
     const auto hill=solveMotion(a,b,680,force);derivatives(hill);close(hill.displacement(hill.length),b.position-a.position,2e-7);
     double previous=0;int pitchExtrema=0,previousSign=1;
     for(int i=1;i<1000;++i){auto q=hill.direction(hill.length*i/1000);const double pitch=std::asin(q.tangent.z);int sign=pitch>previous?1:-1;if(sign!=previousSign)++pitchExtrema;previousSign=sign;previous=pitch;check(q.tangent.z>=-1e-9,"Single ascent cannot hide an interior downhill dip");}
@@ -92,6 +95,11 @@ int main(){try{
         check(cross(q.tangent,q.curvature).z>=-1e-9,"The directional handoff has one purposeful turn without a yaw reversal");}
     const auto gradedStart=planarJet({0,0,51.78},0,6*pi/180),gradedEnd=planarJet({141.36,0,65.7986},0,0,-.003793);
     const auto graded=solveMotion(gradedStart,gradedEnd,159,{66,gravity*.004,.0002,0});
+    const auto levelStart=planarJet({0,0,5.00000003},pi/2,0),levelEnd=planarJet({210,175,5},-.2,0);
+    const auto levelTurn=solveMotion(levelStart,levelEnd,350,{49,gravity*.004,.0002,0,4.4,-.95});
+    derivatives(levelTurn);close(levelTurn.displacement(levelTurn.length),levelEnd.position-levelStart.position,1e-9);
+    for(int i=0;i<=250;++i){const auto q=levelTurn.direction(levelTurn.length*i/250);
+        check(std::abs(q.tangent.z)<1e-6&&norm(q.curvature)*49*49/gravity<4,"A nanometre height residual cannot collapse a level corridor into a sharp endpoint bend");}
     derivatives(graded);close(graded.displacement(graded.length),gradedEnd.position-gradedStart.position,2e-7);
     for(int i=0;i<=100;++i){const auto q=graded.direction(graded.length*i/100);check(q.tangent.z>=-1e-9&&q.tangent.z<std::sin(15*pi/180),"Graded launch exit releases without a dip or exaggerated shoulder");}
     for(auto interval:std::array<std::pair<double,double>,3>{{{0,70},{70,190},{190,300}}}){

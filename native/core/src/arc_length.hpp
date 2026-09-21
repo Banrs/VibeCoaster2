@@ -52,4 +52,35 @@ inline double spanArcLength(const Span& span,double u){
     }
     return result*u*.5;
 }
+inline double cachedArcLength(const Span& span,double u){
+    if(!span.polynomialArc)return spanArcLength(span,u);
+    if(u==1)return span.length;
+    double value=span.arcPolynomial.back();for(int k=16;k>=0;--k)value=value*u+span.arcPolynomial[k];return value;
+}
+inline void prepareArcPolynomial(Span& span,const std::array<Vec3,9>& derivativeBernstein){
+    // sqrt(1+e) = 1+e/2 + R, |R| <= e^2/[8(1-|e|)^(3/2)].
+    // The Bernstein convex hull bounds squared speed over the WHOLE span.
+    // Use the integrated polynomial only when that remainder is well below
+    // the existing arc-inversion tolerance; arbitrary spans retain quadrature.
+    const double squared=dot(span.c[1],span.c[1]),speed=std::sqrt(squared);
+    auto choose=[](int n,int k){long double value=1;for(int i=1;i<=k;++i)value=value*(n-i+1)/i;return value;};
+    long double deviation=0;
+    for(int k=0;k<=16;++k){long double coefficient=0;
+        for(int i=std::max(0,k-8);i<=std::min(8,k);++i){const auto a=derivativeBernstein[i],b=derivativeBernstein[k-i];
+            const long double product=(long double)a.x*b.x+(long double)a.y*b.y+(long double)a.z*b.z;
+            coefficient+=product*choose(8,i)*choose(8,k-i)/choose(16,k);}
+        deviation=std::max(deviation,std::abs(coefficient/squared-1));
+    }
+    deviation+=128*std::numeric_limits<double>::epsilon();
+    if(deviation>1e-7||speed*deviation*deviation/(8*std::pow(1-deviation,1.5L))>1e-15*std::max(1.,span.length))return;
+    std::array<Vec3,9> derivative;for(int i=0;i<9;++i)derivative[i]=span.c[i+1]*double(i+1);
+    for(int k=0;k<=16;++k){long double coefficient=0;
+        for(int i=std::max(0,k-8);i<=std::min(8,k);++i){const auto a=derivative[i],b=derivative[k-i];coefficient+=(long double)a.x*b.x+(long double)a.y*b.y+(long double)a.z*b.z;}
+        if(k==0)coefficient-=squared;
+        span.arcPolynomial[k+1]=double(coefficient/(2*speed*(k+1)));
+    }
+    span.arcPolynomial[1]+=speed;
+    double endpoint=0;for(double coefficient:span.arcPolynomial)endpoint+=coefficient;
+    span.polynomialArc=std::abs(endpoint-span.length)<=8e-15*std::max(1.,span.length);
+}
 }

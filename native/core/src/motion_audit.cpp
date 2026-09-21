@@ -1,5 +1,6 @@
 #include "coaster/coaster.hpp"
 #include "coaster/clearance.hpp"
+#include "simulation_internal.hpp"
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -140,8 +141,8 @@ void assessMotion(Design& d,Cancel cancel){
     if(audit.longestFlatCoastSeconds>2)d.report.fail("WAITING_TRACK","Unpowered level track holds the physical frame for more than two seconds",0,audit.longestFlatCoastSeconds,2);
     audit.passed=d.report.errors.size()==errors;
 }
-void verifySpatialRefinement(Design& d,Cancel cancel){
-    d.spatial={};auto& result=d.spatial;result.performed=true;
+SpatialReplay replaySpatialRefinement(const Design& d,Cancel cancel){
+    SpatialReplay work;auto& result=work.assessment;result.performed=true;
     try{
         Track refined;refined.closed=d.track.closed;refined.authoredGeometry=refined.authoredFrame=true;refined.knots.reserve(d.track.knots.size()*2);
         for(size_t i=0;i<d.track.spans.size();++i){
@@ -158,20 +159,31 @@ void verifySpatialRefinement(Design& d,Cancel cancel){
             const auto a=d.track.sampleSpan(i,u),b=refined.sampleSpan(2*i+(u>.5?1:0),u*2-(u>.5?1:0));
             result.maximumPositionError=std::max(result.maximumPositionError,norm(a.position-b.position));result.maximumOrientationError=std::max(result.maximumOrientationError,norm(a.up-b.up));
         }
-        if(result.maximumPositionError>.001||result.maximumOrientationError>.001)d.report.fail("SPATIAL_REFINEMENT","Half-spacing canonical reconstruction changes geometry beyond 1 mm / 0.001 frame-vector tolerance",0,std::max(result.maximumPositionError,result.maximumOrientationError),.001);
-        const auto replay=simulate(refined,operations,d.request.train,d.request.simulationStep,cancel);
+        if(result.maximumPositionError>.001||result.maximumOrientationError>.001)work.report.fail("SPATIAL_REFINEMENT","Half-spacing canonical reconstruction changes geometry beyond 1 mm / 0.001 frame-vector tolerance",0,std::max(result.maximumPositionError,result.maximumOrientationError),.001);
+        work.simulation=simulate(refined,operations,d.request.train,d.request.simulationStep,cancel);
         result.replay.coarseStep=result.replay.fineStep=d.request.simulationStep;
-        const auto comparison=compareSimulationConvergence(d.simulation,replay,d.request.limits,result.replay);
-        for(const auto& error:comparison.errors)d.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
-        auto dynamic=replay;dynamic.metrics.heightAboveStation=d.simulation.metrics.heightAboveStation;dynamic.metrics.maxGroundHeight=d.simulation.metrics.maxGroundHeight;
-        const auto targets=validateSimulationTargets(dynamic,d.request.targets,d.request.limits);
-        for(const auto& error:targets.errors)d.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
         auto supports=d.supports;for(auto& support:supports)support.trackDistance=map(support.trackDistance);
         const auto refinedSweep=buildClearanceSweepVerified(refined,d.request.train,cancel);
         const auto clearance=validateGeometry(refined,d.request.terrain,d.request.limits,d.request.train,supports,refinedSweep,cancel);
-        for(const auto& error:clearance.errors)d.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
-        result.passed=comparison.valid()&&targets.valid()&&clearance.valid()&&result.maximumPositionError<=.001&&result.maximumOrientationError<=.001;
+        for(const auto& error:clearance.errors)work.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
+    }catch(const std::exception& e){if(cancel&&cancel())work.simulation.cancelled=true;work.report.fail("SPATIAL_REFINEMENT",e.what());}
+    return work;
+}
+void verifySpatialRefinementWith(Design& d,const std::function<SpatialReplay()>& replay,Cancel cancel){
+    d.spatial={};
+    try{
+        auto work=replay();d.spatial=std::move(work.assessment);auto& result=d.spatial;
+        const auto comparison=compareSimulationConvergence(d.simulation,work.simulation,d.request.limits,result.replay);
+        for(const auto& error:comparison.errors)work.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
+        const auto targets=validateSimulationTargets(work.simulation,d.request.targets,d.request.limits);
+        for(const auto& error:targets.errors)work.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
+        if(work.simulation.cancelled||(cancel&&cancel())){d.simulation.cancelled=true;work.report.fail("CANCELLED","Spatial refinement cancelled");}
+        result.passed=work.report.valid()&&result.performed;
+        d.report.errors.insert(d.report.errors.end(),work.report.errors.begin(),work.report.errors.end());
     }catch(const std::exception& e){if(cancel&&cancel())d.simulation.cancelled=true;d.report.fail("SPATIAL_REFINEMENT",e.what());}
+}
+void verifySpatialRefinement(Design& d,Cancel cancel){
+    verifySpatialRefinementWith(d,[&]{return replaySpatialRefinement(d,cancel);},cancel);
 }
 std::string motionReportJson(const Design& d){
     std::ostringstream o;o<<std::setprecision(12);const auto& m=d.motion;

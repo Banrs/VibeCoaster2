@@ -55,6 +55,11 @@ int main() {
     RideRecipe parsed;
     check(parseRecipe(payload, parsed, error) && parsed == recipe, "canonical recipe round trips exactly");
     check(recipePayload(parsed) == payload, "canonical writer is byte stable");
+    check(payload.find("lipSpeedKmh=")==std::string::npos,"Unused cliff speed metadata is absent from editable recipes");
+    auto noOp=recipe;std::get<CliffParameters>(noOp.elements[3].parameters).lipSpeedKmh+=1;
+    check(!validateRecipe(noOp,error),"A silent no-op edit to role-specific fixed metadata is rejected");
+    auto wrongAnchor=recipe;wrongAnchor.elements[7].anchor=TerrainAnchor::Station;
+    check(!validateRecipe(wrongAnchor,error),"Protected placement intent cannot silently ignore an unrelated terrain anchor");
 
     RideRecipe customized = recipe;
     std::swap(customized.elements[12], customized.elements[13]);

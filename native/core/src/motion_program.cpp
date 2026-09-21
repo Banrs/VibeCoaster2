@@ -158,14 +158,15 @@ struct Constraint {Row row{};double value{};}; // row * step >= value
 double dotRow(const Row& a,const Row& b) {double sum=0;for(int i=0;i<variables;++i)sum+=a[i]*b[i];return sum;}
 
 bool constrainedStep(const Matrix& hessian,const Row& gradient,const std::vector<Constraint>& equality,
-                     const std::vector<Constraint>& inequalities,Row& step,std::string& diagnostic) {
-    const size_t m=inequalities.size(),n=variables+equality.size();
+                     const std::vector<Constraint>& inequalities,Row& step,std::string& diagnostic,const Cancel& cancel,int activeVariables) {
+    const size_t m=inequalities.size(),n=activeVariables+equality.size();
     Row x{};std::vector<double> y(equality.size()),slack(m,1),dual(m,1);
     for(int iteration=0;iteration<80;++iteration) {
+        if(cancel&&cancel())throw std::runtime_error("CANCELLED");
         Row residual=gradient;std::vector<double> equalResidual(equality.size()),inequalResidual(m),central(m);
         double gap=0,maximum=0;
-        for(int i=0;i<variables;++i) {
-            for(int j=0;j<variables;++j)residual[i]+=hessian[i][j]*x[j];
+        for(int i=0;i<activeVariables;++i) {
+            for(int j=0;j<activeVariables;++j)residual[i]+=hessian[i][j]*x[j];
             for(size_t j=0;j<equality.size();++j)residual[i]+=equality[j].row[i]*y[j];
             for(size_t j=0;j<m;++j)residual[i]-=inequalities[j].row[i]*dual[j];
             maximum=std::max(maximum,std::abs(residual[i]));
@@ -181,22 +182,22 @@ bool constrainedStep(const Matrix& hessian,const Row& gradient,const std::vector
         if(maximum<1e-8&&gap<1e-10){step=x;return true;}
         for(size_t i=0;i<m;++i)central[i]=slack[i]*dual[i]-.1*gap;
         std::vector<std::vector<double>> matrix(n,std::vector<double>(n+1));
-        for(int i=0;i<variables;++i) {
-            for(int j=0;j<variables;++j)matrix[i][j]=hessian[i][j];
+        for(int i=0;i<activeVariables;++i) {
+            for(int j=0;j<activeVariables;++j)matrix[i][j]=hessian[i][j];
             matrix[i][n]=-residual[i];
             for(size_t c=0;c<m;++c) {
                 const double factor=dual[c]/slack[c];
                 matrix[i][n]-=inequalities[c].row[i]*(central[c]+dual[c]*inequalResidual[c])/slack[c];
-                for(int j=0;j<variables;++j)matrix[i][j]+=factor*inequalities[c].row[i]*inequalities[c].row[j];
+                for(int j=0;j<activeVariables;++j)matrix[i][j]+=factor*inequalities[c].row[i]*inequalities[c].row[j];
             }
         }
         for(size_t c=0;c<equality.size();++c) {
-            for(int i=0;i<variables;++i)matrix[i][variables+c]=matrix[variables+c][i]=equality[c].row[i];
-            matrix[variables+c][n]=-equalResidual[c];
+            for(int i=0;i<activeVariables;++i)matrix[i][activeVariables+c]=matrix[activeVariables+c][i]=equality[c].row[i];
+            matrix[activeVariables+c][n]=-equalResidual[c];
         }
         std::vector<double> solved;
         if(!linearSolve(std::move(matrix),solved)){diagnostic="singular interior-point system";return false;}
-        Row dx{};std::copy_n(solved.begin(),variables,dx.begin());
+        Row dx{};std::copy_n(solved.begin(),activeVariables,dx.begin());
         std::vector<double> ds(m),dz(m);double fraction=1;
         for(size_t c=0;c<m;++c) {
             ds[c]=dotRow(inequalities[c].row,dx)+inequalResidual[c];
@@ -204,8 +205,8 @@ bool constrainedStep(const Matrix& hessian,const Row& gradient,const std::vector
             if(ds[c]<0)fraction=std::min(fraction,-.995*slack[c]/ds[c]);
             if(dz[c]<0)fraction=std::min(fraction,-.995*dual[c]/dz[c]);
         }
-        for(int i=0;i<variables;++i)x[i]+=fraction*dx[i];
-        for(size_t i=0;i<equality.size();++i)y[i]+=fraction*solved[variables+i];
+        for(int i=0;i<activeVariables;++i)x[i]+=fraction*dx[i];
+        for(size_t i=0;i<equality.size();++i)y[i]+=fraction*solved[activeVariables+i];
         for(size_t i=0;i<m;++i){slack[i]+=fraction*ds[i];dual[i]+=fraction*dz[i];}
     }
     diagnostic="interior-point iteration limit";return false;
@@ -251,7 +252,7 @@ MotionProgram polynomialMotion(const detail::MotionJet& begin,const std::array<d
 }
 
 enum class PlacementConstraint { Position, Length, Height };
-static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detail::MotionJet& end,double estimatedLength,const MotionIntent& intent,bool alternateEntryShape,bool linearInitialHeading,PlacementConstraint placement=PlacementConstraint::Position) {
+static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detail::MotionJet& end,double estimatedLength,const MotionIntent& intent,bool alternateEntryShape,bool linearInitialHeading,PlacementConstraint placement,const Cancel& cancel) {
     const bool fixedPosition=placement==PlacementConstraint::Position,fixedHeight=placement==PlacementConstraint::Height;
     if(!std::isfinite(estimatedLength)||estimatedLength<=0)throw std::runtime_error("Motion length must be finite and positive");
     const double speed=intent.entrySpeed;
@@ -262,6 +263,13 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
     const double chord=fixedPosition?norm(delta):estimatedLength/1.25;
     if(!std::isfinite(chord)||chord<=0)throw std::runtime_error("Motion requires a nonzero finite placement scale");
     auto first=detail::directionAngles(begin),last=detail::directionAngles(end);
+    const auto levelJet=[](detail::AngleJet q){return std::abs(q.value)<1e-8&&std::abs(q.first)+std::abs(q.second)+std::abs(q.third)<1e-10;};
+    // Almost-level placed corridors have no meaningful pitch design freedom.
+    // Eliminating those variables avoids an interior-point problem whose whole
+    // feasible pitch polytope has collapsed to zero volume. The final global
+    // equality correction still retains the literal height and endpoint jets.
+    const bool nearlyLevel=fixedPosition&&std::abs(delta.z)<1e-6&&levelJet(first[0])&&levelJet(last[0]);
+    const int headingOffset=nearlyLevel?0:freeCount,activeVariables=nearlyLevel?1+freeCount:variables;
     double yawChange=std::remainder(last[1].value-first[1].value,2*pi);
     // At a half-turn, atan2 rounding must not pick the opposite physical
     // revolution. The chord's side supplies the otherwise ambiguous hand.
@@ -287,7 +295,7 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
         MotionProgram p;p.begin=begin;p.end=end;p.length=chord*std::exp(x[0]);
         endControls(p.pitch,first[0],p.length,false);endControls(p.pitch,last[0],p.length,true);
         endControls(p.heading,first[1],p.length,false);endControls(p.heading,last[1],p.length,true);
-        for(int i=0;i<freeCount;++i){p.pitch[i+4]=x[i+1];p.heading[i+4]=x[i+1+freeCount];}
+        for(int i=0;i<freeCount;++i){p.pitch[i+4]=nearlyLevel?std::lerp(p.pitch[3],p.pitch[count-4],double(i+1)/(freeCount+1)):x[i+1];p.heading[i+4]=x[i+1+headingOffset];}
         return p;
     };
     MotionProgram best;int bestPeak=count/2;double bestError=INFINITY,bestFeasibleCost=INFINITY;std::string failure;
@@ -298,19 +306,19 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
         for(int i=4;i<count-4;++i) {
             auto greville=[](int control){double u=0;for(int j=1;j<=degree;++j)u+=breakpoint(control+j-degree)/degree;return u;};
             const double u=linearInitialHeading?(greville(i)-greville(3))/(greville(count-4)-greville(3)):double(i-3)/(count-7);
-            x[i-3]=extremum?(i<=peak?boundary.pitch[3]+(apex-boundary.pitch[3])*double(i-3)/(peak-3):
+            if(!nearlyLevel)x[i-3]=extremum?(i<=peak?boundary.pitch[3]+(apex-boundary.pitch[3])*double(i-3)/(peak-3):
                 apex+(boundary.pitch[count-4]-apex)*double(i-peak)/(count-4-peak)):
                 boundary.pitch[3]+u*(boundary.pitch[count-4]-boundary.pitch[3]);
             if(orderedYaw&&yawExtremum){
                 const double target=2*chordYaw-(first[1].value+last[1].value)*.5;
                 const double turning=initialYaw>0?std::max({boundary.heading[3],boundary.heading[count-4],target}):std::min({boundary.heading[3],boundary.heading[count-4],target});
-                x[1+freeCount+i-4]=i<=peak?boundary.heading[3]+(turning-boundary.heading[3])*double(i-3)/(peak-3):turning+(boundary.heading[count-4]-turning)*double(i-peak)/(count-4-peak);
+                x[1+headingOffset+i-4]=i<=peak?boundary.heading[3]+(turning-boundary.heading[3])*double(i-3)/(peak-3):turning+(boundary.heading[count-4]-turning)*double(i-peak)/(count-4-peak);
             }else if(orderedYaw) {
                 const double mean=std::clamp((chordYaw-first[1].value)/(last[1].value-first[1].value),.05,.95);
-                x[1+freeCount+i-4]=boundary.heading[3]+std::pow(u,(1-mean)/mean)*(boundary.heading[count-4]-boundary.heading[3]);
+                x[1+headingOffset+i-4]=boundary.heading[3]+std::pow(u,(1-mean)/mean)*(boundary.heading[count-4]-boundary.heading[3]);
             } else {
                 const double bend=2*std::remainder(chordYaw-(first[1].value+last[1].value)*.5,2*pi);
-                x[1+freeCount+i-4]=boundary.heading[3]+u*(boundary.heading[count-4]-boundary.heading[3])+bend*std::pow(std::sin(pi*u),2);
+                x[1+headingOffset+i-4]=boundary.heading[3]+u*(boundary.heading[count-4]-boundary.heading[3])+bend*std::pow(std::sin(pi*u),2);
             }
         }
         const auto reference=program(x);
@@ -322,7 +330,7 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
             // Ordering constrains the free interior; the actual complete
             // curve still has to pass the independent pitch-shape audit.
             for(int i=3;i<count-4;++i) {
-                error+=std::max(0.,-pitchSign(i)*(p.pitch[i+1]-p.pitch[i]));
+                if(!nearlyLevel)error+=std::max(0.,-pitchSign(i)*(p.pitch[i+1]-p.pitch[i]));
                 if(orderedYaw)error+=std::max(0.,-yawDirection(i)*(p.heading[i+1]-p.heading[i]));
             }
             for(int i=4;i<count-4;++i)error+=std::max(0.,std::abs(p.heading[i]-chordYaw)-pi*.5);
@@ -350,7 +358,10 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
             return cost;
         };
         for(int iteration=0;iteration<90;++iteration) {
-            const auto p=program(x);const Vec3 position=displacement(p),residual=fixedPosition?(position-delta)/chord:fixedHeight?Vec3{0,0,(position.z-delta.z)/chord}:Vec3{};
+            if(cancel&&cancel())throw std::runtime_error("CANCELLED");
+            const auto p=program(x);const Vec3 position=displacement(p);
+            Vec3 residual=fixedPosition?(position-delta)/chord:fixedHeight?Vec3{0,0,(position.z-delta.z)/chord}:Vec3{};
+            if(nearlyLevel)residual.z=0;
             const double error=norm(residual)+shapeError(p),cost=objective(p);
             // The QP solves displacement to finite precision; choose the best
             // physically shaped iterate within that numerical neighbourhood,
@@ -362,13 +373,15 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
             std::array<Row,count> pitchJac{},headingJac{};
             for(int i=0;i<count;++i) {
                 pitchJac[i][0]=(stretched.pitch[i]-p.pitch[i])/epsilon;headingJac[i][0]=(stretched.heading[i]-p.heading[i])/epsilon;
-                if(i>=4&&i<count-4){pitchJac[i][i-3]=1;headingJac[i][1+freeCount+i-4]=1;}
+                if(i>=4&&i<count-4){if(!nearlyLevel)pitchJac[i][i-3]=1;headingJac[i][1+headingOffset+i-4]=1;}
             }
             Matrix hessian{};Row gradient{};for(int i=0;i<variables;++i)hessian[i][i]=1e-5;
             auto term=[&](double value,const Row& jac,double weight) {
-                for(int i=0;i<variables;++i) {
+                // Compact B-spline support makes these Jacobians sparse.
+                // Accumulate one triangle and mirror once per solver step.
+                for(int i=0;i<variables;++i)if(jac[i]!=0) {
                     gradient[i]+=2*weight*value*jac[i];
-                    for(int j=0;j<variables;++j)hessian[i][j]+=2*weight*jac[i]*jac[j];
+                    for(int j=i;j<variables;++j)if(jac[j]!=0)hessian[i][j]+=2*weight*jac[i]*jac[j];
                 }
             };
             Row lengthJac{};lengthJac[0]=1;term(x[0],lengthJac,.2);
@@ -380,6 +393,7 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
                     Row row{};double value=0;
                     for(int i=0;i<count;++i) {
                         const double coefficient=order==2?q.basis[i].second:q.basis[i].third;
+                        if(coefficient==0)continue;
                         value+=coefficient*c[i];
                         for(int j=0;j<variables;++j)row[j]+=coefficient*jac[i][j];
                     }
@@ -394,6 +408,7 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
                     double value=0;Row row{};
                     for(int i=0;i<count;++i) {
                         const double coefficient=order==0?basis[i].value:order==1?basis[i].first:basis[i].second;
+                        if(coefficient==0)continue;
                         value+=c[i]*coefficient;for(int j=0;j<variables;++j)row[j]+=jac[i][j]*coefficient;
                     }
                     const double scale=std::pow(p.length,-order);value*=scale;
@@ -416,18 +431,18 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
                 const Vec3 yawAxis{-std::cos(a)*std::sin(b),std::cos(a)*std::cos(b),0};
                 for(int i=0;i<freeCount;++i) {
                     const double weight=q.weight*p.length*q.basis[i+4].value/chord;
-                    positionJac[i+1]=positionJac[i+1]+pitchAxis*weight;
-                    positionJac[i+1+freeCount]=positionJac[i+1+freeCount]+yawAxis*weight;
+                    if(!nearlyLevel)positionJac[i+1]=positionJac[i+1]+pitchAxis*weight;
+                    positionJac[i+1+headingOffset]=positionJac[i+1+headingOffset]+yawAxis*weight;
                 }
             }
-            std::vector<Constraint> equality(fixedPosition?3:1);
+            std::vector<Constraint> equality(fixedPosition?(nearlyLevel?2:3):1);
             if(fixedPosition){
-                for(int i=0;i<variables;++i){equality[0].row[i]=positionJac[i].x;equality[1].row[i]=positionJac[i].y;equality[2].row[i]=positionJac[i].z;}
-                equality[0].value=-residual.x;equality[1].value=-residual.y;equality[2].value=-residual.z;
+                for(int i=0;i<variables;++i){equality[0].row[i]=positionJac[i].x;equality[1].row[i]=positionJac[i].y;if(!nearlyLevel)equality[2].row[i]=positionJac[i].z;}
+                equality[0].value=-residual.x;equality[1].value=-residual.y;if(!nearlyLevel)equality[2].value=-residual.z;
             }else if(fixedHeight){for(int i=0;i<variables;++i)equality[0].row[i]=positionJac[i].z;equality[0].value=-residual.z;}
             else{equality[0].row[0]=1;equality[0].value=std::log(estimatedLength/chord)-x[0];}
             std::vector<Constraint> inequalities;
-            for(int channel=0;channel<2;++channel)if(channel==0||orderedYaw) {
+            for(int channel=0;channel<2;++channel)if((channel==0&&!nearlyLevel)||(channel==1&&orderedYaw)) {
                 const auto& c=channel?p.heading:p.pitch;const auto& jac=channel?headingJac:pitchJac;
                 for(int i=3;i<count-4;++i) {
                     const double s=channel?yawDirection(i):pitchSign(i);Constraint bound;
@@ -443,7 +458,8 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
             Constraint lower,upper;lower.row[0]=1;lower.value=-x[0];upper.row[0]=-1;upper.value=x[0]-std::log(2.5);
             inequalities.push_back(lower);inequalities.push_back(upper);Row step{};
             std::string diagnostic;
-            if(!constrainedStep(hessian,gradient,equality,inequalities,step,diagnostic)){failure="quadratic constraints at iteration "+std::to_string(iteration)+": "+diagnostic;break;}
+            for(int i=0;i<variables;++i)for(int j=0;j<i;++j)hessian[i][j]=hessian[j][i];
+            if(!constrainedStep(hessian,gradient,equality,inequalities,step,diagnostic,cancel,activeVariables)){failure="quadratic constraints at iteration "+std::to_string(iteration)+": "+diagnostic;break;}
             // Feasibility alone is not convergence: keep optimizing the
             // force/shape objective until the constrained step is small.
             double stepSize=0;for(double value:step)stepSize=std::max(stepSize,std::abs(value));
@@ -458,7 +474,8 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
                 auto trial=x;for(int i=0;i<variables;++i)trial[i]+=fraction*step[i];
                 if(trial[0]<-1e-8||trial[0]>std::log(2.5)+1e-8)continue;
                 const auto q=program(trial);
-                const double next=penalty*((fixedPosition?norm(displacement(q)-delta)/chord:fixedHeight?std::abs(displacement(q).z-delta.z)/chord:0)+shapeError(q))+objective(q);
+                const auto difference=displacement(q)-delta;
+                const double next=penalty*((fixedPosition?(nearlyLevel?std::hypot(difference.x,difference.y):norm(difference))/chord:fixedHeight?std::abs(difference.z)/chord:0)+shapeError(q))+objective(q);
                 if(next<merit){x=trial;improved=true;break;}
             }
             if(!improved){failure="line search at iteration "+std::to_string(iteration);break;}
@@ -467,8 +484,8 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
     }
     // A zero-curvature grade can admit either initial pitch trend. Try the
     // other single-extremum shape only if the simpler trend cannot reach.
-    if(bestError>2e-10&&!alternateEntryShape&&std::abs(first[0].first)<1e-7&&std::abs(first[0].second)<1e-8)
-        return solveMotionShape(begin,end,estimatedLength,intent,true,linearInitialHeading,placement);
+    if(bestError>2e-10&&!nearlyLevel&&!alternateEntryShape&&std::abs(first[0].first)<1e-7&&std::abs(first[0].second)<1e-8)
+        return solveMotionShape(begin,end,estimatedLength,intent,true,linearInitialHeading,placement,cancel);
     if(!std::isfinite(bestError))throw std::runtime_error("No feasible ordered motion initialization: "+failure);
     if(!fixedPosition){
         if(fixedHeight&&bestError<1e-5){
@@ -516,10 +533,11 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
     if(norm(displacement(best)-delta)>1e-9){std::ostringstream message;message<<std::setprecision(17)<<"Ordered motion endpoint solve failed: "<<norm(displacement(best)-delta)<<" metres; "<<failure;throw std::runtime_error(message.str());}
     for(int i=3;i<count-4;++i){
         const double p=extremum&&i>=bestPeak?terminalSign:initialSign,y=yawExtremum&&i>=bestPeak?terminalYaw:initialYaw;
-        if(p*(best.pitch[i+1]-best.pitch[i])< -2e-10||(orderedYaw&&y*(best.heading[i+1]-best.heading[i])< -2e-10))
+        if((!nearlyLevel&&p*(best.pitch[i+1]-best.pitch[i])< -2e-10)||(orderedYaw&&y*(best.heading[i+1]-best.heading[i])< -2e-10))
             {std::ostringstream message;message<<"Final endpoint correction cannot violate the continuous pitch/heading shape: pitch="<<p*(best.pitch[i+1]-best.pitch[i])<<", yaw="<<y*(best.heading[i+1]-best.heading[i])<<", priorError="<<bestError<<", feasibleCost="<<bestFeasibleCost;throw std::runtime_error(message.str());}
     }
     const Vec3 bearing=unit(delta);
+    if(nearlyLevel)for(double pitch:best.pitch)if(std::abs(pitch)>1e-6)throw std::runtime_error("Level corridor height correction exceeded its numerical range");
     for(int i=0;i<=160;++i) {
         const auto q=best.direction(best.length*i/160);
         // A semicircle has zero chord projection at its ends. A positive
@@ -530,19 +548,19 @@ static MotionProgram solveMotionShape(const detail::MotionJet& begin,const detai
     }
     return best;
 }
-MotionProgram solveMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double length,const MotionIntent& intent) {
+MotionProgram solveMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double length,const MotionIntent& intent,Cancel cancel) {
     // Nonlinear endpoint solves benefit from two bounded initial control
     // fields. Greville interpolation exactly seeds circular half-turns;
     // endpoint-weighted interpolation also handles inherited mixed jets.
-    try{return solveMotionShape(begin,end,length,intent,false,false);}
-    catch(const std::runtime_error&){return solveMotionShape(begin,end,length,intent,false,true);}
+    try{return solveMotionShape(begin,end,length,intent,false,false,PlacementConstraint::Position,cancel);}
+    catch(const std::runtime_error&){if(cancel&&cancel())throw;return solveMotionShape(begin,end,length,intent,false,true,PlacementConstraint::Position,cancel);}
 }
 
-MotionProgram solveDirectionMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double length,const MotionIntent& intent) {
-    return solveMotionShape(begin,end,length,intent,false,true,PlacementConstraint::Length);
+MotionProgram solveDirectionMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double length,const MotionIntent& intent,Cancel cancel) {
+    return solveMotionShape(begin,end,length,intent,false,true,PlacementConstraint::Length,cancel);
 }
-MotionProgram solveHeightMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double length,const MotionIntent& intent) {
-    return solveMotionShape(begin,end,length,intent,false,true,PlacementConstraint::Height);
+MotionProgram solveHeightMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double length,const MotionIntent& intent,Cancel cancel) {
+    return solveMotionShape(begin,end,length,intent,false,true,PlacementConstraint::Height,cancel);
 }
 
 

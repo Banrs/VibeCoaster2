@@ -66,7 +66,7 @@ MotionBuilder::Range MotionBuilder::curve(MotionJet end,double length,Element el
         const auto last=curve(end,length*.5,element,(prefix+"-out").c_str());return {first.first,last.second};
     }
     MotionProgram program;
-    try {program=solveMotion(start,end,length,{nominalSpeed,gravity*req.train.rollingResistance,drag,releaseBank,req.limits.maxVerticalG-.6,req.limits.minVerticalG+(releaseBank!=0?.9:.55)});}
+    try {program=solveMotion(start,end,length,{nominalSpeed,gravity*req.train.rollingResistance,drag,releaseBank,req.limits.maxVerticalG-.6,req.limits.minVerticalG+(releaseBank!=0?.9:.55)},cancel);}
     catch(const std::exception& error){std::ostringstream message;message<<name<<": "<<error.what()<<"; corridor "<<start.position.x<<","<<start.position.y<<","<<start.position.z<<" -> "<<end.position.x<<","<<end.position.y<<","<<end.position.z<<"; headings "<<std::atan2(start.tangent.y,start.tangent.x)<<" -> "<<std::atan2(end.tangent.y,end.tangent.x);throw std::runtime_error(message.str());}
     return programme(program,element,name,releaseBank);
 }

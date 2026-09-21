@@ -34,7 +34,7 @@ struct TerrainKnoll {
     bool operator==(const TerrainKnoll&) const=default;
     double x{},y{},height{},radius{180};
     bool valid() const{return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(height)&&std::isfinite(radius)&&std::abs(x)<=100000&&std::abs(y)<=100000&&height>=0&&height<=350&&radius>=50&&radius<=1000;}
-    double at(double px,double py) const{const double t=((px-x)*(px-x)+(py-y)*(py-y))/(radius*radius);return t>=1?0:height*std::pow(1-t,3);}
+    double at(double px,double py) const{const double t=((px-x)*(px-x)+(py-y)*(py-y))/(radius*radius),u=1-t;return t>=1?0:height*u*u*u;}
 };
 // A single broad rear slope limits the plateau instead of fitting a sequence
 // of rail samples. It cannot expand the landform's positive footprint.

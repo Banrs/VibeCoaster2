@@ -227,6 +227,11 @@ bool assessAxis(const AccelerationSeries& series, AccelerationAssessment& result
     const double maximum = sign > 0 ? extrema.maximumG : -extrema.minimumG;
     if (maximum <= 0) return true;
     const double cap = curve.points.front().magnitudeG;
+    const double floor = std::min_element(curve.points.begin(), curve.points.end(),
+        [](const auto& a,const auto& b){return a.magnitudeG<b.magnitudeG;})->magnitudeG;
+    // A slice at or below every point of the duration curve cannot fail that
+    // curve. Reversal/history and long-duration scope checks remain separate.
+    if (maximum <= floor) return true;
     std::vector<double> levels;
     // At most 0.1 g between slice lines. Beyond the 200 ms intercept, the
     // cap-crossing scan below already establishes failure or impact review,
@@ -239,6 +244,7 @@ bool assessAxis(const AccelerationSeries& series, AccelerationAssessment& result
     levels.erase(std::unique(levels.begin(), levels.end()), levels.end());
     const char* signName = sign > 0 ? "+" : "-";
     for (const double level : levels) {
+        if (level <= floor) continue;
         if (!scanRuns(values, series.stepSeconds, sign, level, false, cancel, [&](const Run& run) {
             const double duration = run.end - run.begin;
             if (!atLeast(duration, sustainedSeconds)) return;
@@ -347,6 +353,15 @@ bool assessPair(const AccelerationSeries& series, AccelerationAssessment& result
                 std::size_t secondAxis, const std::vector<TimeWindow>& windows, const std::function<bool()>& cancel) {
     const auto x = axes(series)[firstAxis], y = axes(series)[secondAxis];
     const std::string axis = std::string(axisNames[firstAxis]) + axisNames[secondAxis];
+    auto normalizedBound=[&](std::size_t a){
+        const auto& e=result.filteredExtrema[a];
+        const double positive=a==2&&!windows.empty()?zReduced.front().magnitudeG:baseCurves[a][0].points.front().magnitudeG;
+        return std::max(std::max(0.,e.maximumG)/positive,std::max(0.,-e.minimumG)/baseCurves[a][1].points.front().magnitudeG);
+    };
+    const double boundX=normalizedBound(firstAxis),boundY=normalizedBound(secondAxis);
+    // A rectangle enclosing the complete paired trace inside the smallest
+    // applicable ellipse is a sufficient proof for every point in the pair.
+    if(boundX*boundX+boundY*boundY<=1)return true;
     Run run{};
     bool active = false;
     std::string peakSign;
@@ -383,6 +398,8 @@ bool assessPair(const AccelerationSeries& series, AccelerationAssessment& result
             const double radiusY = reduced ? zReduced.front().magnitudeG : baseCurves[secondAxis][midY >= 0 ? 0 : 1].limit(sustainedSeconds);
             const double x0 = std::lerp(x[i], x[i + 1], a) / radiusX, x1 = std::lerp(x[i], x[i + 1], b) / radiusX;
             const double y0 = std::lerp(y[i], y[i + 1], a) / radiusY, y1 = std::lerp(y[i], y[i + 1], b) / radiusY;
+            // Squared ellipse utilization is convex along this linear segment.
+            if(std::max(x0*x0+y0*y0,x1*x1+y1*y1)<=1){close();continue;}
             const double dx = x1 - x0, dy = y1 - y0;
             const double qa = dx * dx + dy * dy, qb = 2 * (x0 * dx + y0 * dy), qc = x0 * x0 + y0 * y0 - 1;
             std::array<double, 4> boundaries{0, 1}; std::size_t count = 2;

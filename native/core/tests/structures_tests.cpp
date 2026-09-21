@@ -5,6 +5,8 @@
 #include <sstream>
 #include <stdexcept>
 using namespace coaster;
+static std::string stableReport(const Design& source){auto copy=source;copy.timings={};return reportJson(copy);}
+
 namespace fs=std::filesystem;
 static int checks=0;
 static void check(bool b,const std::string& s){++checks;if(!b)throw std::runtime_error(s);}
@@ -26,8 +28,8 @@ int main(){try{
     }
     const auto good=out/"accepted.coaster",malformed=out/"malformed.coaster";std::string error;
     check(saveDesign(d,good.string(),error),"Combined save: "+error);const auto saved=bytes(good),payload=saved.substr(saved.find('\n')+1);
-    Design replay;check(loadDesign(good.string(),replay,error),"Combined replay: "+error);check(stationPayload(d.station)==stationPayload(replay.station),"Canonical station fields preserved exactly");check(reportJson(d)==reportJson(replay),"Replay recomputes identical physics/reference/dimensions");
-    auto rejected=[&](const std::string& p,const std::string& expected="REQUIRED_STRUCTURE"){write(malformed,p);Design prior=d;check(!loadDesign(malformed.string(),prior,error),"Checksummed missing geometry rejected");check(error.find(expected)!=std::string::npos,"Missing geometry receives explicit completeness finding: "+error);check(reportJson(prior)==reportJson(d),"Rejected load preserves accepted design");};
+    Design replay;check(loadDesign(good.string(),replay,error),"Combined replay: "+error);check(stationPayload(d.station)==stationPayload(replay.station),"Canonical station fields preserved exactly");check(stableReport(d)==stableReport(replay),"Replay recomputes identical physics/reference/dimensions");
+    auto rejected=[&](const std::string& p,const std::string& expected="REQUIRED_STRUCTURE"){write(malformed,p);Design prior=d;check(!loadDesign(malformed.string(),prior,error),"Checksummed missing geometry rejected");check(error.find(expected)!=std::string::npos,"Missing geometry receives explicit completeness finding: "+error);check(stableReport(prior)==stableReport(d),"Rejected load preserves accepted design");};
     const auto ext=payload.find("EXTENSIONS ");check(ext!=std::string::npos,"Schema6 extension directory present");
     // Strip only the structure under test. A valid landscape remains mandatory
     // in the new exact version, so it must survive the missing-station fixture.
@@ -57,7 +59,7 @@ int main(){try{
     check(code(validateDesignStructures(bad),"STATION_HARDWARE_CLEARANCE"),"Direct station/spine obstruction rejected");
     check(!saveDesign(bad,good.string(),error),"Station/spine overlap cannot overwrite accepted save");check(bytes(good)==saved,"Rejected crossbar save preserves exact bytes");
     const std::string adverse=stationPayload(bad.station);write(malformed,withStation(adverse));
-    Design retained=d;check(!loadDesign(malformed.string(),retained,error),"Checksummed station/spine overlap cannot load");check(error.find("STATION_HARDWARE_CLEARANCE")!=std::string::npos,"Load reports exact station hardware certification gap");check(reportJson(retained)==reportJson(d),"Crossbar load preserves last accepted ride");
+    Design retained=d;check(!loadDesign(malformed.string(),retained,error),"Checksummed station/spine overlap cannot load");check(error.find("STATION_HARDWARE_CLEARANCE")!=std::string::npos,"Load reports exact station hardware certification gap");check(stableReport(retained)==stableReport(d),"Crossbar load preserves last accepted ride");
     const auto platform=*std::find_if(d.station.boxes.begin(),d.station.boxes.end(),[](const StationBox& b){return b.role==StationRole::Platform;});
     Support member;member.members={{{}, {}, .18,.18,SupportMemberKind::Steel,true}};member.members[0].base=platform.center-platform.forward;member.members[0].top=platform.center+platform.forward;member.attachment=member.members[0].top;
     check(supportStationCollision(member,d.station),"Spine-contact flag never exempts station intersection");

@@ -70,7 +70,7 @@ FString GeometryIdentity(const coaster::Design& D)
 
 struct FCoasterRuntimeVerification::FState
 {
-    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, Finish, Done } Stage = Init;
+    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, AwaitGenerationPhase, CancelGeneration, AwaitGenerationCancel, AwaitMeshPhase, AwaitMeshCancel, AwaitScenePhase, AwaitSceneCancel, Finish, Done } Stage = Init;
     FString Output, Profile, SavePath, Error, Identity, SaveHash, PendingShot, FrameRows = TEXT("wall_seconds,ride_seconds,distance_m,speed_ms,wall_frame_ms,engine_delta_ms\n");
     FString Seed = TEXT("42"), Terrain = TEXT("highlands");
     uint64 CommittedRevision = 0;
@@ -81,6 +81,9 @@ struct FCoasterRuntimeVerification::FState
     TArray<double> ShotTimes;
     TSharedFuture<FString> CsvFinished;
     bool CsvStarted = false, PoseChecked = false, SaveCancelChecked = false, Benchmark = false;
+    bool GenerationCancelChecked = false, MeshCancelChecked = false, SceneCancelChecked = false;
+    uint64 CancelRevision = 0;
+    double CancelRideTime = 0, GenerationCancelSeconds = 0, MeshCancelSeconds = 0, SceneCancelSeconds = 0;
     int32 MotionFrames = 0;
 
     bool Write(const FString& Name, const FString& Text, bool Append = false)
@@ -94,6 +97,15 @@ struct FCoasterRuntimeVerification::FState
         UE_LOG(LogTemp, Display, TEXT("CoasterVerify: %s"), *Line.TrimEnd());
     }
     void Advance(EStage Next) { Stage = Next; StageStarted = FPlatformTime::Seconds(); }
+    FString CancellationFields() const
+    {
+        return TEXT(",\"generation_cancel_checked\":") + FString(GenerationCancelChecked ? TEXT("true") : TEXT("false"))
+            + TEXT(",\"mesh_cancel_checked\":") + (MeshCancelChecked ? TEXT("true") : TEXT("false"))
+            + TEXT(",\"scene_cancel_checked\":") + (SceneCancelChecked ? TEXT("true") : TEXT("false"))
+            + TEXT(",\"generation_cancel_seconds\":") + N(GenerationCancelSeconds)
+            + TEXT(",\"mesh_cancel_seconds\":") + N(MeshCancelSeconds)
+            + TEXT(",\"scene_cancel_seconds\":") + N(SceneCancelSeconds);
+    }
     void Fail(const FString& Message) { Error = Message; Advance(Finish); }
     void Capture(AVibeCoasterController& PC, const FString& Label)
     {
@@ -186,9 +198,9 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             else S.Event(TEXT("csv-written"), TEXT(",\"file\":") + Q(CsvPath));
         }
 #endif
-        const bool Passed = S.Error.IsEmpty() && S.Traversed && S.PauseChecked && S.RestartChecked && S.PoseChecked && S.SaveCancelChecked && S.LoadChecked && (S.LoadOnly || S.SaveChecked);
+        const bool Passed = S.Error.IsEmpty() && S.Traversed && S.PauseChecked && S.RestartChecked && S.PoseChecked && S.SaveCancelChecked && S.GenerationCancelChecked && S.MeshCancelChecked && S.SceneCancelChecked && S.LoadChecked && (S.LoadOnly || S.SaveChecked);
         if (!S.Write(TEXT("wall-frames.csv"), S.FrameRows)) S.Error += TEXT(" Frame output write failed.");
-        const FString Report = TEXT("{\"status\":") + Q(Passed && S.Error.IsEmpty() ? TEXT("automated-smoke-passed") : TEXT("failed")) + TEXT(",\"error\":") + Q(S.Error) + TEXT(",\"mode\":\"PHYSICS-PROOF; intensity untested\",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"save_sha1\":") + Q(S.SaveHash) + TEXT(",\"full_traversal\":") + (S.Traversed ? TEXT("true") : TEXT("false")) + TEXT(",\"ride_duration_s\":") + N(S.Duration) + TEXT(",\"final_distance_m\":") + N(S.FinalDistance) + TEXT(",\"seat\":") + FString::FromInt(S.Seat) + TEXT(",\"pause_checked\":") + (S.PauseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"restart_checked\":") + (S.RestartChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_checked\":") + (S.SaveChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"load_checked\":") + (S.LoadChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"missing_reference_refusal_checked\":") + (S.RefusalChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"viewport_width\":") + FString::FromInt(S.ObservedWidth) + TEXT(",\"viewport_height\":") + FString::FromInt(S.ObservedHeight) + TEXT(",\"paused_pose_checked\":") + (S.PoseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_cancel_checked\":") + (S.SaveCancelChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"human_visual_review\":\"pending\",\"keyboard_input\":\"untested\",\"cancellation_phases\":\"see save_cancel_checked; other phases untested\",\"performance\":\"raw wall-frame samples; no FPS or GPU acceptance claim\"}\n");
+        const FString Report = TEXT("{\"status\":") + Q(Passed && S.Error.IsEmpty() ? TEXT("automated-smoke-passed") : TEXT("failed")) + TEXT(",\"error\":") + Q(S.Error) + TEXT(",\"mode\":\"PHYSICS-PROOF; intensity untested\",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"save_sha1\":") + Q(S.SaveHash) + TEXT(",\"full_traversal\":") + (S.Traversed ? TEXT("true") : TEXT("false")) + TEXT(",\"ride_duration_s\":") + N(S.Duration) + TEXT(",\"final_distance_m\":") + N(S.FinalDistance) + TEXT(",\"seat\":") + FString::FromInt(S.Seat) + TEXT(",\"pause_checked\":") + (S.PauseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"restart_checked\":") + (S.RestartChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_checked\":") + (S.SaveChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"load_checked\":") + (S.LoadChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"missing_reference_refusal_checked\":") + (S.RefusalChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"viewport_width\":") + FString::FromInt(S.ObservedWidth) + TEXT(",\"viewport_height\":") + FString::FromInt(S.ObservedHeight) + TEXT(",\"paused_pose_checked\":") + (S.PoseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_cancel_checked\":") + (S.SaveCancelChecked ? TEXT("true") : TEXT("false")) + S.CancellationFields() + TEXT(",\"human_visual_review\":\"pending\",\"keyboard_input\":\"untested\",\"cancellation_phases\":\"generation, mesh preparation, scene commit and save\",\"performance\":\"raw wall-frame samples; no FPS or GPU acceptance claim\"}\n");
         const bool Written = S.Write(TEXT("result.json"), Report);
         UE_LOG(LogTemp, Display, TEXT("CoasterVerify result: %s"), *Report); S.Stage = FState::Done;
         FPlatformMisc::RequestExitWithStatus(false, Passed && S.Error.IsEmpty() && Written ? 0 : 1); return;
@@ -427,7 +439,55 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (HashFile(S.SavePath) != S.SaveHash || !PC.Ride->HasRide() ||
             GeometryIdentity(*PC.Ride->ActiveDesign()) != S.Identity || !PC.Ride->Status().StartsWith(TEXT("Save cancelled before commit;")))
         { S.Fail(TEXT("Pre-commit save cancellation did not preserve file, ride and truthful status")); break; }
-        S.SaveCancelChecked = true; S.Event(TEXT("save-cancellation-preserved-file-and-ride")); S.Advance(FState::Finish); break;
+        S.SaveCancelChecked = true; S.Event(TEXT("save-cancellation-preserved-file-and-ride"));
+        S.CancelRevision = PC.Ride->GeometryRevision(); S.CancelRideTime = PC.Ride->Playback().Time;
+        if(PC.Ride->IsPaused()) PC.Ride->TogglePause();
+        PC.Ride->Generate(PC.Ride->ActiveDesign()->request);
+        S.Advance(FState::AwaitGenerationPhase); break;
+    case FState::AwaitGenerationPhase:
+        if(!PC.Ride->IsBusy() || PC.Ride->GeometryRevision()!=S.CancelRevision) { S.Fail(TEXT("Generation cancellation probe lost its previous ride")); break; }
+        if(PC.Ride->Loading().Phase==coaster::WorkPhase::Authoring && Now-S.StageStarted>.15)
+        { S.Capture(PC,TEXT("loading-generation")); S.Advance(FState::CancelGeneration); }
+        else if(Now-S.StageStarted>5) S.Fail(TEXT("Generation probe did not observe active authoring"));
+        break;
+    case FState::CancelGeneration:
+        PC.Ride->Cancel(); S.Event(TEXT("generation-cancellation-requested")); S.Advance(FState::AwaitGenerationCancel); break;
+    case FState::AwaitGenerationCancel:
+    case FState::AwaitMeshCancel:
+    case FState::AwaitSceneCancel:
+        if(PC.Ride->IsBusy()) { if(Now-S.StageStarted>2) S.Fail(TEXT("Cancellation did not complete within two seconds")); break; }
+        if(!PC.Ride->HasRide() || PC.Ride->GeometryRevision()!=S.CancelRevision || GeometryIdentity(*PC.Ride->ActiveDesign())!=S.Identity || HashFile(S.SavePath)!=S.SaveHash || PC.Ride->Playback().Time<=S.CancelRideTime)
+        { S.Fail(TEXT("Cancellation changed the accepted ride/save or stopped prior playback")); break; }
+        if(S.Stage==FState::AwaitGenerationCancel)
+        {
+            S.GenerationCancelChecked=true; S.GenerationCancelSeconds=Now-S.StageStarted;
+            S.Event(TEXT("generation-cancellation-preserved-playing-ride"),TEXT(",\"latency_s\":")+N(S.GenerationCancelSeconds));
+            PC.Ride->Load(); S.Advance(FState::AwaitMeshPhase);
+        }
+        else if(S.Stage==FState::AwaitMeshCancel)
+        {
+            S.MeshCancelChecked=true; S.MeshCancelSeconds=Now-S.StageStarted;
+            S.Event(TEXT("mesh-cancellation-preserved-playing-ride"),TEXT(",\"latency_s\":")+N(S.MeshCancelSeconds));
+            PC.Ride->Load(); S.Advance(FState::AwaitScenePhase);
+        }
+        else
+        {
+            S.SceneCancelChecked=true; S.SceneCancelSeconds=Now-S.StageStarted;
+            S.Event(TEXT("scene-cancellation-preserved-playing-ride"),TEXT(",\"latency_s\":")+N(S.SceneCancelSeconds));
+            if(!PC.Ride->IsPaused()) PC.Ride->TogglePause(); S.Advance(FState::Finish);
+        }
+        break;
+    case FState::AwaitMeshPhase:
+    case FState::AwaitScenePhase:
+        if(!PC.Ride->IsBusy() || PC.Ride->GeometryRevision()!=S.CancelRevision) { S.Fail(TEXT("Replacement committed before the cancellation phase was observed")); break; }
+        if(PC.Ride->Loading().Phase==(S.Stage==FState::AwaitMeshPhase?coaster::WorkPhase::MeshPreparation:coaster::WorkPhase::SceneCommit))
+        {
+            const bool Mesh=S.Stage==FState::AwaitMeshPhase; PC.Ride->Cancel();
+            S.Event(Mesh?TEXT("mesh-cancellation-requested"):TEXT("scene-cancellation-requested"));
+            S.Advance(Mesh?FState::AwaitMeshCancel:FState::AwaitSceneCancel);
+        }
+        else if(Now-S.StageStarted>30) S.Fail(TEXT("Load did not reach the requested cancellation phase"));
+        break;
     case FState::AwaitSave:
         if (PC.Ride->IsBusy()) { if (Now - S.StageStarted > 120) S.Fail(TEXT("Save timeout")); break; }
         S.SaveHash = HashFile(S.SavePath);

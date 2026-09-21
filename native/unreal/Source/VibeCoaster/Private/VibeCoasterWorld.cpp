@@ -263,6 +263,7 @@ void AVibeCoasterWorld::Save()
     if (IsBusy()) { Runtime->Message = TEXT("Finish or cancel the current request before saving."); return; }
     IFileManager::Get().MakeDirectory(*FPaths::GetPath(DesignPath()), true);
     FJobRequest Work; Work.Kind = EWork::Save; Work.Path = DesignPath(); Work.SaveDesign = Runtime->Design;
+    Runtime->RequestStarted = FPlatformTime::Seconds();
     Work.Revision = ++Runtime->Revision; Runtime->Queued = MoveTemp(Work);
     Runtime->Message = TEXT("Saving the accepted ride...");
     StartQueuedJob();
@@ -341,6 +342,7 @@ void AVibeCoasterWorld::StartQueuedJob()
             if (!Design->accepted()) { Result.Message = Failure(*Design); return Result; }
             if (Design->simulation.frames.empty()) { Result.Message = TEXT("Accepted design has no trace; no ride committed."); return Result; }
             const double PreparationStarted = FPlatformTime::Seconds();
+            Progress({coaster::WorkPhase::MeshPreparation,Design->candidate,0,0,"Preparing the ride scene"});
             auto Prepared = MakeShared<VibeMesh::FPreparedRide, ESPMode::ThreadSafe>();
             Prepared->Design = MoveTemp(Design); Prepared->Revision = Work.Revision;
             if (!VibeMesh::Prepare(*Prepared, Cancelled)) { Result.Message = Prepared->Error; return Result; }
@@ -567,6 +569,25 @@ void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
         Runtime->CameraPoseDirty = false;
     }
     Runtime->PresentedDistance = Runtime->Distance;
+}
+FCoasterLoadingObservation AVibeCoasterWorld::Loading() const
+{
+    FCoasterLoadingObservation View; View.Active = IsBusy();
+    View.ElapsedSeconds = FPlatformTime::Seconds() - Runtime->RequestStarted;
+    if (Runtime->Prepared)
+    {
+        View.Title = TEXT("Preparing your ride"); View.Phase = coaster::WorkPhase::SceneCommit;
+        View.Completed = Runtime->NextChunk + Runtime->NextTie + Runtime->NextSupport + Runtime->NextStation + Runtime->NextLSM + Runtime->NextBrake;
+        View.Total = Runtime->Prepared->Chunks.Num() + Runtime->Prepared->Ties.Num() + Runtime->Prepared->Supports.Num() + Runtime->Prepared->Station.Num() + Runtime->Prepared->LSMHardware.Num() + Runtime->Prepared->BrakeHardware.Num();
+    }
+    else if (Runtime->JobState)
+    {
+        const auto& State = *Runtime->JobState;
+        View.Title = State.Kind == EWork::Load ? TEXT("Opening your ride") : State.Kind == EWork::Save ? TEXT("Saving your ride") : TEXT("Creating your ride");
+        View.Cancelling = State.Cancel.load(); View.Phase = static_cast<coaster::WorkPhase>(State.Phase.load());
+        View.Completed = State.CompletedWork.load(); View.Total = State.TotalWork.load(); View.Candidate = State.Candidate.load();
+    }
+    return View;
 }
 FString AVibeCoasterWorld::Status() const
 {

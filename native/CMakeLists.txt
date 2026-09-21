@@ -11,6 +11,17 @@ execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SO
   OUTPUT_VARIABLE coaster_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 if(coaster_commit MATCHES "^[0-9a-f]+$")
   target_compile_definitions(coaster_core PUBLIC COASTER_BUILD_COMMIT="${coaster_commit}")
+  execute_process(COMMAND git symbolic-ref -q HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE coaster_ref OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  foreach(identity_path HEAD "${coaster_ref}" packed-refs)
+    if(identity_path STREQUAL "")
+      continue()
+    endif()
+    execute_process(COMMAND git rev-parse --git-path "${identity_path}" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE identity_file OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    cmake_path(ABSOLUTE_PATH identity_file BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${identity_file}")
+  endforeach()
 endif()
 if(MSVC)
   target_compile_options(coaster_core PRIVATE /W4 PUBLIC /fp:strict)
@@ -44,7 +55,7 @@ endif()
 
 get_property(core_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${core_tests} PROPERTIES LABELS component)
-set_tests_properties(core core_persistence persistence_cancel reference support
+set_tests_properties(core_persistence persistence_cancel reference support
   support_family organic_generation station structures convergence generation_cancel
   PROPERTIES LABELS integration)
 set_tests_properties(organic_generation PROPERTIES LABELS "integration;representative" TIMEOUT 1800)

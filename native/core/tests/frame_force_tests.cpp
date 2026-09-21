@@ -1,5 +1,6 @@
 #include "coaster/coaster.hpp"
 #include "../src/simulation_internal.hpp"
+#include "../src/arc_length.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -39,6 +40,11 @@ int main(){try{
         Vec3 up=unit(Vec3{0,0,1}-tangent*tangent.z);up=rotate(up,tangent,.02*std::sin(s/19));
         points.push_back({{500*std::sin(theta),500*(1-std::cos(theta)),50+2*std::sin(s/30)},.25*std::sin(s/24),Element::Return,up});}
     auto curved=compile(points,false);
+    for(const auto& span:curved.spans)for(double u:{.013,.127,.431,.827,.999})
+        near(detail::cachedArcLength(span,u),detail::spanArcLength(span,u),2e-13*std::max(1.,span.length),"Bounded arc cache agrees with independent Gaussian quadrature");
+    auto direct=curved;for(auto& span:direct.spans)span.polynomialArc=false;
+    for(double s=.21;s<curved.length;s+=.37)
+        near(norm(curved.sample(s).position-direct.sample(s).position),0,1e-10,"Cached and direct true-arc inversions locate the same geometry");
     size_t positionHint=curved.spans.size();
     for(double s=0.;s<=curved.length;s+=.73){
         const auto position=curved.position(s,positionHint);

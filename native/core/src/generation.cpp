@@ -69,7 +69,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
     double fastestDeparture=plannedDepartureSeconds(req.limits.maxLongitudinalG*gravity-.02,req.train,req.limits);
     if(fastestDeparture>req.targets.launchSeconds){last.report.fail("LAUNCH_FEASIBILITY","Requested departure is below the force-limited flat-station prototype bound",0,fastestDeparture,req.targets.launchSeconds);return last;}
     if(req.targets.requireIntensity&&std::isfinite(req.targets.referenceExposure)&&req.targets.referenceExposure>10*std::max(0.,req.limits.maxVerticalG)){last.report.fail("INTENSITY_FEASIBILITY","Requested reference exposure exceeds ten seconds at the selected vertical force ceiling",0,req.targets.referenceExposure,10*std::max(0.,req.limits.maxVerticalG));return last;}
-    std::vector<std::string> history;Design bestIntensity;bool haveBestIntensity=false;
+    std::vector<std::string> history;Design bestIntensity;bool haveBestIntensity=false;double previousCandidateElapsed=0;
     auto remember=[&](const Design* d,int index){
         if(progress&&d){
             progress(index,d->accepted()?"Candidate accepted":"Candidate rejected");
@@ -82,7 +82,8 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
                 for(const auto& warning:report->warnings)progress(index,"Warning: "+warning);
             }
         }
-        std::ostringstream h;h<<std::setprecision(12)<<"{\"candidate\":"<<index<<",\"constructed\":"<<(d?"true":"false");
+        double elapsed=0;for(double phase:work.snapshot().seconds)elapsed+=phase;
+        std::ostringstream h;h<<std::setprecision(12)<<"{\"candidate\":"<<index<<",\"constructed\":"<<(d?"true":"false")<<",\"elapsedSeconds\":"<<elapsed<<",\"candidateSeconds\":"<<elapsed-previousCandidateElapsed;previousCandidateElapsed=elapsed;
         if(d){h<<",\"completed\":"<<(d->simulation.completed?"true":"false")<<",\"exposure10Seconds\":"<<d->simulation.metrics.exposure10Seconds<<",\"launchSeconds\":";if(std::isfinite(d->simulation.metrics.launchTo180))h<<d->simulation.metrics.launchTo180;else h<<"null";if(d->simulation.completed)h<<",\"movingDurationSeconds\":"<<movingRideSeconds(*d);h<<",\"errors\":[";bool comma=false;for(const auto* report:{&d->report,&d->simulation.report})for(const auto& f:report->errors){if(comma)h<<',';comma=true;h<<'"'<<f.code<<'"';}h<<']';}
         else h<<",\"errors\":[\"CANDIDATE_FAILURE\"]";h<<'}';history.push_back(h.str());
     };
@@ -103,7 +104,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
             work.enter(WorkPhase::Motion,i,"Simulating initial geometry");
             auto motion=simulateMotion(d.track,d.operations,req.train,req.simulationStep,cancel);
             if(motion.cancelled){d.simulation.cancelled=true;d.report.fail("CANCELLED","Generation cancelled");return d;}
-            for(int refinement=0;!motion.frames.empty()&&refinement<3;++refinement){
+            for(int refinement=0;!motion.frames.empty()&&refinement<4;++refinement){
                 double maximumCorrection=0,boostPeak=0;
                 for(const auto& section:d.sections)if(section.role==RideRole::DownhillLaunch)
                     for(const auto& frame:motion.frames)if(frame.distance>=section.start&&frame.distance<=section.end)boostPeak=std::max(boostPeak,frame.speed);
@@ -116,7 +117,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
                     if(std::abs(actual-port.speed)>=.01)feedback.energyCorrection[port.id]+=actual*actual-port.speed*port.speed;
                     maximumCorrection=std::max(maximumCorrection,std::abs(actual-port.speed));
                 }
-                if(maximumCorrection<.12)break;
+                if(maximumCorrection<.20)break;
                 work.enter(WorkPhase::Authoring,i,"Correcting reached source ports from finite-train energy");
                 d=compileRecipe(req,i,feedback,ports,cancel);
                 work.enter(WorkPhase::Motion,i,"Simulating energy-corrected geometry");
@@ -169,8 +170,9 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
             try{buildSupportLayout(d,cancel);}
             catch(const std::exception& e){constructionFailures.push_back({"SUPPORT_LAYOUT",e.what()});}
             d.inversionDimensions=measureInversionDimensions(d.track,d.sections,cancel);
+            auto spatial=std::async(std::launch::async,[&]{return replaySpatialRefinement(d,[&]{return stopFine.load()||(cancel&&cancel());});});
             work.enter(WorkPhase::Geometry,i,"Checking measured targets and clearance");
-            const auto sweep=buildClearanceSweepVerified(d.track,req.train,cancel);
+            auto sweep=buildClearanceSweepVerified(d.track,req.train,cancel);sweep.prepareGround(d.request.terrain,cancel);
             d.report=validateGeometry(d.track,d.request.terrain,req.limits,req.train,d.supports,sweep,cancel);
             d.report.errors.insert(d.report.errors.end(),constructionFailures.begin(),constructionFailures.end());
             auto structures=validateDesignStructures(d,sweep,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());
@@ -185,7 +187,8 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
                 else verifyConvergence(d,cancel);
             }
             if(fine.valid()){stopFine.store(true);fine.wait();}
-            if(d.report.valid()&&d.convergence.passed)verifySpatialRefinement(d,cancel);
+            if(d.report.valid()&&d.convergence.passed)verifySpatialRefinementWith(d,[&]{return spatial.get();},cancel);
+            if(spatial.valid()){stopFine.store(true);spatial.wait();}
             if(d.simulation.cancelled)return d;
             if(d.checksPassed())freezeAcceptedRevision(d);
             remember(&d,i);if(d.accepted()){

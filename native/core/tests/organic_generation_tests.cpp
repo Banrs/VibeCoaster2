@@ -195,7 +195,7 @@ void checkTrimOperatingCases(const Design& d){
         const auto run=simulate(d.track,operations,train),fine=simulate(d.track,operations,train,1./1920);ConvergenceAssessment assessment;
         const auto convergence=compareSimulationConvergence(run,fine,d.request.limits,assessment),limits=validateSimulationTargets(run,d.request.targets,d.request.limits);
         std::cout<<"trimMode="<<mode<<" completed="<<run.completed<<" Gz="<<run.metrics.minVerticalG<<":"<<run.metrics.maxVerticalG<<" Gy="<<run.metrics.maxLateralG<<'\n';
-        check(run.completed&&limits.valid()&&convergence.valid(),"Trims off, fully deployed and lower-drag operation all complete within unchanged force/performance/refinement limits");
+        check(run.completed&&limits.valid()&&validateSimulationTargets(fine,d.request.targets,d.request.limits).valid()&&convergence.valid(),"Trims off, fully deployed and lower-drag operation pass unchanged limits at both time resolutions");
     }
 }
 void checkAcceptedRevisionPersistence(const Design& d){
@@ -228,11 +228,8 @@ int main(int argc,char** argv){try{
     checkInversions(first);checkPropulsionCorridors(first);checkTerminalBrake(first);checkComposition(first);checkC3Transitions(first);checkTrimOperatingCases(first);
     check(first.simulation.metrics.minVerticalG<0,"The complete ride includes actual measured airtime");
     if(baselineOnly){checkAcceptedRevisionPersistence(first);std::cout<<"PASS "<<checks<<" checkpoint baseline, operating scenarios and persistence checks\n";return 0;}
-    auto second=generateChecked(5,TerrainKind::Highlands);checkComposition(second);checkPropulsionCorridors(second);
-    const auto varied=generateChecked(77,TerrainKind::Highlands);checkComposition(varied);
-    bool changed=first.track.knots.size()!=varied.track.knots.size();
-    if(!changed&&first.track.knots.size()==varied.track.knots.size())for(size_t i=0;i<first.track.knots.size();++i)changed|=norm(first.track.knots[i].position-varied.track.knots[i].position)>1e-6;
-    check(changed,"Representative seeds change the physical authored route while typed recipe identities remain available");
+    // Seed/style diversity belongs to the eight-case corpus. This suite keeps
+    // the distinct full-route, operating-envelope and exact-repeat checks.
     const auto repeated=generateChecked(42);bool identical=first.track.knots.size()==repeated.track.knots.size();
     if(identical)for(size_t i=0;i<first.track.knots.size();++i){const auto& a=first.track.knots[i];const auto& b=repeated.track.knots[i];identical&=same(a.position,b.position)&&same(a.tangent,b.tangent)&&same(a.curvature,b.curvature)&&same(a.up,b.up)&&a.bank==b.bank&&a.element==b.element;}
     first.timings=repeated.timings; // Wall-clock measurements are intentionally nondeterministic.

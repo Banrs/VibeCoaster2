@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
+#include <charconv>
 #include <fcntl.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -35,7 +36,15 @@ std::filesystem::path utf8path(const std::string& s){return std::filesystem::pat
 uint64_t checksum(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
 std::string quote(const std::string& s){std::ostringstream o;o<<'"';for(unsigned char c:s){switch(c){case '"':o<<"\\\"";break;case '\\':o<<"\\\\";break;case '\n':o<<"\\n";break;case '\r':o<<"\\r";break;case '\t':o<<"\\t";break;default:if(c<32)o<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<int(c)<<std::dec;else o<<c;}}o<<'"';return o.str();}
 void number(std::ostream& o,double x){if(std::isfinite(x))o<<x;else o<<"null";}
-void vec(std::ostream& o,Vec3 v){o<<v.x<<' '<<v.y<<' '<<v.z<<' ';}
+void vec(std::ostream& o,Vec3 v){
+    char bytes[96];char* next=bytes;
+    for(double value:{v.x,v.y,v.z}){
+        const auto result=std::to_chars(next,bytes+sizeof(bytes)-1,value,std::chars_format::general,17);
+        if(result.ec!=std::errc{})throw std::runtime_error("Coordinate serialization failed");
+        next=result.ptr;*next++=' ';
+    }
+    o.write(bytes,next-bytes);
+}
 void vec(std::istream& i,Vec3& v){i>>v.x>>v.y>>v.z;}
 std::string extensionTail(const Design& d,Cancel cancel){
     const auto& r=d.request;
@@ -101,11 +110,11 @@ std::string designPayload(const Design& d,Cancel cancel){
         return p.str();
 }
 std::string cachePayload(const Track& track){
-    std::string bytes;bytes.reserve(track.spans.size()*512+32);
+    std::string bytes;bytes.reserve(track.spans.size()*sizeof(Span)+32);
     auto scalar=[&](auto value){bytes.append(reinterpret_cast<const char*>(&value),sizeof(value));};
     auto vector=[&](Vec3 value){scalar(value.x);scalar(value.y);scalar(value.z);};
     scalar(track.length);scalar(track.closed);scalar(track.authoredGeometry);scalar(track.authoredFrame);scalar(track.spans.size());
-    for(const auto& span:track.spans){for(auto p:span.c)vector(p);for(auto p:span.referenceUp)vector(p);for(double bank:span.bank)scalar(bank);scalar(span.start);scalar(span.length);}
+    for(const auto& span:track.spans){for(auto p:span.c)vector(p);for(auto p:span.referenceUp)vector(p);for(double bank:span.bank)scalar(bank);scalar(span.start);scalar(span.length);for(double coefficient:span.arcPolynomial)scalar(coefficient);scalar(span.polynomialArc);}
     return bytes;
 }
 bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cancel){
@@ -225,27 +234,35 @@ bool recheck(Design& d,Cancel cancel,WorkRecorder* work=nullptr){
     for(const auto& op:d.operations)if(!validDriveParameters(op)){d.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return false;}
     if(work)work->enter(WorkPhase::Geometry,d.candidate,"Checking saved track and clearance");
     d.track.rebuild();d.inversionDimensions=d.request.recipe.elements.empty()?measureInversionDimensions(d.track,cancel):measureInversionDimensions(d.track,d.sections,cancel);
-    const auto sweep=buildClearanceSweepVerified(d.track,d.request.train,cancel);
+    // Rebuild certifies the numerical interpolation domain. Independent
+    // dynamics and spatial checks can now overlap the solid-clearance pass;
+    // no result is accepted until all of them have joined and passed.
+    std::atomic<bool> stopFine{false};
+    const Cancel stop=[&]{return stopFine.load()||(cancel&&cancel());};
+    auto coarse=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,d.request.train,d.request.simulationStep,stop);});
+    auto fine=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,d.request.train,d.request.simulationStep*.5,stop);});
+    auto spatial=std::async(std::launch::async,[&]{return replaySpatialRefinement(d,stop);});
+    auto sweep=buildClearanceSweepVerified(d.track,d.request.train,cancel);sweep.prepareGround(d.request.terrain,cancel);
     d.report=validateGeometry(d.track,d.request.terrain,d.request.limits,d.request.train,d.supports,sweep,cancel);
     if(work)work->enter(WorkPhase::Structures,d.candidate,"Checking saved supports and station");
     auto structures=validateDesignStructures(d,sweep,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());
     if(!d.report.valid()){
+        stopFine.store(true);
         if(std::any_of(d.report.errors.begin(),d.report.errors.end(),[](const Finding& f){return f.code=="CANCELLED";}))d.simulation.cancelled=true;
         return false;
     }
     // Both resolutions read the same rebuilt geometry; callback invocations stay
     // serialized, and the worker joins before any design can escape this check.
     if(work)work->enter(WorkPhase::Forces,d.candidate,"Replaying all seats at both native resolutions");
-    std::atomic<bool> stopFine{false};
-    auto fine=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,d.request.train,d.request.simulationStep*.5,[&]{return stopFine.load()||(cancel&&cancel());});});
-    d.convergence={};d.simulation=simulate(d.track,d.operations,d.request.train,d.request.simulationStep,cancel);
+    d.convergence={};d.simulation=coarse.get();
     evaluateTargets(d,&sweep);
     if(work)work->enter(WorkPhase::Authorship,d.candidate,"Checking editable sources and continuous motion");
     assessAuthorship(d,cancel);assessMotion(d,cancel);
     if(work)work->enter(WorkPhase::Refinement,d.candidate,"Checking independent time and spatial refinement");
     verifyConvergenceWith(d,[&]{return fine.get();},cancel);
     if(fine.valid()){stopFine.store(true);fine.wait();}
-    if(d.report.valid()&&d.convergence.passed)verifySpatialRefinement(d,cancel);
+    if(d.report.valid()&&d.convergence.passed)verifySpatialRefinementWith(d,[&]{return spatial.get();},cancel);
+    if(spatial.valid()){stopFine.store(true);spatial.wait();}
     if(d.checksPassed())freezeAcceptedRevision(d);
     return d.accepted();
 }
@@ -320,6 +337,7 @@ std::string reportJson(const Design& d){
 bool saveDesign(const Design& source,const std::string& path,std::string& error,Cancel cancel,Progress progress){
     WorkRecorder work(std::move(progress),WorkPhase::Serialization);
     if(!source.accepted()){error="REJECTED_DESIGN: only a completed, validated design may be saved";return false;}
+    for(const auto& operation:source.operations)if(!validDriveParameters(operation)){error="DRIVE_CONFIG: Invalid explicit drive operation";return false;}
     try{
         const Design& d=source;
         work.enter(WorkPhase::Serialization,d.candidate,"Writing unchanged accepted revision");

@@ -213,10 +213,31 @@ bool parseParameters(int variant, const std::vector<std::string>& tokens, Elemen
     return true;
 }
 
-void writeParameters(std::ostream& output, const ElementParameters& parameters) {
-    const auto descriptors = fieldsForVariant(int(parameters.index()));
-    for (std::size_t i = 0; i < descriptors.size; ++i)
-        output << ' ' << descriptors.data[i].name << '=' << std::setprecision(17) << descriptors.data[i].get(parameters);
+bool editableField(const RecipeElement& element,std::string_view field) {
+    switch(element.role){
+        case RideRole::Station:return field=="lengthMeters";
+        case RideRole::Brakes:return field=="lengthMeters"||field=="accelerationMps2";
+        case RideRole::Departure:case RideRole::CliffLip:return field!="gradeDegrees";
+        case RideRole::CliffApproach:return field=="summitHeightMeters"||field=="outwardBankDegrees"||field=="approachLengthMeters";
+        case RideRole::CliffDrop:return field=="dropDegrees";
+        case RideRole::Wave:return field!="lengthMeters";
+        case RideRole::Immelmann:return field!="yawDegrees";
+        case RideRole::Return:return !std::holds_alternative<SweepParameters>(element.parameters)||field!="negativeG";
+        default:return true;
+    }
+}
+ElementParameters reservedParameters(const RecipeElement& element){
+    // Version1 files included fixed metadata from shared parameter families.
+    // Retain those values when loading, but expose only parameters that the
+    // selected role actually compiles. Silent no-op edits are rejected.
+    static const auto prototype=defaultRideRecipe();
+    for(const auto& item:prototype.elements)if(item.role==element.role&&item.parameters.index()==element.parameters.index())return item.parameters;
+    return std::visit([](const auto& value)->ElementParameters{using T=std::decay_t<decltype(value)>;auto p=T{};if constexpr(std::is_same_v<T,SweepParameters>)p.negativeG=0;return p;},element.parameters);
+}
+void writeParameters(std::ostream& output, const RecipeElement& element) {
+    const auto descriptors = fieldsForVariant(int(element.parameters.index()));
+    for (std::size_t i = 0; i < descriptors.size; ++i)if(editableField(element,descriptors.data[i].name))
+        output << ' ' << descriptors.data[i].name << '=' << std::setprecision(17) << descriptors.data[i].get(element.parameters);
 }
 
 bool variantMatches(RideRole role, const ElementParameters& parameters) {
@@ -317,7 +338,7 @@ RideRecipe defaultRideRecipe() {
     recipe.elements = {
         element("station", RideRole::Station, TerrainAnchor::Station, OperationParameters{20, 0, 0, 0}),
         element("departure", RideRole::Departure, TerrainAnchor::Approach, OperationParameters{180, 230.4, 0, 0}),
-        element("opening", RideRole::Opening, TerrainAnchor::Approach, HillParameters{110, .15, 50, 3.5, 1.2, 1.5, 1}),
+        element("opening", RideRole::Opening, TerrainAnchor::Approach, HillParameters{160, .15, 50, 3.5, 1.2, 1.5, 1}),
         element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 30, 300}),
         element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{100, 32, 0, 7}),
         element("cliff-drop", RideRole::CliffDrop, TerrainAnchor::CliffFoot, CliffParameters{285, 32, 88, 30, 220}),
@@ -326,7 +347,7 @@ RideRecipe defaultRideRecipe() {
         element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 90, 73, 3.5, 500}),
         element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{145, 15, .9, 55, 0}),
         element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{100, 0, .6, 55, -5}),
-        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{260, -60, -90, 0, -1.25, 45}),
+        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{260, -70, -90, 0, -1.25, 45}),
         element("return-crest", RideRole::Return, TerrainAnchor::Ravine, HillParameters{35, -1.25, 0, 3.2, 1.0, 1.5, 1}),
         element("return-valley", RideRole::Return, TerrainAnchor::Ravine, TurnParameters{-40, -2, 35, 1, 300}),
         element("return-sweep", RideRole::Return, TerrainAnchor::Approach, SweepParameters{300, 0, 0, 0, 0, 0}),
@@ -350,9 +371,17 @@ bool validateRecipe(const RideRecipe& recipe, std::string& error) {
         if (current.role <= RideRole::Unspecified || current.role > RideRole::Brakes || current.anchor < TerrainAnchor::Station || current.anchor > TerrainAnchor::Ravine) { error = "invalid element role or terrain anchor"; return false; }
         if (!variantMatches(current.role, current.parameters)) { error = "element variant does not match role: " + current.id; return false; }
         if (!validParameters(current.parameters, error)) { error += " in element " + current.id; return false; }
+        const auto reserved=reservedParameters(current);const auto descriptors=fieldsForVariant(int(current.parameters.index()));
+        for(size_t f=0;f<descriptors.size;++f){const auto& field=descriptors.data[f];
+            if(!editableField(current,field.name)&&field.get(current.parameters)!=field.get(reserved)){error="field is fixed metadata for this role: "+current.id+"."+field.name;return false;}}
+        if(current.role!=RideRole::Return){
+            const auto defaults=defaultRideRecipe();const auto expected=std::find_if(defaults.elements.begin(),defaults.elements.end(),[&](const auto& item){return item.role==current.role;});
+            if(expected==defaults.elements.end()||current.anchor!=expected->anchor){error="terrain anchor does not match the element role: "+current.id;return false;}
+        }else if(current.anchor!=TerrainAnchor::Approach&&current.anchor!=TerrainAnchor::Ravine){error="return elements require a ravine or final approach anchor";return false;}
         if(const auto* p=std::get_if<OperationParameters>(&current.parameters)){
             if(current.role!=RideRole::DownhillLaunch&&p->lengthMeters<=0){error="operation length must be positive outside the automatic downhill launch";return false;}
             if(current.role!=RideRole::DownhillLaunch&&p->gradeDegrees!=0){error="station, departure and braking corridors require a level grade";return false;}
+            if(current.role==RideRole::Brakes&&p->accelerationMps2>=0){error="terminal brake acceleration must be negative";return false;}
         }
         if(current.role==RideRole::Return){
             if(const auto* p=std::get_if<SweepParameters>(&current.parameters);p&&p->negativeG!=0){error="use a return hill for negative-G intent; return sweeps require negativeG=0";return false;}
@@ -396,7 +425,7 @@ std::string recipePayload(const RideRecipe& recipe) {
     output << std::setprecision(17) << "VIBECOASTER_RECIPE 1\n" << std::quoted(recipe.name) << '\n' << recipe.elements.size() << '\n';
     for (const auto& item : recipe.elements) {
         output << std::quoted(item.id) << ' ' << roleName(item.role) << ' ' << anchorName(item.anchor) << ' ' << variantName(item.parameters);
-        writeParameters(output, item.parameters);
+        writeParameters(output, item);
         output << '\n';
     }
     const auto text = output.str();
@@ -437,6 +466,8 @@ bool parseRecipe(const std::string& text, RideRecipe& destination, std::string& 
         case 5: item.parameters = SweepParameters{}; break;
         case 6: item.parameters = CamelbackParameters{}; break;
         }
+        const auto reserved=reservedParameters(item);const auto descriptors=fieldsForVariant(variantIndex);
+        for(size_t f=0;f<descriptors.size;++f){const auto& field=descriptors.data[f];if(!editableField(item,field.name))field.set(item.parameters,field.get(reserved));}
         std::vector<std::string> fields; std::string token;
         while (row >> token) fields.push_back(std::move(token));
         if (!parseParameters(variantIndex, fields, item.parameters, error)) return false;

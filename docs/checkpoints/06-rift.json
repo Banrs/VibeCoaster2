@@ -1,0 +1,206 @@
+{
+  "checkpoint": "complete revised ride",
+  "release": "2.0.0-rift.1",
+  "status": "Local native/corpus/recipe checks complete; reviewed code commit, CI, clean package and GPU verification pending",
+  "sourceQualification": "These are local working-tree results. Final CI and package reports must identify their tested code commit.",
+  "baseline": {
+    "lengthMeters": 8533.920559297458,
+    "metrics": {
+      "maxSpeed": 83.48035380220354,
+      "heightAboveStation": 305.8138603014356,
+      "maxGroundHeight": 229.3760263799449,
+      "verticalRelief": 305.8138603014356,
+      "inversionGroundHeight": 143.8788984832055,
+      "launchTo180": 1.3970000020687403,
+      "exposure10Seconds": 29.04670210340956,
+      "minVerticalG": -1.4229035429998373,
+      "maxVerticalG": 4.119500813869291,
+      "maxLateralG": 0.6830098815769585,
+      "maxLongitudinalG": 4.296297446973072,
+      "maxJerkGps": 13.198334827605933,
+      "maxJerkDistance": 3441.489034065374,
+      "duration": 197.85833333412697,
+      "minGroundClearance": 2.3791531330945523,
+      "driveWorkPerMass": 6019.307278425967,
+      "brakeWorkPerMass": 1139.545302437516,
+      "lossWorkPerMass": 4879.761975989662,
+      "maxEnergyResidual": 1.2562040296870691e-09,
+      "peakDrivePowerWatts": 19919267.771294724,
+      "peakBrakePowerWatts": 2275743.6718161064
+    },
+    "generationObservationSeconds": 10.5838642,
+    "controlledPerformanceAccepted": false,
+    "freshLoadObservationSeconds": 3.213618,
+    "freshLoadEvidence": {
+      "path": "native/build/evidence/rift-overlapped-load.json",
+      "sha256": "8427a90ded3c52063696e6a878df83e25a84e1d996494f8b52436a9cf85c37f7"
+    }
+  },
+  "opening": {
+    "riseAboveStationMeters": 160.548740466,
+    "dropToRecoveryMeters": 155.0117112063,
+    "maximumDescentDegrees": 56.456870229274166,
+    "maximumBankDegrees": 38.397933506885224,
+    "headingChangeDegrees": 56.514116486732945,
+    "crestToRecoverySeconds": 7.218979576000001,
+    "reference": "https://www.youtube.com/watch?v=0vgRPSZv1Gg",
+    "comparison": "Rounded crown, committed twisted descent and low recovery, with approximately 7.2 seconds from crown to recovery against roughly 8 seconds in the paused FF front POV. V2 has a substantially taller opening; this is a compositional comparison, not an exact copy."
+  },
+  "corpus": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "baseline-42",
+        "accepted": true,
+        "candidate": 0,
+        "generationSeconds": 11.109244
+      },
+      {
+        "name": "seed-77",
+        "accepted": true,
+        "candidate": 2,
+        "generationSeconds": 21.703465
+      },
+      {
+        "name": "flat-42",
+        "accepted": true,
+        "candidate": 0,
+        "generationSeconds": 8.495766
+      },
+      {
+        "name": "trims-off-42",
+        "accepted": true,
+        "candidate": 0,
+        "generationSeconds": 8.563586
+      },
+      {
+        "name": "seed-5",
+        "accepted": true,
+        "candidate": 0,
+        "generationSeconds": 10.225365
+      },
+      {
+        "name": "flowing-7",
+        "accepted": true,
+        "candidate": 2,
+        "generationSeconds": 24.538301
+      },
+      {
+        "name": "higher-314",
+        "accepted": true,
+        "candidate": 2,
+        "generationSeconds": 31.748175
+      },
+      {
+        "name": "lower-42",
+        "accepted": true,
+        "candidate": 0,
+        "generationSeconds": 10.730267
+      }
+    ],
+    "evidence": {
+      "path": "native/build/evidence/rift-corpus-opening160/summary.json",
+      "bytes": 476197,
+      "sha256": "9bbb2031179b7062068a9541268e1cf0fcf99d54938351023b6bfb672c01d754"
+    }
+  },
+  "operatingScenarios": {
+    "trimsOff": true,
+    "trimsFull": true,
+    "drag20PercentLower": true,
+    "bothTimeResolutions": true,
+    "lowerDragMinimumGz": -1.50826,
+    "lowerDragMaximumGy": 0.704745,
+    "nominalNegativePeakExceedPercent": 0.5506666666666549,
+    "astmAllowanceApplied": false,
+    "evidence": {
+      "path": "native/build/evidence/rift-operating-checks.log",
+      "bytes": 339,
+      "sha256": "63135f89e9254b3007916aa44d83843d00859160c120fbff22e3a048c24e67e6"
+    }
+  },
+  "recipeDemonstration": {
+    "method": "Export text recipe; change return crest 35\u219232 m; swap return crest and valley; generate/save; reload/export; change crest to30 m and regenerate/save. No C++ edits between demonstration steps.",
+    "steps": {
+      "edited-reordered": {
+        "accepted": true,
+        "candidate": 2,
+        "seconds": 12.729919
+      },
+      "reloaded": {
+        "accepted": true,
+        "candidate": 2,
+        "seconds": 4.81627
+      },
+      "reedited": {
+        "accepted": true,
+        "candidate": 2,
+        "seconds": 14.535485
+      }
+    },
+    "files": [
+      {
+        "path": "native/build/evidence/recipe-final/compiled.vcrecipe",
+        "bytes": 1918,
+        "sha256": "2d7863c053d816b127eeb2bfe68b46df8f59253f1905b7d61d1e11eb4f51ca7c"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/default.vcrecipe",
+        "bytes": 1918,
+        "sha256": "e1da9e312903842b49d0859e77e7fdc6d1d037a96462b5157135a61884d2ad6d"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/edited-reordered.coaster",
+        "bytes": 15815878,
+        "sha256": "030af4c83bdd11782ea8f5f8647869ed719a835fb355c31f282983e4753f9903"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/edited-reordered.json",
+        "bytes": 64774,
+        "sha256": "93961ede8399f364eb759101771335abcf082b5b56e8fee73d2687ee56b2fe57"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/edited-reordered.vcrecipe",
+        "bytes": 1937,
+        "sha256": "1630b7265694f415743f45c2ea518fe7105c75c4713c434dd575aa94b64200bf"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/reedited.coaster",
+        "bytes": 15813087,
+        "sha256": "68ba705c9abe9c7978b5ff04e478be939fff1a42fa131c1de8fe4764d6c5185f"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/reedited.json",
+        "bytes": 64789,
+        "sha256": "3103c031c0da34eb901970c7ab4ae099bd8fe604e6a659f1d56b869ddeca5131"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/reedited.vcrecipe",
+        "bytes": 1937,
+        "sha256": "6290dafb40f63bc3a43e09bd5906f0f73646c73866f872000cf793916fa4014d"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/reloaded.json",
+        "bytes": 64765,
+        "sha256": "872344b553e1c8d2719a186f926c47c40e1afdf81a84634c849436585804f1d6"
+      },
+      {
+        "path": "native/build/evidence/recipe-final/reloaded.vcrecipe",
+        "bytes": 1918,
+        "sha256": "2d7863c053d816b127eeb2bfe68b46df8f59253f1905b7d61d1e11eb4f51ca7c"
+      }
+    ]
+  },
+  "unrealEditor": {
+    "passed": true,
+    "contractsPassed": 6,
+    "evidence": "native/unreal/Saved/BuildRuns/20260921-171015-599"
+  },
+  "remaining": [
+    "Checkpoint GitHub CI and clean package",
+    "Actual GPU front/rear traversal, new loading/cancellation probes and visual terrain review",
+    "Controlled five warm runs, separate first process and0.9 control",
+    "Exact checkpoint Play target verification",
+    "Final generator verification checkpoint"
+  ]
+}

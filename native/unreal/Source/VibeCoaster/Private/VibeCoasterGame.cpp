@@ -262,9 +262,32 @@ void AVibeCoasterHUD::DrawHUD()
     }
     if (PC->Ride)
     {
+        const auto Loading = PC->Ride->Loading();
+        if (Loading.Active)
+        {
+            const float Top = Y - 8 * Scale, BarX = X + 16 * Scale, BarWidth = Width - 32 * Scale;
+            DrawRect(FLinearColor(.012f,.025f,.044f,.94f),X,Top,Width,160*Scale);
+            DrawRect(Accent,X,Top,4*Scale,160*Scale);
+            Line(Loading.Cancelling ? TEXT("Cancelling...") : Loading.Title,Accent);
+            Line(FString(UTF8_TO_TCHAR(coaster::phaseName(Loading.Phase))));
+            Line(FString::Printf(TEXT("%.1f seconds elapsed%s"),Loading.ElapsedSeconds,
+                Loading.Candidate > 0 ? *FString::Printf(TEXT("  |  design attempt %d"),Loading.Candidate+1) : TEXT("")));
+            const float BarY = Y + 4*Scale;
+            DrawRect(FLinearColor(.08f,.14f,.19f),BarX,BarY,BarWidth,6*Scale);
+            if (Loading.Total > 0)
+                DrawRect(Accent,BarX,BarY,BarWidth*FMath::Clamp(Loading.Completed/Loading.Total,0.,1.),6*Scale);
+            else
+            {
+                const float Pulse = .5f+.5f*FMath::Sin(Loading.ElapsedSeconds*2);
+                DrawRect(Accent,BarX+Pulse*BarWidth*.75f,BarY,BarWidth*.25f,6*Scale);
+            }
+            Y += 26*Scale;
+            Line(PC->Ride->HasRide() ? TEXT("Your current ride is ready to use. Esc cancels this request.") : TEXT("Esc cancels this request."));
+            Y = Top + 174*Scale;
+        }
         // Keep telemetry legible against bright sky as the camera rolls.
-        const FString StatusText = PC->Ride->Status();
-        const FString TelemetryText = PC->ShowTelemetry ? PC->Ride->Telemetry() : FString();
+        const FString StatusText = Loading.Active ? FString() : PC->Ride->Status();
+        const FString TelemetryText = PC->ShowTelemetry && !Loading.Active ? PC->Ride->Telemetry() : FString();
         TArray<FString> StatusLines, TelemetryLines;
         StatusText.ParseIntoArrayLines(StatusLines, false);
         TelemetryText.ParseIntoArrayLines(TelemetryLines, false);

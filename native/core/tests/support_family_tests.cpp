@@ -20,7 +20,11 @@ void validate(const Design& d){
         check(supportCollision(s,sweep)<0,"Every family clears the actual continuous train/hardware sweep");
         auto q=d.track.sample(s.trackDistance);
         check(norm(s.attachment-(q.position-q.up*(spineDepth+spineRadius)))<1e-8,"Exact canonical spine attachment");
-        const double standoff=-dot(s.top-s.attachment,q.up);check((standoff>=.18-1e-8&&standoff<=2+1e-8)||std::abs(standoff-6)<1e-8||std::abs(standoff-10)<1e-8,"Cap uses a bounded canonical under-spine stand-off");
+        const auto delta=s.top-s.attachment;const double standoff=-dot(delta,q.up);
+        bool bounded=standoff>=.18-1e-8&&standoff<=2+1e-8&&norm(delta+q.up*standoff)<1e-8;
+        for(double offset:{2.,6.,10.}){const auto outreach=delta+q.up*offset;
+            bounded|=norm(outreach)<=48+1e-8&&(std::abs(outreach.z)<1e-8||(std::abs(dot(outreach,q.up))+std::abs(dot(outreach,q.tangent))<1e-8));}
+        check(bounded,"Cap has a bounded stand-off with either bank-normal or level cliff outreach");
         for(const auto& m:s.members){auto mesh=supportMemberMesh(m);check(mesh.positions.size()==34&&mesh.indices.size()==96,"Every compact member uses the canonical closed solid mesh");}
     }
 }

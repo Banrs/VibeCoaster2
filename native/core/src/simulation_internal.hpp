@@ -16,4 +16,9 @@ public:
 };
 MotionResult simulateMotion(const Track&,const std::vector<Operation>&,const TrainConfig&,double step,Cancel);
 void verifyConvergenceWith(Design&,const std::function<SimulationResult()>& fineReplay,Cancel);
+// Independent spatial work reads only the frozen geometry/operations/structures.
+// Compare its result after the primary seat replay is available.
+struct SpatialReplay {SpatialAssessment assessment;SimulationResult simulation;ValidationReport report;};
+SpatialReplay replaySpatialRefinement(const Design&,Cancel);
+void verifySpatialRefinementWith(Design&,const std::function<SpatialReplay()>&,Cancel);
 }

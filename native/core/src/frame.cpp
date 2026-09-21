@@ -50,7 +50,10 @@ void rebuildFramePolynomials(Track& track){
     if(track.knots.size()<4||track.spans.size()+1!=track.knots.size())throw std::runtime_error("Frame cache requires rebuilt canonical spans");
     std::vector<Vec3> up;std::vector<double> bank;up.reserve(track.knots.size());bank.reserve(track.knots.size());
     for(const auto& k:track.knots){up.push_back(k.up);bank.push_back(k.bank);}
-    auto upD=sharedDerivatives(track,up);auto bankD=sharedDerivatives(track,bank);
+    std::vector<std::array<Vec3,3>> upD;
+    std::vector<std::array<double,3>> bankD;
+    if(track.authoredFrame){upD.resize(up.size());bankD.resize(bank.size());}
+    else{upD=sharedDerivatives(track,up);bankD=sharedDerivatives(track,bank);}
     if(track.authoredFrame)for(size_t i=0;i<track.knots.size();++i) {
         const auto& k=track.knots[i];
         if(k.bank!=0||!finite(k.upFirst)||!finite(k.upSecond)||!finite(k.upThird))throw std::runtime_error("Invalid authored physical frame derivatives");
@@ -119,10 +122,15 @@ std::array<double,8> Track::bankPolynomial(size_t i) const{if(i>=spans.size())th
 TrackKinematics sampleSpanKinematics(const Track& track,size_t i,double u){
     checkParameter(track,i,u);const auto& span=track.spans[i];auto d=positionDerivative(span,u);auto q=magnitude(d);auto tangent=d*inverse(q);
     auto raw=polynomialJet(span.referenceUp,u);auto unbanked=normalized(raw-tangent*jetDot(raw,tangent));
-    const auto bank=polynomialJet(span.bank,u);const double sinBank=std::sin(bank.value),cosBank=std::cos(bank.value);
-    const ScalarJet c{cosBank,-sinBank*bank.first,-sinBank*bank.second-cosBank*bank.first*bank.first,-sinBank*bank.third-3*cosBank*bank.first*bank.second+sinBank*bank.first*bank.first*bank.first};
-    const ScalarJet s{sinBank,cosBank*bank.first,cosBank*bank.second-sinBank*bank.first*bank.first,cosBank*bank.third-3*sinBank*bank.first*bank.second-cosBank*bank.first*bank.first*bank.first};
-    auto up=unbanked*c+jetCross(tangent,unbanked)*s+tangent*(jetDot(tangent,unbanked)*(ScalarJet{1,0,0}-c));
+    // Authored frames already include physical roll, with an identically zero
+    // separate bank polynomial. Preserve the legacy path for unowned frames.
+    auto up=unbanked;
+    if(!track.authoredFrame){
+        const auto bank=polynomialJet(span.bank,u);const double sinBank=std::sin(bank.value),cosBank=std::cos(bank.value);
+        const ScalarJet c{cosBank,-sinBank*bank.first,-sinBank*bank.second-cosBank*bank.first*bank.first,-sinBank*bank.third-3*cosBank*bank.first*bank.second+sinBank*bank.first*bank.first*bank.first};
+        const ScalarJet s{sinBank,cosBank*bank.first,cosBank*bank.second-sinBank*bank.first*bank.first,cosBank*bank.third-3*sinBank*bank.first*bank.second-cosBank*bank.first*bank.first*bank.first};
+        up=unbanked*c+jetCross(tangent,unbanked)*s+tangent*(jetDot(tangent,unbanked)*(ScalarJet{1,0,0}-c));
+    }
     const double q2=q.value*q.value,q3=q2*q.value;
     Vec3 upS=up.first/q.value,upSS=up.second/q2-up.first*(q.first/q3);
     Vec3 curvature=tangent.first/q.value,curvatureS=tangent.second/q2-tangent.first*(q.first/q3);

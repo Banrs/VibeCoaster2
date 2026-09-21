@@ -80,6 +80,8 @@ def native_phase_timings(progress, native_seconds):
         if elapsed is None:
             continue
         name = update.get("phase_key", update["phase_name"])
+        if name in {"meshPreparation", "sceneCommit", "complete"}:
+            continue  # These stages have separate wall-clock measurements.
         if current is None:
             current, started = name, elapsed
         elif name != current:
@@ -184,8 +186,9 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
     stage_seconds = {x["stage"]: x["elapsed_seconds"] for x in timings
                      if x["stage"] in {"mesh-preparation", "scene-commit", "ready"}}
     phase_seconds = native_phase_timings(progress, native_seconds)
-    parsing_seconds = sum(value for name, value in phase_seconds.items()
-                           if name == "parsing" or "saved ride" in name.lower() or "revalidat" in name.lower())
+    parsing_values = [value for name, value in phase_seconds.items()
+                      if name == "parsing" or "saved ride" in name.lower() or "revalidat" in name.lower()]
+    parsing_seconds = sum(parsing_values) if parsing_values else None
     wall_motion = first_motion_observed - start
     return {
         "launch_to_motion_seconds": wall_motion,
@@ -194,6 +197,7 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
         "scene_to_motion_seconds": moving_event["wall_seconds"] - committed_event["wall_seconds"],
         "geometry_sha1": committed_event["geometry_sha1"],
         "version": events.get("begin", {}).get("geometry_version"),
+        "build_commit":events.get("begin",{}).get("build_commit"),
         "mode": mode,
         "terrain": terrain,
         "candidate": candidate,
@@ -222,6 +226,7 @@ def summarize(rows, variants):
         mesh_values = [r["mesh_preparation_seconds"] for r in warm if r["mesh_preparation_seconds"] is not None]
         commit_values = [r["scene_commit_seconds"] for r in warm if r["scene_commit_seconds"] is not None]
         ready_values = [r["ready_seconds"] for r in warm if r["ready_seconds"] is not None]
+        request_values=[r["request_to_scene_seconds"] for r in warm]
         summary[variant] = {
             "cold_seconds": cold_values[0] if len(cold_values) == 1 else None,
             "warm_sample_count": len(warm_values),
@@ -232,6 +237,8 @@ def summarize(rows, variants):
             "warm_mesh_median_seconds": statistics.median(mesh_values) if mesh_values else None,
             "warm_scene_commit_median_seconds": statistics.median(commit_values) if commit_values else None,
             "warm_ready_median_seconds": statistics.median(ready_values) if ready_values else None,
+            "warm_request_to_scene_median_seconds":statistics.median(request_values) if request_values else None,
+            "warm_request_to_scene_max_seconds":max(request_values) if request_values else None,
         }
     return summary
 
@@ -269,7 +276,7 @@ def main():
         "seed": args.seed,
         "timing": "Process launch through accepted moving-playback event; native callback, mesh preparation, scene commit and ready timings are retained separately.",
         "samples": "One cold sample and exactly warm_runs warm samples per executable; warm summaries report median and maximum only. No p95 is inferred from five samples.",
-        "cache": "The first launch is reported separately; OS and driver caches are not forcibly cleared.",
+        "cache": "Each repetition uses a new process. The first is reported separately; OS and driver caches are not forcibly cleared, so cold means first process in this experiment, not an empty machine cache.",
         "scope": "Real 2560x1440 rendering; full traversal and screenshots are separate verification.",
     }
     (root / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")

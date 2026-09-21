@@ -17,8 +17,8 @@ struct MotionProgram {
     Vec3 displacement(double endDistance) const;
 };
 MotionProgram polynomialMotion(const detail::MotionJet& begin,const std::array<double,8>& pitch,const std::array<double,8>& heading,double length);
-MotionProgram solveMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double estimatedLength,const MotionIntent&);
+MotionProgram solveMotion(const detail::MotionJet& begin,const detail::MotionJet& end,double estimatedLength,const MotionIntent&,Cancel = {});
 // Inherits direction jets while allowing the integrated displacement to place the next element.
-MotionProgram solveHeightMotion(const detail::MotionJet&,const detail::MotionJet&,double,const MotionIntent&);
-MotionProgram solveDirectionMotion(const detail::MotionJet&,const detail::MotionJet&,double,const MotionIntent&);
+MotionProgram solveHeightMotion(const detail::MotionJet&,const detail::MotionJet&,double,const MotionIntent&,Cancel = {});
+MotionProgram solveDirectionMotion(const detail::MotionJet&,const detail::MotionJet&,double,const MotionIntent&,Cancel = {});
 }

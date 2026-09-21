@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <sstream>
 using namespace coaster;
+static std::string stableReport(const Design& source){auto copy=source;copy.timings={};return reportJson(copy);}
+
 static int checks=0;
 static void check(bool b,const std::string& message){++checks;if(!b)throw std::runtime_error(message);}
 static void near(double a,double b,double tolerance,const std::string& what){check(std::isfinite(a)&&std::abs(a-b)<=tolerance,what+": "+std::to_string(a)+" versus "+std::to_string(b));}
@@ -102,7 +104,7 @@ static void provenance(const Design& current){
     for(const std::string version:{"0.9.0-flight.1","0.8.0-immelmann.1","0.8.1-linear.2","0.8.2-graded.2","unsupported"}){
         writeVersion(badPath,version);auto unchanged=current;
         check(!loadDesign(badPath.string(),unchanged,error)&&error.find("Unsupported generator version")!=std::string::npos,"Unrecognized provenance is explicitly rejected");
-        check(reportJson(unchanged)==reportJson(current),"Unsupported provenance preserves the accepted design");
+        check(stableReport(unchanged)==stableReport(current),"Unsupported provenance preserves the accepted design");
     }
     for(const auto& path:{newPath,oldPath,resavedPath,badPath})std::filesystem::remove(path);
 }
@@ -125,17 +127,17 @@ static void migration(const Design& current){
         auto unchanged=current;
         check(!loadDesign(badPath.string(),unchanged,error),"Older canonical semantics explicitly rejected");
         check(error.find("unsupported schema")!=std::string::npos,"Old geometry rejection identifies unsupported schema");
-        check(reportJson(unchanged)==reportJson(current),"Unsupported load preserves last accepted design");
+        check(stableReport(unchanged)==stableReport(current),"Unsupported load preserves last accepted design");
         check(readBytes(badPath)==original,"Rejected input remains byte-identical");
     }
     check(loadDesign(newPath.string(),replay,error),"Reload current explicit profile: "+error);
-    check(reportJson(current)==reportJson(replay),"Current profile physics/provenance roundtrip");
+    check(stableReport(current)==stableReport(replay),"Current profile physics/provenance roundtrip");
     auto rejectedSurface=[&](std::vector<std::string> lines,const std::string& expected="profile"){
         std::string payload;for(const auto& line:lines)payload+=line+"\n";
         {std::ofstream file(badPath,std::ios::binary);file<<"COASTER 6 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;}
         auto unchanged=current;const bool loaded=loadDesign(badPath.string(),unchanged,error);
         check(!loaded&&error.find(expected)!=std::string::npos,"Checksummed unsupported or mismatched terrain is explicitly refused: "+error);
-        check(reportJson(unchanged)==reportJson(current),"Unsupported ground leaves the accepted design intact");
+        check(stableReport(unchanged)==stableReport(current),"Unsupported ground leaves the accepted design intact");
     };
     for(int kind:{1,2}){auto lines=payloadLines(currentBytes);auto fields=tokens(lines[0]);fields[2]=std::to_string(kind);lines[0].clear();for(const auto& field:fields){if(!lines[0].empty())lines[0]+=' ';lines[0]+=field;}rejectedSurface(lines,kind==1?"profile":"terrain");}
     for(const std::string profile:{"2 1 0 0 0 0 600","1 1 0 0 0 5 600"}){auto lines=payloadLines(currentBytes);bool found=false;for(size_t i=0;i+1<lines.size();++i)if(lines[i].starts_with("TERRAIN_PROFILE ")){lines[i]="TERRAIN_PROFILE 1 "+std::to_string(profile.size()+1);lines[i+1]=profile;found=true;break;}check(found,"Saved flat-profile extension exists");rejectedSurface(lines);}
@@ -153,7 +155,7 @@ static void migration(const Design& current){
     for(const auto& fields:std::vector<std::pair<std::string,std::string>>{{"0","0.2"},{"-1","0.2"},{"21","0.2"},{"nan","0.2"},{"1e309","0.2"},{"2.4","-1"},{"2.4","6"},{"2.4","nan"},{"2.4","1e309"}}){
         writeBadProfile(badPath,currentBytes,current.track.knots.size(),fields.first,fields.second);
         auto unchanged=current;check(!loadDesign(badPath.string(),unchanged,error),"Invalid checksummed profile is rejected");
-        check(reportJson(unchanged)==reportJson(current),"Invalid profile load preserves previous accepted design");
+        check(stableReport(unchanged)==stableReport(current),"Invalid profile load preserves previous accepted design");
     }
     for(const auto& fields:std::vector<std::pair<double,double>>{{0,.2},{-1,.2},{21,.2},{NAN,.2},{INFINITY,.2},{2.4,-1},{2.4,6},{2.4,NAN},{2.4,INFINITY}}){
         auto invalid=current;invalid.operations[0].stopDeceleration=fields.first;invalid.operations[0].stopOffset=fields.second;
@@ -163,7 +165,7 @@ static void migration(const Design& current){
     }
     for(const auto& fade:std::vector<std::string>{"0","0.001","1000.1","nan","inf","1e309","-1"}){
         const auto& op=current.operations.front();writeBadProfile(badPath,currentBytes,current.track.knots.size(),std::to_string(op.stopDeceleration),std::to_string(op.stopOffset),fade);
-        auto unchanged=current;check(!loadDesign(badPath.string(),unchanged,error),"Invalid checksummed fade is rejected");check(reportJson(unchanged)==reportJson(current),"Invalid fade load preserves last-good design");
+        auto unchanged=current;check(!loadDesign(badPath.string(),unchanged,error),"Invalid checksummed fade is rejected");check(stableReport(unchanged)==stableReport(current),"Invalid fade load preserves last-good design");
     }
     for(double fade:std::array<double,6>{0.,.001,1000.1,NAN,INFINITY,-1.}){
         auto invalid=current;invalid.operations.front().exitFadeMeters=fade;

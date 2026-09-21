@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "../src/arc_length.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -22,7 +23,10 @@ static void verifyJoins(const Track& t){
     bool highOrder=false;
     for(size_t i=0;i<t.spans.size();++i){
         const auto& sp=t.spans[i];highOrder=highOrder||norm(sp.c[6])+norm(sp.c[7])>1e-13;
-        for(double u:{0.,.013,.23,.5,.91,1.})check(t.distanceAtSpan(i,u)==sp.start+scalarArc(sp,u),"Paired quadrature is bit-exact with the scalar Gaussian rule");
+        for(double u:{0.,.013,.23,.5,.91,1.}){
+            check(detail::spanArcLength(sp,u)==scalarArc(sp,u),"Paired quadrature is bit-exact with the scalar Gaussian rule");
+            check(std::abs(t.distanceAtSpan(i,u)-(sp.start+scalarArc(sp,u)))<=2e-13*std::max(1.,sp.length)+4*std::numeric_limits<double>::epsilon()*sp.start,"Bounded polynomial cache retains the true-arc inversion accuracy");
+        }
         close(derivative(sp,0,0),t.knots[i].position,2e-10,"Septic start interpolation");close(derivative(sp,1,0),t.knots[i+1].position,2e-9,"Septic end interpolation");
         for(int k=0;k<=10;++k){double u=k/10.,distance=t.distanceAtSpan(i,u);if(t.closed&&i+1==t.spans.size()&&k==10)distance=0;
             auto at=t.locate(distance);auto a=t.sampleSpan(i,u),b=t.sample(distance);close(a.position,b.position,2e-9,"Distance/parameter roundtrip");close(a.up,b.up,2e-9,"Distance/frame parameter roundtrip");check(at.parameter>=0&&at.parameter<=1,"Inversion bounded parameter");}

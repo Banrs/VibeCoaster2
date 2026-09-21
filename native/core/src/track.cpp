@@ -8,7 +8,7 @@
 namespace coaster {
 static Vec3 transport(Vec3 up,Vec3 a,Vec3 b){Vec3 c=cross(a,b);double s=norm(c);if(s>1e-10)up=rotate(up,c/s,std::atan2(s,dot(a,b)));return unit(up-b*dot(up,b));}
 static Vec3 der(const Span& sp,double u){Vec3 v=sp.c.back()*double(sp.c.size()-1);for(int i=int(sp.c.size())-2;i>=1;--i)v=v*u+sp.c[i]*i;return v;}
-static double arc(const Span& sp,double u){return detail::spanArcLength(sp,u);}
+static double arc(const Span& sp,double u){return detail::cachedArcLength(sp,u);}
 static double binomial(int n,int k){double result=1;for(int i=1;i<=k;++i)result=result*(n-i+1)/i;return result;}
 void Track::rebuild(){
     if(knots.size()<4||knots.size()>200000)throw std::runtime_error("Invalid knot count");
@@ -83,7 +83,8 @@ void Track::rebuild(){
             if(!finite(derivative[b])||speed<h*.5||speed<norm(derivative[b])*.95)throw std::runtime_error("Canonical span is outside the supported tangent cone");minimumSpeed=std::min(minimumSpeed,speed);}
         for(int b=0;b<8;++b)secondBound=std::max(secondBound,8*norm(derivative[b+1]-derivative[b]));
         if(secondBound/(minimumSpeed*minimumSpeed)>.2)throw std::runtime_error("Canonical span exceeds the interval curvature bound");
-        sp.length=arc(sp,1);if(!std::isfinite(sp.length)||sp.length<1e-5||sp.length>200)throw std::runtime_error("Invalid canonical span length");length+=sp.length;spans.push_back(sp);
+        sp.length=detail::spanArcLength(sp,1);if(!std::isfinite(sp.length)||sp.length<1e-5||sp.length>200)throw std::runtime_error("Invalid canonical span length");
+        detail::prepareArcPolynomial(sp,derivative);length+=sp.length;spans.push_back(sp);
     }
     rebuildFramePolynomials(*this);
 }
@@ -195,10 +196,17 @@ double lowerBound(const TrackSample& q,const Terrain& terrain,double trainTop,do
     return boxLowerBound(box,terrain,motionPadding);
 }
 }
+void ClearanceSweep::prepareGround(const Terrain& terrain,Cancel cancel){
+    std::vector<double> values;values.reserve(samples.size());
+    for(const auto& cell:samples){if(cancel&&cancel())throw std::runtime_error("CANCELLED");values.push_back(terrain_validation::lowerBound(cell.sample,terrain,top,pad));}
+    groundLowerBounds=std::move(values);sampledTerrain=terrain;
+}
 double minimumSweptGroundClearance(const Track& track,const Terrain& terrain,const TrainConfig& train,Cancel cancel){
     const auto sweep=buildClearanceSweep(track,train,cancel);return minimumSweptGroundClearance(sweep,terrain,cancel);
 }
 double minimumSweptGroundClearance(const ClearanceSweep& sweep,const Terrain& terrain,Cancel cancel){
+    if(cancel&&cancel())throw std::runtime_error("CANCELLED");
+    if(const auto* values=sweep.groundBounds(terrain);values&&!values->empty())return *std::min_element(values->begin(),values->end());
     double minimum=INFINITY;
     for(const auto& cell:sweep.frames()){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
@@ -295,9 +303,10 @@ static ValidationReport validateGeometryImpl(const Track& t,const Terrain& terra
     // that envelope; no additional centreline-height gate is imposed.
     // Reuse this same prepared sweep for all support-member checks below.
     size_t terrainFrame=0;
+    const auto* groundBounds=sweep->groundBounds(terrain);
     for(const auto& f:sweep->frames()){
         if((terrainFrame++&127)==0&&cancel&&cancel()){r.fail("CANCELLED","Swept terrain validation cancelled");return r;}
-        double lower=terrain_validation::lowerBound(f.sample,terrain,sweep->trainTop(),sweep->padding());
+        double lower=groundBounds?(*groundBounds)[terrainFrame-1]:terrain_validation::lowerBound(f.sample,terrain,sweep->trainTop(),sweep->padding());
         if(!std::isfinite(lower)||lower<limits.minClearance){
             r.fail("TERRAIN_SWEEP_CLEARANCE","Cannot certify configured terrain clearance for the complete swept train body",f.distance,lower,limits.minClearance);
             if(r.errors.size()>=10)return r;

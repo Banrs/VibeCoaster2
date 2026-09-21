@@ -20,7 +20,7 @@
 namespace coaster {
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
 constexpr const char* generatorVersion=COASTER_GENERATOR_VERSION;
-inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
+inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
 
 enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
@@ -29,7 +29,11 @@ struct Knot {
     Vec3 third,fourth,upFirst,upSecond,upThird;
 };
 // Deterministic caches rebuilt from the COASTER6 canonical knots.
-struct Span { std::array<Vec3,10> c{}; std::array<Vec3,8> referenceUp{}; std::array<double,8> bank{}; double start{},length{}; };
+struct Span {
+    std::array<Vec3,10> c{};std::array<Vec3,8> referenceUp{};std::array<double,8> bank{};
+    double start{},length{};
+    std::array<double,18> arcPolynomial{};bool polynomialArc{}; // Rebuilt, never trusted from disk.
+};
 struct TrackSample { Vec3 position,tangent,curvature,up,right; Element element; };
 struct TrackLocation { size_t span{}; double parameter{}; };
 struct TrackKinematics { TrackSample sample; Vec3 upS,upSS,curvatureS,upSSS,curvatureSS; };
@@ -192,6 +196,8 @@ public:
     double padding() const{return pad;}
     double bodyRadius() const{return radius;}
     double trainTop() const{return top;}
+    void prepareGround(const Terrain&,Cancel cancel={});
+    const std::vector<double>* groundBounds(const Terrain& terrain) const{return sampledTerrain&&*sampledTerrain==terrain?&groundLowerBounds:nullptr;}
 private:
     ClearanceSweep()=default;
     struct Key {int x,y,z;bool operator==(const Key&) const=default;};
@@ -199,6 +205,8 @@ private:
     std::vector<ClearanceFrame> samples;
     std::unordered_map<Key,std::vector<size_t>,Hash> cells;
     double top{},length{},pad{},radius{};
+    std::optional<Terrain> sampledTerrain;
+    std::vector<double> groundLowerBounds;
     friend ClearanceSweep buildClearanceSweep(const Track&,const TrainConfig&,Cancel);
     friend ClearanceSweep buildClearanceSweepVerified(const Track&,const TrainConfig&,Cancel);
     friend int supportCollision(const Support&,const ClearanceSweep&,Cancel);

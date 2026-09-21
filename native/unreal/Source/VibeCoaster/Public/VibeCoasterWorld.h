@@ -12,6 +12,14 @@ class ACameraActor;
 struct FCoasterRuntime;
 struct FCoasterRuntimeDeleter { void operator()(FCoasterRuntime* Pointer) const; };
 struct FCoasterPlaybackObservation { double Time, Distance, Speed; };
+struct FCoasterLoadingObservation
+{
+    bool Active = false, Cancelling = false;
+    coaster::WorkPhase Phase = coaster::WorkPhase::Complete;
+    double ElapsedSeconds = 0, Completed = 0, Total = 0;
+    int32 Candidate = 0;
+    FString Title;
+};
 
 UCLASS()
 class VIBECOASTER_API AVibeCoasterAssembly : public AActor
@@ -52,6 +60,7 @@ public:
     void SetSeat(int32 InSeat);
     void ToggleOverview();
     FString Status() const;
+    FCoasterLoadingObservation Loading() const;
     FString Telemetry() const;
     TArray<FString> Comparison() const;
     bool IsBusy() const;

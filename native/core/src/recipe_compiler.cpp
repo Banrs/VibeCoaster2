@@ -42,8 +42,8 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
     std::vector<CompiledElement> compiled;std::vector<std::pair<std::string,size_t>> sourcePorts;
     std::vector<std::pair<LandmarkKind,size_t>> landmarks;
     std::vector<double> sourceSpeeds;size_t brakeBegin=0;
-    Vec3 plateauArrival{},plateauCenter{},cliffTop{},cliffFoot{},waveBase{},loopBase{},immelExit{};
-    double cliffYaw=0;
+    Vec3 plateauArrival{},plateauCenter{},cliffTop{},cliffFoot{},waveBase{},loopBase{},immelExit{},outbankBay{},camelbackBase{},returnRavine{};
+    double cliffYaw=0,brakeCapacity=7;
     auto heading=[&]{return std::atan2(cursor.tangent.y,cursor.tangent.x);};
     auto speedFor=[&](const std::string& id){const auto found=feedback.energyCorrection.find(id);return std::sqrt(std::max(25.,motion.nominalSpeed*motion.nominalSpeed+(found==feedback.energyCorrection.end()?0:found->second)));};
     auto lossFor=[&](auto& intent){intent.rollingAcceleration=gravity*req.train.rollingResistance;intent.dragAccelerationCoefficient=motion.drag;};
@@ -142,8 +142,14 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
             plateauArrival=cursor.position;const double arrivalYaw=heading();groundLandscape(plateauArrival,arrivalYaw,summit);
             landmarks.push_back({LandmarkKind::PlateauArrival,d.track.knots.size()-1});
             if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;t.ramps.push_back({ascentStart.position.x,ascentStart.position.y,ascentEnd.position.x,ascentEnd.position.y,std::max(0.,ascentStart.position.z-datum),std::max(0.,ascentEnd.position.z-datum),std::tan(20*pi/180),std::tan(32*pi/180),190});}
-            const auto act=terrainAct(element,TerrainAct::Clifftop,-10,-65*pi/180+turnVariation+.25*std::sin(attempt*2.399963229728653),p.outwardBankDegrees*pi/180,std::max(-1.24,-.99*req.style.airtime),p.approachLengthMeters/300);
-            source(act,Element::Turn,element);break;
+            const auto act=terrainAct(element,TerrainAct::Clifftop,-10,-65*pi/180+turnVariation+.25*std::sin(attempt*2.399963229728653),p.outwardBankDegrees*pi/180,std::max(-1.015,-.99*req.style.airtime),p.approachLengthMeters/300);
+            source(act,Element::Turn,element);
+            const auto low=std::min_element(act.authoring.controls.begin(),act.authoring.controls.end(),[](const auto& a,const auto& b){return a.normalG<b.normalG;});
+            const auto sample=std::lower_bound(act.section.samples.begin(),act.section.samples.end(),low->time,[](const auto& a,double time){return a.time<time;});
+            const auto& authored=d.forcePrograms.back();
+            const auto outward=rotated(unit(cross(sample->forward,Vec3{0,0,1})),authored.heading);
+            outbankBay=authored.origin+rotated(sample->position,authored.heading)+outward*70;
+            break;
         }
         case RideRole::CliffLip:{
             const auto& p=std::get<OperationParameters>(element.parameters);const double target=p.targetSpeedKmh/3.6;
@@ -160,7 +166,9 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
             intent.drop=cliffTop.z-(datum+85);intent.maximumPitch=p.dropDegrees*pi/180;intent.exitPitch=boostParameters.gradeDegrees*pi/180;
             intent.crestRampSeconds=2.6;intent.crestG=-.55;intent.pulloutG=3.8;intent.pulloutRampSeconds=1.5;intent.exitRampSeconds=1.2;lossFor(intent);
             source(designFvdDive(intent,cancel),Element::Hill,element);cliffFoot=cursor.position;
-            if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;t.cliffX=cliffTop.x+std::cos(cliffYaw)*7;t.cliffY=cliffTop.y+std::sin(cliffYaw)*7;t.cliffHeading=cliffYaw;}
+            if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;t.cliffX=cliffTop.x+std::cos(cliffYaw)*7;t.cliffY=cliffTop.y+std::sin(cliffYaw)*7;t.cliffHeading=cliffYaw;
+                t.ravines.push_back({outbankBay.x,outbankBay.y,cliffFoot.x,cliffFoot.y,std::max(0.,t.heightMeters-45),0,145,190});
+            }
             break;
         }
         case RideRole::DownhillLaunch:{
@@ -172,6 +180,12 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
             landmarks.push_back({LandmarkKind::DownhillLaunchExit,d.track.knots.size()-1});
             freeDirection({0,0,0,0},{heading(),0,0,0},target*1.4,Element::Hill,element.id+"-valley");
             if(cursor.position.z<datum)throw std::runtime_error("Inclined launch exhausted the authored cliff-foot relief");
+            camelbackBase=cursor.position;
+            if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;
+                t.ramps.push_back({cliffFoot.x,cliffFoot.y,cursor.position.x,cursor.position.y,cliffFoot.z-5,cursor.position.z-5,std::tan(p.gradeDegrees*pi/180),0,340});
+                const auto shoulder=(cliffFoot+cursor.position)*.5+rotated(Vec3{0,220,0},heading());
+                t.foothills.push_back({shoulder.x,shoulder.y,65,420});
+            }
             break;
         }
         case RideRole::Camelback:{
@@ -180,9 +194,15 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
             intent.height=224.654746724*p.profileScale*scale*scale;intent.exitHeight=0;intent.exitPitch=.12;
             intent.positiveG=2.934128338;intent.exitPositiveG=4.005031584;intent.airtimeG=-.895986970;
             intent.rampSeconds=2.425134587*timeScale;intent.ascentReleaseSeconds=2.907610573*timeScale;intent.exitRampSeconds=3.286095368*timeScale;intent.crestLoadChangeG=-.060263335;
-            protectedHill.tailCutSeconds=p.tailCutSeconds*timeScale;protectedHill.releaseSeconds=p.releaseSeconds*timeScale;protectedHill.exitNormalG=p.exitNormalG;protectedHill.minimumExitPitch=p.minimumExitPitchDegrees*pi/180;
+            // Higher-speed copies retain the protected crest but cannot scale
+            // the post-airtime positive hold beyond its fixed duration envelope.
+            protectedHill.tailCutSeconds=p.tailCutSeconds*timeScale+3*std::max(0.,timeScale-1);protectedHill.releaseSeconds=p.releaseSeconds*timeScale;protectedHill.exitNormalG=p.exitNormalG;protectedHill.minimumExitPitch=p.minimumExitPitchDegrees*pi/180;
             lossFor(intent);auto protectedResult=designFvdCamelback(protectedHill,cancel);
-            source({std::move(protectedResult.authoring),std::move(protectedResult.section)},Element::Hill,element);break;
+            source({std::move(protectedResult.authoring),std::move(protectedResult.section)},Element::Hill,element);
+            if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;const double floor=std::min(camelbackBase.z,cursor.position.z)-5.5;
+                t.ramps.push_back({camelbackBase.x,camelbackBase.y,cursor.position.x,cursor.position.y,floor,floor,0,0,400});
+            }
+            break;
         }
         case RideRole::Wave:{
             const auto& p=std::get<TurnParameters>(element.parameters);FvdWaveRequest intent;
@@ -211,9 +231,16 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
             const auto& p=std::get<SweepParameters>(element.parameters);const double bank=p.rollDegrees*(req.style.signatureRollDegrees/45)*pi/180;
             // A descending outward roll over the ravine shoulder. It spends
             // existing elevation and ends in a positively loaded low carve.
-            const auto act=terrainAct(element,TerrainAct::RavineRoll,std::max(p.riseMeters,datum+6-cursor.position.z),p.headingDegrees*pi/180,bank,std::max(-1.32,p.negativeG*req.style.airtime),p.lengthMeters/260,p.exitPitchDegrees*pi/180);
+            const auto act=terrainAct(element,TerrainAct::RavineRoll,std::max(p.riseMeters,datum+2-cursor.position.z),p.headingDegrees*pi/180,bank,std::max(-1.32,p.negativeG*req.style.airtime),p.lengthMeters/260,p.exitPitchDegrees*pi/180);
             source(act,Element::Turn,element);
-            if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;const auto mid=(immelExit+cursor.position)*.5;t.foothills.push_back({mid.x+110,mid.y+90,std::max(0.,immelExit.z-12),240});t.ravines.push_back({immelExit.x,immelExit.y,cursor.position.x,cursor.position.y,60,20,100,80});}
+            returnRavine=cursor.position;
+            if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;const auto mid=(immelExit+cursor.position)*.5;
+                t.foothills.push_back({mid.x+110,mid.y+90,std::max(0.,immelExit.z-12),380});
+                t.foothills.push_back({mid.x-280,mid.y-180,55,520});
+                t.foothills.push_back({plateauCenter.x-1050,plateauCenter.y-500,45,1000});
+                t.foothills.push_back({loopBase.x+650,loopBase.y+250,180,950});
+                t.ravines.push_back({immelExit.x,immelExit.y,cursor.position.x,cursor.position.y,60,50,110,140});
+            }
             break;
         }
         case RideRole::Return:{
@@ -221,39 +248,59 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
                 if constexpr(std::is_same_v<P,HillParameters>){
                     FvdHillRequest intent;intent.entrySpeed=speedFor(element.id);intent.height=p.riseMeters*p.profileScale;
                     intent.positiveG=p.pulloutG;intent.airtimeG=std::max(-1.32,p.negativeG*req.style.airtime);intent.rampSeconds=p.releaseSeconds;intent.exitRampSeconds=p.recoverySeconds;
-                    intent.twistAngle=(p.twistDegrees+(req.style.returnStyle?25.:0))*pi/180;intent.exitHeight=0;intent.exitPitch=-.12;lossFor(intent);
+                    intent.twistAngle=(p.twistDegrees+(req.style.returnStyle?25.:0))*pi/180;
+                    const size_t next=size_t(&element-req.recipe.elements.data())+1;
+                    intent.exitHeight=next<req.recipe.elements.size()&&req.recipe.elements[next].anchor==TerrainAnchor::Approach?4:0;
+                    intent.exitPitch=-.12;lossFor(intent);
                     const auto hill=designFvdHill(intent,cancel);double begin=0;
                     source(hill,Element::Airtime,element,begin);
                 }else if constexpr(std::is_same_v<P,TurnParameters>){
                     const double angle=p.headingDegrees*pi/180+turnVariation;
                     const double length=std::max(p.lengthMeters,1.875*std::abs(angle)*motion.nominalSpeed*motion.nominalSpeed/(gravity*std::tan(std::abs(p.bankDegrees)*pi/180)));
                     auto end=detail::planarJet({cursor.position.x,cursor.position.y,cursor.position.z+p.riseMeters},heading()+angle,0,(p.exitNormalG-1)*gravity/(motion.nominalSpeed*motion.nominalSpeed));
-                    auto program=solveHeightMotion(cursor,end,length,{motion.nominalSpeed,gravity*req.train.rollingResistance,motion.drag,0,4.4,-.8});
+                    auto program=solveHeightMotion(cursor,end,length,{motion.nominalSpeed,gravity*req.train.rollingResistance,motion.drag,0,4.4,-.8},cancel);
                     motion.programme(program,Element::Turn,element.id.c_str());motion.modules.back().reversals=1;
                 }else if constexpr(std::is_same_v<P,SweepParameters>){
                     if(element.anchor!=TerrainAnchor::Approach){
                         auto end=detail::planarJet({cursor.position.x,cursor.position.y,cursor.position.z+p.riseMeters},heading()+p.headingDegrees*pi/180,p.exitPitchDegrees*pi/180);
-                        motion.programme(solveHeightMotion(cursor,end,p.lengthMeters,{motion.nominalSpeed,gravity*req.train.rollingResistance,motion.drag,p.rollDegrees*pi/180,4.4,-.8}),Element::Turn,element.id.c_str(),p.rollDegrees*pi/180);
+                        motion.programme(solveHeightMotion(cursor,end,p.lengthMeters,{motion.nominalSpeed,gravity*req.train.rollingResistance,motion.drag,p.rollDegrees*pi/180,4.4,-.8},cancel),Element::Turn,element.id.c_str(),p.rollDegrees*pi/180);
                         motion.modules.back().reversals=1;return;
                     }
-                    // Resolve the return outside the broad plateau footprint,
-                    // before constructing its two smooth low corridors.
+                    if(req.terrain.kind==TerrainKind::Highlands)d.request.terrain.ravines.push_back({returnRavine.x,returnRavine.y,cursor.position.x,cursor.position.y,60,50,160,190});
+                    // A reordered final hill may still be descending while
+                    // pulling out. Finish that same curvature release before
+                    // asking a placed level corridor to reach the station.
+                    const auto jets=detail::directionAngles(cursor);
+                    if(std::abs(jets[0].value)>1e-5){
+                        auto released=[](AngleJet q,double length){return q.value+q.first*length*.5+q.second*length*length*.1+q.third*length*length*length/120;};
+                        double length=std::max(40.,motion.nominalSpeed*2);
+                        double lo=1,hi=2;
+                        while(hi<400&&released(jets[0],lo)*released(jets[0],hi)>0){lo=hi;hi*=1.25;}
+                        if(hi<400){
+                            for(int k=0;k<48;++k){const double mid=(lo+hi)*.5;if(released(jets[0],lo)*released(jets[0],mid)>0)lo=mid;else hi=mid;}
+                            length=(lo+hi)*.5;
+                        }
+                        const auto program=polynomialMotion(cursor,detail::anglePolynomial(jets[0],{0,0,0,0},length),detail::anglePolynomial(jets[1],{released(jets[1],length),0,0,0},length),length);
+                        for(int k=1;k<100;++k){const double pitch=std::asin(program.direction(length*k/100).tangent.z);
+                            if(pitch*jets[0].value< -1e-10||std::abs(pitch)>std::abs(jets[0].value)+1e-7)throw std::runtime_error("The incoming grade cannot release monotonically into the low return");}
+                        motion.programme(program,Element::Turn,(element.id+"-grade-release").c_str());
+                    }
+                    // The valley already places this port outside the plateau.
+                    // Reach the station approach directly instead of detouring
+                    // outward to a second, redundant landscape waypoint.
                     const double side=cursor.position.y>=plateauCenter.y?1.:-1.;
-                    const Vec3 gate{plateauCenter.x-640,side*std::max(450.,side*plateauCenter.y+584),datum+p.riseMeters};
-                    const Vec3 approach{-450,side*250,datum+p.riseMeters};
-                    const auto incoming=unit(Vec3{gate.x-cursor.position.x,gate.y-cursor.position.y,0}),outgoing=unit(Vec3{approach.x-gate.x,approach.y-gate.y,0});
-                    const auto direction=unit(incoming+outgoing);const double yaw=std::atan2(direction.y,direction.x)+p.headingDegrees*pi/180;
-                    auto gatePose=detail::directionJet({0,0,0,0},{yaw,std::copysign(1./600,cross(incoming,outgoing).z),0,0});gatePose.position=gate;
+                    const Vec3 approach{-600,side*320,datum+p.riseMeters};
+                    if(req.terrain.kind==TerrainKind::Highlands)d.request.terrain.ravines.push_back({cursor.position.x,cursor.position.y,approach.x,approach.y,65,45,260,290});
                     const size_t begin=d.track.knots.size()-1;
-                    motion.curve(gatePose,std::max(p.lengthMeters,norm(gate-cursor.position)*1.12),Element::Turn,(element.id+"-foothill").c_str(),p.rollDegrees*pi/180);
-                    motion.curve(detail::planarJet(approach,-side*pi/2,p.exitPitchDegrees*pi/180),std::max(p.lengthMeters,norm(approach-cursor.position)*1.12),Element::Turn,(element.id+"-station-approach").c_str());
+                    motion.curve(detail::planarJet(approach,-side*pi/2+p.headingDegrees*pi/180,p.exitPitchDegrees*pi/180),std::max(p.lengthMeters,norm(approach-cursor.position)*1.12),Element::Turn,(element.id+"-station-approach").c_str(),p.rollDegrees*pi/180);
                     for(size_t k=begin;k<d.track.knots.size();++k)if(d.track.knots[k].position.z<datum-.05)throw std::runtime_error("Low return corridor left its basin floor; no clearance lift is inserted");
                 }else throw std::runtime_error("Unsupported return parameter family");
             },element.parameters);break;
         }
         case RideRole::Brakes:{
             const auto& p=std::get<OperationParameters>(element.parameters);
-            const double alignment=std::max(24.,motion.nominalSpeed);
+            brakeCapacity=-p.accelerationMps2;
+            const double alignment=std::max(50.,motion.nominalSpeed*1.8);
             const Vec3 destination{-p.lengthMeters-alignment,0,datum};
             motion.curve(detail::planarJet(destination,0,0),norm(destination-cursor.position)*1.25,Element::Turn,"station-return");
             motion.line(alignment,Element::Brake,"brake-alignment");
@@ -285,7 +332,7 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
     d.track.rebuild();auto at=[&](size_t i){return i>=d.track.spans.size()?d.track.length:d.track.spans[i].start;};
     for(const auto& motor:motion.motors){const double ramp=motor.kind==DriveKind::Launch?departureRamp(motor.acceleration,req.limits):.65;
         d.operations.push_back({at(motor.begin)+(motor.kind==DriveKind::Launch?3:2*halfTrain+3),at(motor.end)-2*halfTrain-3,motor.kind,motor.speed,req.train.carMass*motor.acceleration,req.train.carMass*motor.acceleration*110,ramp});}
-    d.operations.push_back({at(brakeBegin)+2*halfTrain+3,80,DriveKind::Station,0,req.train.carMass*7,req.train.carMass*700,.5,6,1.5});
+    d.operations.push_back({at(brakeBegin)+2*halfTrain+3,80,DriveKind::Station,0,req.train.carMass*brakeCapacity,req.train.carMass*brakeCapacity*100,.5,std::min(6.,brakeCapacity*6/7),1.5});
     for(auto& operation:d.operations)operation.exitFadeMeters=std::max(1.,operation.targetSpeed*operation.rampSeconds);
     for(const auto& element:compiled)for(size_t i=element.moduleBegin;i<element.moduleEnd;++i){const auto& m=motion.modules[i];d.sections.push_back({m.name,at(m.begin),at(m.end),m.reversals,m.planar,element.role,element.id});}
     landmarks.push_back({LandmarkKind::BrakeEntry,brakeBegin});for(const auto& [kind,knot]:landmarks)d.landmarks.push_back({kind,at(knot)});

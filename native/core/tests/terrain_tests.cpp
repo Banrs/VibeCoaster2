@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "coaster/clearance.hpp"
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -39,6 +40,11 @@ int main(){try{
     for(int j=0;j<=20;++j){auto q=line.sampleSpan(cell.span,cell.parameterBegin+(cell.parameterEnd-cell.parameterBegin)*j/20);for(double x:{-1.275,1.275})for(double y:{-1.5,1.5})for(double z:{-.8,3.6})check(bound<=clear(q.position+q.tangent*x+q.right*y+q.up*z,flat)+1e-9,"Continuous canonical cell includes intermediate body corners");}
     Limits limits;auto safe=circle(20);check(validateGeometry(safe,flat,limits,train,{}).valid(),"Clear closed curve accepted with full headroom");
     auto safeSweep=buildClearanceSweep(safe,train);int nominal=int(std::ceil(safe.length/2));
+    const double freshGround=minimumSweptGroundClearance(safeSweep,flat);
+    safeSweep.prepareGround(flat);
+    check(minimumSweptGroundClearance(safeSweep,flat)==freshGround,"Reused full-body ground bounds match the fresh certificate exactly");
+    Terrain raised=flat;raised.kind=TerrainKind::Highlands;raised.heightMeters=10;
+    check(!safeSweep.groundBounds(raised)&&minimumSweptGroundClearance(safeSweep,raised)<freshGround-1,"Changing terrain cannot reuse a stale ground certificate");
     auto chordBounds=chord_validation::arcBounds(safe,safeSweep,nominal,{});check(chordBounds.size()==size_t(nominal),"Every chord gets one linear-time bound");
     for(size_t i=0;i<chordBounds.size();++i){double sampledLength=0;auto previous=safe.sample(safe.length*i/nominal).position;
         for(int j=1;j<=30;++j){auto point=safe.sample(safe.length*(i+j/30.)/nominal).position;sampledLength+=norm(point-previous);previous=point;}

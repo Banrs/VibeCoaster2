@@ -7,6 +7,8 @@
 #include <sstream>
 #include <stdexcept>
 using namespace coaster;
+static std::string stableReport(const Design& source){auto copy=source;copy.timings={};return reportJson(copy);}
+
 namespace fs=std::filesystem;
 static int checks=0;
 static void check(bool v,const std::string& m){++checks;if(!v)throw std::runtime_error(m);}
@@ -36,7 +38,7 @@ int main(){try{
                 auto u=VibeCoordinates::Position(mesh.positions[a]),v=VibeCoordinates::Position(mesh.positions[c]),w=VibeCoordinates::Position(mesh.positions[b]);auto expected=VibeCoordinates::Direction(mesh.normals[a]+mesh.normals[b]+mesh.normals[c]);check(dot(cross(Vec3{v.X-u.X,v.Y-u.Y,v.Z-u.Z},Vec3{w.X-u.X,w.Y-u.Y,w.Z-u.Z}),Vec3{expected.X,expected.Y,expected.Z})>0,"Reflected UE winding remains outward");}
         }
     }
-    auto good=out/"new.coaster";check(saveDesign(d,good.string(),error),"New save: "+error);Design replay;check(loadDesign(good.string(),replay,error),"New load: "+error);check(reportJson(d)==reportJson(replay),"Schema6 exact independent replay");for(size_t i=0;i<d.supports.size();++i)sameSupport(d.supports[i],replay.supports[i]);
+    auto good=out/"new.coaster";check(saveDesign(d,good.string(),error),"New save: "+error);Design replay;check(loadDesign(good.string(),replay,error),"New load: "+error);check(stableReport(d)==stableReport(replay),"Schema6 exact independent replay");for(size_t i=0;i<d.supports.size();++i)sameSupport(d.supports[i],replay.supports[i]);
     auto support=d.supports.front();
     check(!support.members.empty()&&support.members.front().kind==SupportMemberKind::Footing,"Malformed-footing fixtures start from a real footing");
     check(support.members.back().spineContact,"Malformed-contact fixtures start from the verified spine endpoint");
@@ -62,8 +64,8 @@ int main(){try{
     {auto x=support;auto q=d.track.sample(0);x.members={{q.position+q.up*1.,x.attachment,.18,.18,SupportMemberKind::Steel,true}};check(supportCollision(x,sweep)>=0,"Own-joint flag never exempts the train");}
     {auto x=support;auto q=d.track.sample(0);Vec3 p=q.position+q.right*3.;x.members={{p-q.up,p+q.up*3,2.,2.,SupportMemberKind::Footing,false}};check(supportCollision(x,sweep)>=0,"Footing full radius envelope checked");}
     const auto goodBytes=bytes(good);auto rows=lines(goodBytes);size_t firstSupport=5+d.track.knots.size()+d.operations.size(),firstMember=firstSupport+1;int malformed=0;
-    for(auto [col,value]:std::vector<std::pair<size_t,std::string>>{{6,"0"},{6,"-1"},{6,"nan"},{6,"1e309"},{6,"6"},{8,"9"},{9,"2"},{0,"nan"},{5,"9999999"}}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstMember,col,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed malformed member rejected: "+value);check(reportJson(unchanged)==reportJson(d),"Failed load retains accepted ride");++malformed;}
-    for(auto value:{"513","60001","-1","18446744073709551615"}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstSupport,11,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed oversized count rejected");check(reportJson(unchanged)==reportJson(d),"Oversized load retains accepted ride");++malformed;}
+    for(auto [col,value]:std::vector<std::pair<size_t,std::string>>{{6,"0"},{6,"-1"},{6,"nan"},{6,"1e309"},{6,"6"},{8,"9"},{9,"2"},{0,"nan"},{5,"9999999"}}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstMember,col,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed malformed member rejected: "+value);check(stableReport(unchanged)==stableReport(d),"Failed load retains accepted ride");++malformed;}
+    for(auto value:{"513","60001","-1","18446744073709551615"}){auto bad=out/"malformed.coaster";corrupt(bad,rows,firstSupport,11,value);Design unchanged=d;check(!loadDesign(bad.string(),unchanged,error),"Checksummed oversized count rejected");check(stableReport(unchanged)==stableReport(d),"Oversized load retains accepted ride");++malformed;}
     {auto bad=d;bad.supports[0].members[0].radiusBase=NAN;check(!saveDesign(bad,good.string(),error),"Bad canonical member cannot overwrite accepted save");check(bytes(good)==goodBytes,"Rejected save preserves exact prior file");}
     check(!saveDesign(d,good.string(),error,[]{return true;}),"Cancelled save rejected");check(bytes(good)==goodBytes,"Cancelled save preserves exact prior file");
     std::cout<<"PASS "<<checks<<" support assertions; "<<members<<" closed member meshes, "<<malformed<<" checksummed malformed cases\n";
