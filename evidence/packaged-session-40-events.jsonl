@@ -1,0 +1,243 @@
+{"event": "startup", "wall": 0.0053983, "utc_ticks": "639257127159420000", "engine": "5.8.2-56702186+++UE5+Release-5.8", "save": "isolated-profile/Saved/Designs/Current.vcd"}
+{"event": "ui-gpu-ready", "wall": 0.1170762, "utc_ticks": "639257127160530000"}
+{"event": "request", "wall": 0.117293701, "utc_ticks": "639257127160530000", "load": true, "cycle": 0}
+{"event": "native-ready", "wall": 2.1004906, "utc_ticks": "639257127180360000", "seconds": 1.983136799, "worker_native": 1.829406399, "worker_mesh": 0.151939001}
+{"event": "scene-submit", "wall": 2.1730198, "utc_ticks": "639257127181090000"}
+{"event": "scene-commit", "wall": 2.1731898, "utc_ticks": "639257127181090000"}
+{"event": "materials-ready", "wall": 2.173281599, "utc_ticks": "639257127181090000"}
+{"event": "gpu-ready", "wall": 2.375111498, "utc_ticks": "639257127183110000", "seconds": 2.257805601, "rendered_frames": 4, "cycle": 1, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 2.684202299, "utc_ticks": "639257127186200000", "load": true, "cycle": 1}
+{"event": "native-ready", "wall": 4.750934001, "utc_ticks": "639257127206870000", "seconds": 2.066681601, "worker_native": 1.897194698, "worker_mesh": 0.1543229}
+{"event": "scene-submit", "wall": 4.824157599, "utc_ticks": "639257127207600000"}
+{"event": "scene-commit", "wall": 4.824405, "utc_ticks": "639257127207600000"}
+{"event": "materials-ready", "wall": 4.824506599, "utc_ticks": "639257127207600000"}
+{"event": "gpu-ready", "wall": 5.058798898, "utc_ticks": "639257127209950000", "seconds": 2.3745827, "rendered_frames": 3, "cycle": 2, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 5.343833901, "utc_ticks": "639257127212800000", "load": true, "cycle": 2}
+{"event": "native-ready", "wall": 7.410580199, "utc_ticks": "639257127233460000", "seconds": 2.066677798, "worker_native": 1.888566397, "worker_mesh": 0.168215603}
+{"event": "scene-submit", "wall": 7.485266499, "utc_ticks": "639257127234210000"}
+{"event": "scene-commit", "wall": 7.485498298, "utc_ticks": "639257127234210000"}
+{"event": "materials-ready", "wall": 7.485610198, "utc_ticks": "639257127234210000"}
+{"event": "gpu-ready", "wall": 7.687351998, "utc_ticks": "639257127236240000", "seconds": 2.343506798, "rendered_frames": 4, "cycle": 3, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 7.9722239, "utc_ticks": "639257127239080000", "load": true, "cycle": 3}
+{"event": "native-ready", "wall": 10.0222243, "utc_ticks": "639257127259590000", "seconds": 2.0499519, "worker_native": 1.881060202, "worker_mesh": 0.154260099}
+{"event": "scene-submit", "wall": 10.0955659, "utc_ticks": "639257127260320000"}
+{"event": "scene-commit", "wall": 10.0958324, "utc_ticks": "639257127260320000"}
+{"event": "materials-ready", "wall": 10.095931899, "utc_ticks": "639257127260320000"}
+{"event": "gpu-ready", "wall": 10.275038298, "utc_ticks": "639257127262110000", "seconds": 2.302807499, "rendered_frames": 3, "cycle": 4, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 10.559840098, "utc_ticks": "639257127264960000", "load": true, "cycle": 4}
+{"event": "native-ready", "wall": 12.6265621, "utc_ticks": "639257127285620000", "seconds": 2.066667799, "worker_native": 1.897817001, "worker_mesh": 0.154743001}
+{"event": "scene-submit", "wall": 12.6997757, "utc_ticks": "639257127286360000"}
+{"event": "scene-commit", "wall": 12.700007699, "utc_ticks": "639257127286360000"}
+{"event": "materials-ready", "wall": 12.7001139, "utc_ticks": "639257127286360000"}
+{"event": "gpu-ready", "wall": 12.879572101, "utc_ticks": "639257127288150000", "seconds": 2.3197238, "rendered_frames": 3, "cycle": 5, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 13.164342199, "utc_ticks": "639257127291010000", "load": true, "cycle": 5}
+{"event": "native-ready", "wall": 15.1977458, "utc_ticks": "639257127311330000", "seconds": 2.0333483, "worker_native": 1.873108801, "worker_mesh": 0.154132199}
+{"event": "scene-submit", "wall": 15.27039, "utc_ticks": "639257127312060000"}
+{"event": "scene-commit", "wall": 15.270675201, "utc_ticks": "639257127312070000"}
+{"event": "materials-ready", "wall": 15.2707729, "utc_ticks": "639257127312070000"}
+{"event": "gpu-ready", "wall": 15.479415398, "utc_ticks": "639257127314150000", "seconds": 2.315057598, "rendered_frames": 3, "cycle": 6, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 15.764292598, "utc_ticks": "639257127317000000", "load": true, "cycle": 6}
+{"event": "native-ready", "wall": 17.797670599, "utc_ticks": "639257127337330000", "seconds": 2.033327501, "worker_native": 1.879457001, "worker_mesh": 0.152709901}
+{"event": "scene-submit", "wall": 17.8707808, "utc_ticks": "639257127338060000"}
+{"event": "scene-commit", "wall": 17.871045798, "utc_ticks": "639257127338060000"}
+{"event": "materials-ready", "wall": 17.8711766, "utc_ticks": "639257127338060000"}
+{"event": "gpu-ready", "wall": 18.065003797, "utc_ticks": "639257127340000000", "seconds": 2.300700601, "rendered_frames": 4, "cycle": 7, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 18.349727001, "utc_ticks": "639257127342850000", "load": true, "cycle": 7}
+{"event": "native-ready", "wall": 20.3997823, "utc_ticks": "639257127363360000", "seconds": 2.0500044, "worker_native": 1.883743998, "worker_mesh": 0.152949102}
+{"event": "scene-submit", "wall": 20.4729045, "utc_ticks": "639257127364080000"}
+{"event": "scene-commit", "wall": 20.473182999, "utc_ticks": "639257127364090000"}
+{"event": "materials-ready", "wall": 20.473297399, "utc_ticks": "639257127364090000"}
+{"event": "gpu-ready", "wall": 20.667455699, "utc_ticks": "639257127366030000", "seconds": 2.317726802, "rendered_frames": 4, "cycle": 8, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 20.9522148, "utc_ticks": "639257127368880000", "load": true, "cycle": 8}
+{"event": "native-ready", "wall": 23.002266198, "utc_ticks": "639257127389380000", "seconds": 2.049998999, "worker_native": 1.8814536, "worker_mesh": 0.153973497}
+{"event": "scene-submit", "wall": 23.074363098, "utc_ticks": "639257127390100000"}
+{"event": "scene-commit", "wall": 23.0745713, "utc_ticks": "639257127390100000"}
+{"event": "materials-ready", "wall": 23.074667498, "utc_ticks": "639257127390100000"}
+{"event": "gpu-ready", "wall": 23.2698172, "utc_ticks": "639257127392060000", "seconds": 2.317587398, "rendered_frames": 3, "cycle": 9, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 23.554550998, "utc_ticks": "639257127394900000", "load": true, "cycle": 9}
+{"event": "native-ready", "wall": 25.587935701, "utc_ticks": "639257127415240000", "seconds": 2.033333, "worker_native": 1.868925299, "worker_mesh": 0.155987199}
+{"event": "scene-submit", "wall": 25.661423098, "utc_ticks": "639257127415970000"}
+{"event": "scene-commit", "wall": 25.661651298, "utc_ticks": "639257127415970000"}
+{"event": "materials-ready", "wall": 25.6617475, "utc_ticks": "639257127415970000"}
+{"event": "gpu-ready", "wall": 25.8425771, "utc_ticks": "639257127417780000", "seconds": 2.288009699, "rendered_frames": 3, "cycle": 10, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 26.127373599, "utc_ticks": "639257127420630000", "load": true, "cycle": 10}
+{"event": "native-ready", "wall": 28.144147798, "utc_ticks": "639257127440790000", "seconds": 2.0167161, "worker_native": 1.859041099, "worker_mesh": 0.155296002}
+{"event": "scene-submit", "wall": 28.2165775, "utc_ticks": "639257127441530000"}
+{"event": "scene-commit", "wall": 28.216807701, "utc_ticks": "639257127441530000"}
+{"event": "materials-ready", "wall": 28.216901399, "utc_ticks": "639257127441530000"}
+{"event": "gpu-ready", "wall": 28.396556899, "utc_ticks": "639257127443320000", "seconds": 2.269179102, "rendered_frames": 3, "cycle": 11, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 28.6812906, "utc_ticks": "639257127446170000", "load": true, "cycle": 11}
+{"event": "native-ready", "wall": 30.731364198, "utc_ticks": "639257127466680000", "seconds": 2.050021797, "worker_native": 1.8886947, "worker_mesh": 0.154458899}
+{"event": "scene-submit", "wall": 30.8041973, "utc_ticks": "639257127467400000"}
+{"event": "scene-commit", "wall": 30.804422799, "utc_ticks": "639257127467400000"}
+{"event": "materials-ready", "wall": 30.804515399, "utc_ticks": "639257127467400000"}
+{"event": "gpu-ready", "wall": 30.999722399, "utc_ticks": "639257127469350000", "seconds": 2.318416897, "rendered_frames": 4, "cycle": 12, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 31.284478698, "utc_ticks": "639257127472200000", "load": true, "cycle": 12}
+{"event": "native-ready", "wall": 33.317932099, "utc_ticks": "639257127492540000", "seconds": 2.033394799, "worker_native": 1.875136998, "worker_mesh": 0.155565802}
+{"event": "scene-submit", "wall": 33.3909254, "utc_ticks": "639257127493260000"}
+{"event": "scene-commit", "wall": 33.3911721, "utc_ticks": "639257127493260000"}
+{"event": "materials-ready", "wall": 33.3912642, "utc_ticks": "639257127493270000"}
+{"event": "gpu-ready", "wall": 33.5878173, "utc_ticks": "639257127495230000", "seconds": 2.303326499, "rendered_frames": 4, "cycle": 13, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 33.8724523, "utc_ticks": "639257127498080000", "load": true, "cycle": 13}
+{"event": "native-ready", "wall": 35.9225276, "utc_ticks": "639257127518580000", "seconds": 2.050022103, "worker_native": 1.885837097, "worker_mesh": 0.156569302}
+{"event": "scene-submit", "wall": 35.995807901, "utc_ticks": "639257127519320000"}
+{"event": "scene-commit", "wall": 35.996019498, "utc_ticks": "639257127519320000"}
+{"event": "materials-ready", "wall": 35.996142898, "utc_ticks": "639257127519320000"}
+{"event": "gpu-ready", "wall": 36.192180298, "utc_ticks": "639257127521280000", "seconds": 2.319719899, "rendered_frames": 4, "cycle": 14, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 36.476851899, "utc_ticks": "639257127524130000", "load": true, "cycle": 14}
+{"event": "native-ready", "wall": 38.510263998, "utc_ticks": "639257127544460000", "seconds": 2.033361599, "worker_native": 1.867052101, "worker_mesh": 0.155948497}
+{"event": "scene-submit", "wall": 38.5831117, "utc_ticks": "639257127545190000"}
+{"event": "scene-commit", "wall": 38.583310701, "utc_ticks": "639257127545190000"}
+{"event": "materials-ready", "wall": 38.583426401, "utc_ticks": "639257127545190000"}
+{"event": "gpu-ready", "wall": 38.778432399, "utc_ticks": "639257127547140000", "seconds": 2.301574599, "rendered_frames": 4, "cycle": 15, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 39.063131399, "utc_ticks": "639257127549990000", "load": true, "cycle": 15}
+{"event": "native-ready", "wall": 41.096556898, "utc_ticks": "639257127570320000", "seconds": 2.033371903, "worker_native": 1.872584999, "worker_mesh": 0.154838901}
+{"event": "scene-submit", "wall": 41.169100098, "utc_ticks": "639257127571040000"}
+{"event": "scene-commit", "wall": 41.1693202, "utc_ticks": "639257127571050000"}
+{"event": "materials-ready", "wall": 41.169414099, "utc_ticks": "639257127571050000"}
+{"event": "gpu-ready", "wall": 41.349777501, "utc_ticks": "639257127572860000", "seconds": 2.286631502, "rendered_frames": 3, "cycle": 16, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 41.6347856, "utc_ticks": "639257127575710000", "load": true, "cycle": 16}
+{"event": "native-ready", "wall": 43.668184098, "utc_ticks": "639257127596040000", "seconds": 2.033346903, "worker_native": 1.866273999, "worker_mesh": 0.154435199}
+{"event": "scene-submit", "wall": 43.741214201, "utc_ticks": "639257127596770000"}
+{"event": "scene-commit", "wall": 43.7414538, "utc_ticks": "639257127596780000"}
+{"event": "materials-ready", "wall": 43.741554901, "utc_ticks": "639257127596780000"}
+{"event": "gpu-ready", "wall": 43.921903498, "utc_ticks": "639257127598570000", "seconds": 2.287110303, "rendered_frames": 3, "cycle": 17, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 44.206619699, "utc_ticks": "639257127601430000", "load": true, "cycle": 17}
+{"event": "native-ready", "wall": 46.2567112, "utc_ticks": "639257127621920000", "seconds": 2.0500389, "worker_native": 1.887589, "worker_mesh": 0.157094602}
+{"event": "scene-submit", "wall": 46.328878101, "utc_ticks": "639257127622640000"}
+{"event": "scene-commit", "wall": 46.3291751, "utc_ticks": "639257127622650000"}
+{"event": "materials-ready", "wall": 46.329311498, "utc_ticks": "639257127622650000"}
+{"event": "gpu-ready", "wall": 46.5110166, "utc_ticks": "639257127624460000", "seconds": 2.304389797, "rendered_frames": 3, "cycle": 18, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 46.795717899, "utc_ticks": "639257127627320000", "load": true, "cycle": 18}
+{"event": "native-ready", "wall": 48.862453599, "utc_ticks": "639257127647980000", "seconds": 2.066685397, "worker_native": 1.9106072, "worker_mesh": 0.1544469}
+{"event": "scene-submit", "wall": 48.935540799, "utc_ticks": "639257127648710000"}
+{"event": "scene-commit", "wall": 48.935772799, "utc_ticks": "639257127648710000"}
+{"event": "materials-ready", "wall": 48.9358739, "utc_ticks": "639257127648710000"}
+{"event": "gpu-ready", "wall": 49.131438401, "utc_ticks": "639257127650670000", "seconds": 2.335714698, "rendered_frames": 4, "cycle": 19, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 49.416134801, "utc_ticks": "639257127653520000", "load": true, "cycle": 19}
+{"event": "native-ready", "wall": 51.466178101, "utc_ticks": "639257127674020000", "seconds": 2.049978901, "worker_native": 1.881034601, "worker_mesh": 0.159400899}
+{"event": "scene-submit", "wall": 51.5389276, "utc_ticks": "639257127674740000"}
+{"event": "scene-commit", "wall": 51.539169401, "utc_ticks": "639257127674750000"}
+{"event": "materials-ready", "wall": 51.539260898, "utc_ticks": "639257127674750000"}
+{"event": "gpu-ready", "wall": 51.734114498, "utc_ticks": "639257127676700000", "seconds": 2.317973502, "rendered_frames": 4, "cycle": 20, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 52.018758699, "utc_ticks": "639257127679540000", "load": true, "cycle": 20}
+{"event": "native-ready", "wall": 54.068821799, "utc_ticks": "639257127700040000", "seconds": 2.050012801, "worker_native": 1.881249398, "worker_mesh": 0.1537509}
+{"event": "scene-submit", "wall": 54.141238198, "utc_ticks": "639257127700770000"}
+{"event": "scene-commit", "wall": 54.1414821, "utc_ticks": "639257127700770000"}
+{"event": "materials-ready", "wall": 54.1415786, "utc_ticks": "639257127700770000"}
+{"event": "gpu-ready", "wall": 54.323196199, "utc_ticks": "639257127702590000", "seconds": 2.3044287, "rendered_frames": 3, "cycle": 21, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 54.607977301, "utc_ticks": "639257127705440000", "load": true, "cycle": 21}
+{"event": "native-ready", "wall": 56.658036198, "utc_ticks": "639257127725940000", "seconds": 2.050004803, "worker_native": 1.8856108, "worker_mesh": 0.155356299}
+{"event": "scene-submit", "wall": 56.731420599, "utc_ticks": "639257127726670000"}
+{"event": "scene-commit", "wall": 56.731641199, "utc_ticks": "639257127726670000"}
+{"event": "materials-ready", "wall": 56.7317276, "utc_ticks": "639257127726670000"}
+{"event": "gpu-ready", "wall": 56.912700098, "utc_ticks": "639257127728480000", "seconds": 2.304709502, "rendered_frames": 3, "cycle": 22, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 57.197520699, "utc_ticks": "639257127731330000", "load": true, "cycle": 22}
+{"event": "native-ready", "wall": 59.264219299, "utc_ticks": "639257127752000000", "seconds": 2.0666494, "worker_native": 1.899038699, "worker_mesh": 0.1544188}
+{"event": "scene-submit", "wall": 59.337509397, "utc_ticks": "639257127752730000"}
+{"event": "scene-commit", "wall": 59.337690298, "utc_ticks": "639257127752730000"}
+{"event": "materials-ready", "wall": 59.337816298, "utc_ticks": "639257127752730000"}
+{"event": "gpu-ready", "wall": 59.519557498, "utc_ticks": "639257127754550000", "seconds": 2.3220338, "rendered_frames": 3, "cycle": 23, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 59.804384798, "utc_ticks": "639257127757400000", "load": true, "cycle": 23}
+{"event": "native-ready", "wall": 61.837800898, "utc_ticks": "639257127777740000", "seconds": 2.0333611, "worker_native": 1.874829099, "worker_mesh": 0.154243503}
+{"event": "scene-submit", "wall": 61.910296299, "utc_ticks": "639257127778460000"}
+{"event": "scene-commit", "wall": 61.9105202, "utc_ticks": "639257127778460000"}
+{"event": "materials-ready", "wall": 61.910613999, "utc_ticks": "639257127778460000"}
+{"event": "gpu-ready", "wall": 62.0917514, "utc_ticks": "639257127780270000", "seconds": 2.287360799, "rendered_frames": 3, "cycle": 24, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 62.376502499, "utc_ticks": "639257127783120000", "load": true, "cycle": 24}
+{"event": "native-ready", "wall": 64.4265595, "utc_ticks": "639257127803620000", "seconds": 2.050005898, "worker_native": 1.881803598, "worker_mesh": 0.1539446}
+{"event": "scene-submit", "wall": 64.499393299, "utc_ticks": "639257127804360000"}
+{"event": "scene-commit", "wall": 64.4996165, "utc_ticks": "639257127804360000"}
+{"event": "materials-ready", "wall": 64.4997117, "utc_ticks": "639257127804360000"}
+{"event": "gpu-ready", "wall": 64.6965225, "utc_ticks": "639257127806320000", "seconds": 2.320010699, "rendered_frames": 4, "cycle": 25, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 64.981240001, "utc_ticks": "639257127809180000", "load": true, "cycle": 25}
+{"event": "native-ready", "wall": 67.014630601, "utc_ticks": "639257127829510000", "seconds": 2.033337399, "worker_native": 1.8630776, "worker_mesh": 0.1542936}
+{"event": "scene-submit", "wall": 67.088088498, "utc_ticks": "639257127830240000"}
+{"event": "scene-commit", "wall": 67.0883133, "utc_ticks": "639257127830240000"}
+{"event": "materials-ready", "wall": 67.0884072, "utc_ticks": "639257127830240000"}
+{"event": "gpu-ready", "wall": 67.286554299, "utc_ticks": "639257127832230000", "seconds": 2.305307001, "rendered_frames": 4, "cycle": 26, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 67.571327299, "utc_ticks": "639257127835070000", "load": true, "cycle": 26}
+{"event": "native-ready", "wall": 69.621400598, "utc_ticks": "639257127855570000", "seconds": 2.050021898, "worker_native": 1.889431901, "worker_mesh": 0.153946899}
+{"event": "scene-submit", "wall": 69.6938111, "utc_ticks": "639257127856300000"}
+{"event": "scene-commit", "wall": 69.694047, "utc_ticks": "639257127856300000"}
+{"event": "materials-ready", "wall": 69.694144599, "utc_ticks": "639257127856300000"}
+{"event": "gpu-ready", "wall": 69.892347399, "utc_ticks": "639257127858290000", "seconds": 2.321012199, "rendered_frames": 4, "cycle": 27, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 70.1771877, "utc_ticks": "639257127861130000", "load": true, "cycle": 27}
+{"event": "native-ready", "wall": 72.227234598, "utc_ticks": "639257127881630000", "seconds": 2.049998101, "worker_native": 1.883236598, "worker_mesh": 0.155179001}
+{"event": "scene-submit", "wall": 72.299556699, "utc_ticks": "639257127882350000"}
+{"event": "scene-commit", "wall": 72.2997697, "utc_ticks": "639257127882350000"}
+{"event": "materials-ready", "wall": 72.2998625, "utc_ticks": "639257127882350000"}
+{"event": "gpu-ready", "wall": 72.4956594, "utc_ticks": "639257127884310000", "seconds": 2.318465002, "rendered_frames": 4, "cycle": 28, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 72.7803046, "utc_ticks": "639257127887160000", "load": true, "cycle": 28}
+{"event": "native-ready", "wall": 74.8137432, "utc_ticks": "639257127907490000", "seconds": 2.033387102, "worker_native": 1.871042199, "worker_mesh": 0.155255299}
+{"event": "scene-submit", "wall": 74.8872566, "utc_ticks": "639257127908230000"}
+{"event": "scene-commit", "wall": 74.8874772, "utc_ticks": "639257127908230000"}
+{"event": "materials-ready", "wall": 74.887565199, "utc_ticks": "639257127908230000"}
+{"event": "gpu-ready", "wall": 75.082237598, "utc_ticks": "639257127910180000", "seconds": 2.301929403, "rendered_frames": 4, "cycle": 29, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 75.366887398, "utc_ticks": "639257127913030000", "load": true, "cycle": 29}
+{"event": "native-ready", "wall": 77.400327399, "utc_ticks": "639257127933360000", "seconds": 2.033381801, "worker_native": 1.875742901, "worker_mesh": 0.156549897}
+{"event": "scene-submit", "wall": 77.472996101, "utc_ticks": "639257127934090000"}
+{"event": "scene-commit", "wall": 77.473215699, "utc_ticks": "639257127934090000"}
+{"event": "materials-ready", "wall": 77.473309997, "utc_ticks": "639257127934090000"}
+{"event": "gpu-ready", "wall": 77.6568413, "utc_ticks": "639257127935930000", "seconds": 2.2899471, "rendered_frames": 3, "cycle": 30, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 77.9415599, "utc_ticks": "639257127938770000", "load": true, "cycle": 30}
+{"event": "native-ready", "wall": 79.974948898, "utc_ticks": "639257127959100000", "seconds": 2.033337701, "worker_native": 1.871277299, "worker_mesh": 0.154947899}
+{"event": "scene-submit", "wall": 80.0480645, "utc_ticks": "639257127959840000"}
+{"event": "scene-commit", "wall": 80.048306398, "utc_ticks": "639257127959840000"}
+{"event": "materials-ready", "wall": 80.048405901, "utc_ticks": "639257127959840000"}
+{"event": "gpu-ready", "wall": 80.243347701, "utc_ticks": "639257127961790000", "seconds": 2.301780298, "rendered_frames": 4, "cycle": 31, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 80.528007098, "utc_ticks": "639257127964640000", "load": true, "cycle": 31}
+{"event": "native-ready", "wall": 82.5780598, "utc_ticks": "639257127985140000", "seconds": 2.050002899, "worker_native": 1.8790976, "worker_mesh": 0.157694899}
+{"event": "scene-submit", "wall": 82.6520181, "utc_ticks": "639257127985870000"}
+{"event": "scene-commit", "wall": 82.652227599, "utc_ticks": "639257127985880000"}
+{"event": "materials-ready", "wall": 82.652327999, "utc_ticks": "639257127985880000"}
+{"event": "gpu-ready", "wall": 82.859816499, "utc_ticks": "639257127987950000", "seconds": 2.331797097, "rendered_frames": 4, "cycle": 32, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 83.144735198, "utc_ticks": "639257127990810000", "load": true, "cycle": 32}
+{"event": "native-ready", "wall": 85.161449198, "utc_ticks": "639257128010970000", "seconds": 2.016660802, "worker_native": 1.8461341, "worker_mesh": 0.154138099}
+{"event": "scene-submit", "wall": 85.2347661, "utc_ticks": "639257128011710000"}
+{"event": "scene-commit", "wall": 85.234982099, "utc_ticks": "639257128011710000"}
+{"event": "materials-ready", "wall": 85.235074099, "utc_ticks": "639257128011710000"}
+{"event": "gpu-ready", "wall": 85.4317117, "utc_ticks": "639257128013680000", "seconds": 2.286960702, "rendered_frames": 4, "cycle": 33, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 85.716489699, "utc_ticks": "639257128016520000", "load": true, "cycle": 33}
+{"event": "native-ready", "wall": 87.766613398, "utc_ticks": "639257128037030000", "seconds": 2.050060201, "worker_native": 1.894042801, "worker_mesh": 0.1543606}
+{"event": "scene-submit", "wall": 87.8400192, "utc_ticks": "639257128037760000"}
+{"event": "scene-commit", "wall": 87.840176199, "utc_ticks": "639257128037760000"}
+{"event": "materials-ready", "wall": 87.8402634, "utc_ticks": "639257128037760000"}
+{"event": "gpu-ready", "wall": 88.0230712, "utc_ticks": "639257128039590000", "seconds": 2.306573499, "rendered_frames": 3, "cycle": 34, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 88.307879198, "utc_ticks": "639257128042440000", "load": true, "cycle": 34}
+{"event": "native-ready", "wall": 90.341307901, "utc_ticks": "639257128062770000", "seconds": 2.033376299, "worker_native": 1.8754314, "worker_mesh": 0.154038001}
+{"event": "scene-submit", "wall": 90.4138574, "utc_ticks": "639257128063490000"}
+{"event": "scene-commit", "wall": 90.414074499, "utc_ticks": "639257128063500000"}
+{"event": "materials-ready", "wall": 90.414162099, "utc_ticks": "639257128063500000"}
+{"event": "gpu-ready", "wall": 90.593823601, "utc_ticks": "639257128065300000", "seconds": 2.2859409, "rendered_frames": 3, "cycle": 35, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 90.8785576, "utc_ticks": "639257128068140000", "load": true, "cycle": 35}
+{"event": "native-ready", "wall": 92.928646598, "utc_ticks": "639257128088650000", "seconds": 2.050037503, "worker_native": 1.884186301, "worker_mesh": 0.155802801}
+{"event": "scene-submit", "wall": 93.0017271, "utc_ticks": "639257128089380000"}
+{"event": "scene-commit", "wall": 93.0020492, "utc_ticks": "639257128089380000"}
+{"event": "materials-ready", "wall": 93.0022052, "utc_ticks": "639257128089380000"}
+{"event": "gpu-ready", "wall": 93.184834298, "utc_ticks": "639257128091200000", "seconds": 2.3062733, "rendered_frames": 3, "cycle": 36, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 93.4695451, "utc_ticks": "639257128094050000", "load": true, "cycle": 36}
+{"event": "native-ready", "wall": 95.502942298, "utc_ticks": "639257128114390000", "seconds": 2.033345498, "worker_native": 1.868325401, "worker_mesh": 0.157455903}
+{"event": "scene-submit", "wall": 95.575760201, "utc_ticks": "639257128115110000"}
+{"event": "scene-commit", "wall": 95.5759154, "utc_ticks": "639257128115110000"}
+{"event": "materials-ready", "wall": 95.576003101, "utc_ticks": "639257128115120000"}
+{"event": "gpu-ready", "wall": 95.759037498, "utc_ticks": "639257128116950000", "seconds": 2.289483398, "rendered_frames": 3, "cycle": 37, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 96.043947, "utc_ticks": "639257128119800000", "load": true, "cycle": 37}
+{"event": "native-ready", "wall": 98.060707901, "utc_ticks": "639257128139960000", "seconds": 2.016704399, "worker_native": 1.862675998, "worker_mesh": 0.1537241}
+{"event": "scene-submit", "wall": 98.133139499, "utc_ticks": "639257128140690000"}
+{"event": "scene-commit", "wall": 98.133357499, "utc_ticks": "639257128140690000"}
+{"event": "materials-ready", "wall": 98.133452598, "utc_ticks": "639257128140690000"}
+{"event": "gpu-ready", "wall": 98.3301588, "utc_ticks": "639257128142660000", "seconds": 2.286207501, "rendered_frames": 4, "cycle": 38, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 98.614983499, "utc_ticks": "639257128145500000", "load": true, "cycle": 38}
+{"event": "native-ready", "wall": 100.631735798, "utc_ticks": "639257128165680000", "seconds": 2.016696498, "worker_native": 1.857948799, "worker_mesh": 0.154614102}
+{"event": "scene-submit", "wall": 100.7043438, "utc_ticks": "639257128166400000"}
+{"event": "scene-commit", "wall": 100.704634298, "utc_ticks": "639257128166410000"}
+{"event": "materials-ready", "wall": 100.704757299, "utc_ticks": "639257128166410000"}
+{"event": "gpu-ready", "wall": 100.901809599, "utc_ticks": "639257128168370000", "seconds": 2.286810298, "rendered_frames": 3, "cycle": 39, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 101.186623998, "utc_ticks": "639257128171230000", "load": true, "cycle": 39}
+{"event": "native-ready", "wall": 103.236679498, "utc_ticks": "639257128191720000", "seconds": 2.050005, "worker_native": 1.882997002, "worker_mesh": 0.155926198}
+{"event": "scene-submit", "wall": 103.310190398, "utc_ticks": "639257128192460000"}
+{"event": "scene-commit", "wall": 103.310392298, "utc_ticks": "639257128192460000"}
+{"event": "materials-ready", "wall": 103.310497001, "utc_ticks": "639257128192460000"}
+{"event": "gpu-ready", "wall": 103.5192721, "utc_ticks": "639257128194550000", "seconds": 2.332635801, "rendered_frames": 3, "cycle": 40, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "finished", "wall": 103.7873822, "utc_ticks": "639257128197230000"}

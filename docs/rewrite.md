@@ -42,12 +42,14 @@ scene has rendered on the GPU. Old scene ownership survives preparation,
 validation, upload, failure and cancellation until atomic replacement.
 Startup, process-cold and warm distributions must be reported separately.
 Empirical p99 and its sample count are required; a few medians prove no tail
-guarantee. No performance target is currently established for this rewrite.
+guarantee. The verified Windows package now meets the measured targets on the
+tested host; see [release evidence](release-3.0.0-preview.1.md).
 
 Native route, representative edits, replay, operating scenarios and refinement
-now have passing development evidence in [progress.md](progress.md). Final
-acceptance still requires physical hardware coverage, cold/warm loading tails,
-the matched Escarpment generation baseline, packages and exact Play identity.
+now have passing evidence in [progress.md](progress.md). Modeled spatial drive
+coverage, first/repeat loading tails, the matched Escarpment baseline and exact
+packaged Play identity are recorded in the verified preview report. Detailed
+machinery and whole-standard approval remain outside this model.
 
 Authoring split: force-critical crests, inversions and the protected camelback
 use FVD. Spatial splines are appropriate for grounded routing, deliberate

@@ -1,8 +1,9 @@
 # Rewrite progress
 
-Development checkpoint. The original ride, scene-clearance, loading-tail,
-packaging and Play-identity requirements remain the goal. Windows and macOS are
-the CI targets; Linux is deferred.
+Verified Windows preview 3.0.0-preview.1. Ride, scene-clearance, loading-tail,
+packaging and exact Play verification are complete for the declared model.
+See [the release report](release-3.0.0-preview.1.md) for the authoritative packaged
+results. Windows/macOS native CI passes; Linux is deferred.
 
 ## Authorship and site
 
@@ -82,7 +83,7 @@ swallowing cancellation; cancellation now bypasses trial-recovery catches.
 The 235 retained acceleration fixtures pass. The audit command reports the fresh
 validation results without recomputing them.
 
-## Runtime evidence and timing
+## Earlier runtime checkpoints and timing
 
 Unreal 5.8.2 builds with one compiler worker. The preview supports asynchronous
 generation/loading, editable recipe controls, save/load, cancellation, retained
@@ -119,12 +120,14 @@ See [runtime-verification.md](runtime-verification.md) and the retained evidence
 for exact scope. The preceding `a4c33e5` checkpoint passed Windows/macOS CI:
 https://github.com/Banrs/VibeCoaster2/actions/runs/35775800852 .
 
-## Remaining acceptance work
+## Preview scope and later work
 
-Modeled drive coverage and a six-run matched Escarpment generation baseline are
-now complete. Sufficient process-cold/warm load-tail samples, versioned packages
-and exact tested Play executable identity remain open. Detailed equipment design
-is outside this simulation preview; its explicit scope is in hardware-coverage.md. Native and automated GPU passes alone are not final ride acceptance.
+Modeled drive coverage, matched generation timing, 300 first/repeat load pairs,
+a 40-load session, the versioned Windows package and exact Play identity now pass.
+Detailed equipment design is outside this simulation preview; its explicit scope
+is in hardware-coverage.md. Detailed art, full GUI layout editing and VR follow
+this foundation; macOS UE packaging/GPU verification remains unperformed. Native and automated GPU passes alone are not
+final ride acceptance.
 
 The parent repository, VibeCoasterjs, archived implementation and playable
 fallbacks remain untouched. Work is on `codex/fresh-rewrite` in `Banrs/VibeCoaster2`.
@@ -133,9 +136,11 @@ Computer use remains blocked by sandbox setup's inability to protect `.git`,
 whose owner is `CodexSandboxOnline`. An owner-only repair is prepared but awaits
 the specific approval requested after automatic review rejected the administrative
 ownership change. No sandbox or filesystem security controls were disabled.
+
 The development generation comparison used fresh processes/profiles at actual
 2560x1440, 60 FPS, VSync off: rewrite median 7.527 s through GPU readiness versus
 Escarpment 31.630 s through its earlier scene-commit marker (76.20% reduction).
 Startup is excluded and recorded separately. Source and executable identities,
 all samples, and differing ride lengths/durations are retained in
-`evidence/generation-comparison-development.json`. Final-package timing is pending.
+`evidence/generation-comparison-development.json`. Final-package timing is now
+recorded in the release report (7.675 s median).

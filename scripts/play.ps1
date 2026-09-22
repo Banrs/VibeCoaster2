@@ -35,7 +35,7 @@ if ($CheckOnly) { return }
 $userDir = Join-Path $repo 'profiles/play'
 New-Item -ItemType Directory -Path $userDir -Force | Out-Null
 # The runtime prefers the user's saved design. The shipped default is only a fallback.
-$launchArgs = @('-windowed','-ResX=1600','-ResY=900','-VibeAutoLoad',"-VibeDefault=`"$default`"", "-UserDir=`"$userDir`"")
+$launchArgs = @('-windowed','-ResX=1600','-ResY=900','-NoVSync','-ExecCmds="r.VSync 0,t.MaxFPS 60"','-VibeAutoLoad',"-VibeDefault=`"$default`"", "-UserDir=`"$userDir`"")
 if ($Verify) {
     $verifyDir = Join-Path $repo ('out/play-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff'))
     if (Test-Path -LiteralPath $verifyDir) { throw 'Play verification needs a new directory.' }
@@ -52,7 +52,12 @@ if ($Verify) {
     if ($ready.Count -ne 1 -or $ready[0].rendered_frames -lt 3 -or $requests.Count -ne 1 -or -not $requests[0].load) {
         throw 'Play did not load a saved design through actual GPU readiness.'
     }
+    if ($ready[0].viewport_width -ne 1600 -or $ready[0].viewport_height -ne 900) {
+        throw 'Play viewport differs from the expected default window.'
+    }
     [ordered]@{sourceCommit=$identity.sourceCommit;executableSha256=$identity.executableSha256;
+        launcherSha256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash;
+        resolution='1600x900';maxFps=60;vsync=$false;renderedFrames=$ready[0].rendered_frames;
         manifestSha256=(Get-FileHash -LiteralPath $Manifest -Algorithm SHA256).Hash;
         processId=$process.Id;exitCode=$process.ExitCode;gpuReadySeconds=$ready[0].seconds} |
         ConvertTo-Json | Set-Content -Encoding utf8 -LiteralPath (Join-Path $verifyDir 'identity.json')

@@ -1,0 +1,43 @@
+{"event": "startup", "wall": 0.003720701, "utc_ticks": "639257122108350000", "engine": "5.8.2-56702186+++UE5+Release-5.8", "save": "isolated-profile/Saved/Designs/Current.vcd"}
+{"event": "ui-gpu-ready", "wall": 0.114927799, "utc_ticks": "639257122109470000"}
+{"event": "request", "wall": 0.115152299, "utc_ticks": "639257122109470000", "load": true, "cycle": 0}
+{"event": "native-ready", "wall": 2.165006202, "utc_ticks": "639257122129980000", "seconds": 2.049798399, "worker_native": 1.8957965, "worker_mesh": 0.1525979}
+{"event": "scene-submit", "wall": 2.238596801, "utc_ticks": "639257122130710000"}
+{"event": "scene-commit", "wall": 2.238798, "utc_ticks": "639257122130710000"}
+{"event": "materials-ready", "wall": 2.238883901, "utc_ticks": "639257122130710000"}
+{"event": "gpu-ready", "wall": 2.432705902, "utc_ticks": "639257122132640000", "seconds": 2.317539498, "rendered_frames": 4, "cycle": 1, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "ride-start", "wall": 2.4329581, "utc_ticks": "639257122132650000", "view": "front"}
+{"event": "ride-capture", "wall": 7.432557799, "utc_ticks": "639257122182640000", "view": "front", "ride_time": 5.007288, "rendered_frames": 288}
+{"event": "ride-capture", "wall": 32.437337801, "utc_ticks": "639257122432690000", "view": "front", "ride_time": 30.012041, "rendered_frames": 1775}
+{"event": "ride-capture", "wall": 48.440429401, "utc_ticks": "639257122592730000", "view": "front", "ride_time": 46.015108, "rendered_frames": 2723}
+{"event": "ride-capture", "wall": 56.441086799, "utc_ticks": "639257122672730000", "view": "front", "ride_time": 54.015785, "rendered_frames": 3187}
+{"event": "ride-capture", "wall": 72.436112199, "utc_ticks": "639257122832680000", "view": "front", "ride_time": 70.010793, "rendered_frames": 4133}
+{"event": "ride-capture", "wall": 78.426498901, "utc_ticks": "639257122892590000", "view": "front", "ride_time": 76.001211, "rendered_frames": 4478}
+{"event": "ride-capture", "wall": 88.4353671, "utc_ticks": "639257122992670000", "view": "front", "ride_time": 86.010055, "rendered_frames": 5065}
+{"event": "ride-capture", "wall": 93.439476501, "utc_ticks": "639257123042720000", "view": "front", "ride_time": 91.014232, "rendered_frames": 5351}
+{"event": "ride-capture", "wall": 104.429935399, "utc_ticks": "639257123152620000", "view": "front", "ride_time": 102.00464, "rendered_frames": 5998}
+{"event": "ride-capture", "wall": 111.438223101, "utc_ticks": "639257123222700000", "view": "front", "ride_time": 109.012974, "rendered_frames": 6404}
+{"event": "ride-capture", "wall": 128.4284705, "utc_ticks": "639257123392610000", "view": "front", "ride_time": 126.003193, "rendered_frames": 7411}
+{"event": "ride-capture", "wall": 141.4397563, "utc_ticks": "639257123522720000", "view": "front", "ride_time": 139.014503, "rendered_frames": 8177}
+{"event": "ride-capture", "wall": 162.429831699, "utc_ticks": "639257123732620000", "view": "front", "ride_time": 160.004475, "rendered_frames": 9422}
+{"event": "ride-capture", "wall": 179.427350402, "utc_ticks": "639257123902600000", "view": "front", "ride_time": 177.002109, "rendered_frames": 10427}
+{"event": "ride-capture", "wall": 191.439401202, "utc_ticks": "639257124022710000", "view": "front", "ride_time": 189.014159, "rendered_frames": 11133}
+{"event": "ride-complete", "wall": 194.377987999, "utc_ticks": "639257124052100000", "view": "front", "ride_time": 191.940625, "wall_seconds": 191.952685, "rendered_frames": 11296}
+{"event": "ride-start", "wall": 194.378239602, "utc_ticks": "639257124052100000", "view": "rear"}
+{"event": "ride-capture", "wall": 199.378073599, "utc_ticks": "639257124102100000", "view": "rear", "ride_time": 5.000079, "rendered_frames": 300}
+{"event": "ride-capture", "wall": 224.379117101, "utc_ticks": "639257124352110000", "view": "rear", "ride_time": 30.001103, "rendered_frames": 1788}
+{"event": "ride-capture", "wall": 240.394417301, "utc_ticks": "639257124512260000", "view": "rear", "ride_time": 46.016409, "rendered_frames": 2737}
+{"event": "ride-capture", "wall": 248.382122699, "utc_ticks": "639257124592140000", "view": "rear", "ride_time": 54.004136, "rendered_frames": 3202}
+{"event": "ride-capture", "wall": 264.387591001, "utc_ticks": "639257124752190000", "view": "rear", "ride_time": 70.009601, "rendered_frames": 4150}
+{"event": "ride-capture", "wall": 270.389111798, "utc_ticks": "639257124812210000", "view": "rear", "ride_time": 76.011117, "rendered_frames": 4496}
+{"event": "ride-capture", "wall": 280.3809206, "utc_ticks": "639257124912120000", "view": "rear", "ride_time": 86.002927, "rendered_frames": 5082}
+{"event": "ride-capture", "wall": 285.3837176, "utc_ticks": "639257124962150000", "view": "rear", "ride_time": 91.005724, "rendered_frames": 5369}
+{"event": "ride-capture", "wall": 296.379742101, "utc_ticks": "639257125072120000", "view": "rear", "ride_time": 102.001744, "rendered_frames": 6016}
+{"event": "ride-capture", "wall": 303.3936937, "utc_ticks": "639257125142260000", "view": "rear", "ride_time": 109.015656, "rendered_frames": 6423}
+{"event": "ride-capture", "wall": 320.394639999, "utc_ticks": "639257125312270000", "view": "rear", "ride_time": 126.01665, "rendered_frames": 7431}
+{"event": "ride-capture", "wall": 333.3895518, "utc_ticks": "639257125442220000", "view": "rear", "ride_time": 139.011561, "rendered_frames": 8197}
+{"event": "ride-capture", "wall": 354.3926722, "utc_ticks": "639257125652250000", "view": "rear", "ride_time": 160.014687, "rendered_frames": 9444}
+{"event": "ride-capture", "wall": 371.383085899, "utc_ticks": "639257125822150000", "view": "rear", "ride_time": 177.005084, "rendered_frames": 10450}
+{"event": "ride-capture", "wall": 383.378460798, "utc_ticks": "639257125942100000", "view": "rear", "ride_time": 189.000476, "rendered_frames": 11156}
+{"event": "ride-complete", "wall": 386.3258611, "utc_ticks": "639257125971570000", "view": "rear", "ride_time": 191.940625, "wall_seconds": 191.947873, "rendered_frames": 11319}
+{"event": "finished", "wall": 386.825873401, "utc_ticks": "639257125976580000"}

@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "version": "3.0.0-preview.1",
+  "sourceCommit": "89209ae840f3251266cc6f47b69eef9d5ae24e3b",
+  "configuration": "Development",
+  "compilerWorkers": 1,
+  "createdUtc": "2026-09-22T22:14:49.4599287Z",
+  "engine": {
+    "MajorVersion": 5,
+    "MinorVersion": 8,
+    "PatchVersion": 2,
+    "Changelist": 56702186,
+    "CompatibleChangelist": 55116800,
+    "IsLicenseeVersion": 0,
+    "IsPromotedBuild": 1,
+    "BranchName": "++UE5+Release-5.8"
+  },
+  "executable": "Windows/VibeCoaster/Binaries/Win64/VibeCoaster.exe",
+  "executableSha256": "888AD7A20F9F0DECA67D3C5D538208353083E799F67AC40E9B272F21D6C95F05",
+  "fixture": "Defaults/Default.vcd",
+  "fixtureSha256": "058967F0836BE874F30617AD3138C27811FDE04F57282319E9B75C3BE46AF572",
+  "payload": [
+    {
+      "path": "Windows/VibeCoaster.exe",
+      "sha256": "1800266141868A922F44981DA83D9B2ED261A4369D1D922583855ABE1C61D283"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/DbgHelp/dbghelp.dll",
+      "sha256": "36795E47D9724EE68349EFBBE64ABA94DB108B9CAD1E3DFE8BC510F359136F53"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/MsQuic/v220/win64/msquic.dll",
+      "sha256": "5C6B07BF263DD8B85CB146B59468A22EB1FBD8635D4A6C56A8E41B67CE5ECA2B"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/NVIDIA/NVaftermath/Win64/GFSDK_Aftermath_Lib.x64.dll",
+      "sha256": "82D7A3E50710D660927DB2F318CBED471049C962B7C05DE12C2B2B3E40A35AF9"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Ogg/Win64/VS2015/libogg_64.dll",
+      "sha256": "F23DF1213C4BF23B5C666BAFA7EC18743847A2E18192AE8E0D096A2FB7C28BF9"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vorbis/Win64/VS2015/libvorbis_64.dll",
+      "sha256": "A56D43A98E197F5E73A1DADF5C1DC7A07AD40327B199FAA4FF1247ABD6ECCD5B"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vorbis/Win64/VS2015/libvorbisfile_64.dll",
+      "sha256": "D64E67CA918716BE8B6056A6F7A1F6256E910754425DB8369D952943264B40EB"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/VkLayer_api_dump.dll",
+      "sha256": "8C5AF98E2D899D4AEC744C63A8BC99B90124D8FC3BDC120D4C178E1DF3A3E5E8"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/VkLayer_crash_diagnostic.dll",
+      "sha256": "7972FA60E084DC7DA6C8A69AC1645B112F5E98A078FC27A7D3DF469F2DA4F811"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/VkLayer_gfxreconstruct.dll",
+      "sha256": "DD72D28450DB1B52BD6C5DC12228741B680940C5FB5EB6B6A0E26F0EE5C3FC3E"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/VkLayer_khronos_profiles.dll",
+      "sha256": "93227F57DDCA0084E1655A65D2CC915D65B5191F6C645A17C0B36CFA2F714B38"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/VkLayer_khronos_shader_object.dll",
+      "sha256": "EEBD555AAB6DF20B21520564D0EB2341AD0E9CDDE6148EE1C71EF76805C5E7DF"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/VkLayer_khronos_synchronization2.dll",
+      "sha256": "341B6B5EEDBF4B7AEB4439AF85B23974B820B1413DFAF6356911476DF44ED559"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/VkLayer_khronos_validation.dll",
+      "sha256": "EA37BFDA6749684D88A1944AE7103A87D9B38468579F397C3C82EDE1CEAA40D6"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Windows/WinPixEventRuntime/x64/WinPixEventRuntime.dll",
+      "sha256": "BA40D206C6113AC1A35993A06390C93E55602713A902D7BA7B2F2F0ED13E3D3F"
+    },
+    {
+      "path": "Windows/Engine/Binaries/ThirdParty/Windows/XAudio2_9/x64/xaudio2_9redist.dll",
+      "sha256": "0CA010ABCABE52493FDB744D79C4C8132AE6756046B68AA7C88BDC03EC1EFFCD"
+    },
+    {
+      "path": "Windows/Engine/Config/StagedBuild_VibeCoaster.ini",
+      "sha256": "F1945CD6C19E56B3C1C78943EF5EC18116907A4CA1EFC40A57D48AB1DB7ADFC5"
+    },
+    {
+      "path": "Windows/Engine/Plugins/NNE/NNERuntimeORT/Binaries/ThirdParty/Onnxruntime/Win64/onnxruntime.dll",
+      "sha256": "5DF3D744B5CC4421181E9E2C97CADFF4E9B1B2B25E80202160E80FC94FF948F2"
+    },
+    {
+      "path": "Windows/VibeCoaster/Binaries/Win64/tbb12.dll",
+      "sha256": "DE15A5F93BFD334D4FE32343A81D76F9DE0824AF8E31B2189637D12545AF2673"
+    },
+    {
+      "path": "Windows/VibeCoaster/Binaries/Win64/tbbmalloc.dll",
+      "sha256": "74EDC04A8F5BC2593A5A555B675C1251D6D90E693EE6A67CFA11DD3B2D17A856"
+    },
+    {
+      "path": "Windows/VibeCoaster/Binaries/Win64/VibeCoaster.exe",
+      "sha256": "888AD7A20F9F0DECA67D3C5D538208353083E799F67AC40E9B272F21D6C95F05"
+    },
+    {
+      "path": "Windows/VibeCoaster/Binaries/Win64/D3D12/x64/D3D12Core.dll",
+      "sha256": "C41711499E13244FD07CA28A9B32ECE29E4454ECC38FB50681F74254B333A9B3"
+    },
+    {
+      "path": "Windows/VibeCoaster/Binaries/Win64/D3D12/x64/d3d12SDKLayers.dll",
+      "sha256": "E36F1EE4371798892529762368907D19B997493AD6F30AA8ACBFD0132881804F"
+    },
+    {
+      "path": "Windows/VibeCoaster/Binaries/Win64/DML/x64/DirectML.dll",
+      "sha256": "F97B69379ECBDBAB7E1DCD2B6170E7F285D367C86EE6718BC401C4D7CEF1275C"
+    },
+    {
+      "path": "Windows/VibeCoaster/Content/Paks/global.ucas",
+      "sha256": "3F020F4A1F0B6B7519D83F969F243D7C76D7132D893BEE049F4C091D8CBE90B7"
+    },
+    {
+      "path": "Windows/VibeCoaster/Content/Paks/global.utoc",
+      "sha256": "3EDFD50BAECC75E0F9481E060CD7862AB93665012E22F1C1D56449FA930711EE"
+    },
+    {
+      "path": "Windows/VibeCoaster/Content/Paks/VibeCoaster-Windows.pak",
+      "sha256": "E3F4F253956DC309BADA71AF1397EC3E07FA900DC38E7159124AE6B7993F14EC"
+    },
+    {
+      "path": "Windows/VibeCoaster/Content/Paks/VibeCoaster-Windows.ucas",
+      "sha256": "92F47496BFF83C4D02661BDC5A1513B50B5FFBEE8796B1BFB2CCFA54862ECC01"
+    },
+    {
+      "path": "Windows/VibeCoaster/Content/Paks/VibeCoaster-Windows.utoc",
+      "sha256": "B0B4C289BAAF882FFD72C4E433A3F167B93778AFC3D96DADBCC6DE8251E78C40"
+    }
+  ],
+  "buildLog": "out/package-89209ae840f3-20260922-221356/build-cook-run.log"
+}

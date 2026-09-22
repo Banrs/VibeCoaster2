@@ -3,7 +3,8 @@
 The Unreal 5.8.2 preview runs fresh source, nominal and operating dynamics,
 separate spatial/temporal refinement, terrain/track and shared support/station
 clearance and modeled drive-coverage checks before replacement. Release
-verification remains open.
+verification for Windows 3.0.0-preview.1 is complete; see
+[the packaged release report](release-3.0.0-preview.1.md).
 
 The overview uses a depth-tested orange FVD trace and blue spatial-spline trace.
 These screen-width inspection lines are hidden in front/rear views; physical
@@ -63,7 +64,7 @@ connection. The asset script now checks connections and the runtime waits for th
 actual shader map. Its retained native material reference is released after removing
 the render callback and draining render work, before UObject teardown.
 
-## Current evidence
+## Earlier development evidence
 
 The newest `scene-*-events.jsonl`, matching identities and summaries cover the
 shared checked/rendered structures, vehicle parts and closed-station continuity.
@@ -88,7 +89,8 @@ Three current fully validated preview loads measured 2.387, 2.532 and 2.547 seco
 through GPU readiness. An earlier first request after material rebuilding took
 5.77 seconds; that shader-compilation tail remains in the local record. These few
 samples are not a p99 claim. Physical hardware coverage, sufficient process-cold/warm
-samples, packaged builds and exact Play identity remain required for release.
+samples, packaged builds and exact Play identity were still pending at that
+development checkpoint; the completed package results are in the release report.
 `-Mode Generate -Cycles N` explicitly authors a fresh default ride on every cycle.
 `-Width 2560 -Height 1440 -MaxFps 60 -DisableVSync` reproduces the generation
 comparison configuration. Actual viewport dimensions are asserted from runtime
@@ -100,3 +102,13 @@ run resolves its source commit from the build manifest and checks its executable
 hash instead of attributing the binary to whatever checkout happens to be current.
 `Play.cmd -Verify` exercises the normal launcher, including payload hashes and the
 user-save/default fallback, and exits after recording actual GPU readiness.
+
+The promoted Play launcher uses 1600x900 at 60 FPS with VSync off, while the
+formal timing series exercises 2560x1440 at the same frame limit. Its verified
+executable is bound to the package manifest; later documentation/launcher commits
+do not relabel that binary with a different source commit.
+
+`scripts/measure-package.ps1 -Manifest <package-manifest.json> -Processes 300
+-Series <new-name>` reproduces the 300 fresh-process/repeat-load pairs. Each
+process uses a new profile, fixed 2560x1440/60 FPS/VSync-off settings and two fully
+validated loads. The script retains every run and stops on a verification error.

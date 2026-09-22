@@ -1,0 +1,14 @@
+{
+  "exitCode": 0,
+  "processSeconds": 389.1270094,
+  "processStartUtcTicks": "639257122093237705",
+  "initialUiGpuSeconds": 1.6232295,
+  "samples": [
+    {
+      "load": true,
+      "seconds": 2.317539498,
+      "observedSeconds": 2.317553603,
+      "frames": 4
+    }
+  ]
+}

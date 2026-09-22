@@ -1,0 +1,21 @@
+{"event": "startup", "wall": 0.006467897, "utc_ticks": "639257121163030000", "engine": "5.8.2-56702186+++UE5+Release-5.8", "save": "isolated-profile/Saved/Designs/Current.vcd"}
+{"event": "ui-gpu-ready", "wall": 0.403881498, "utc_ticks": "639257121167000000"}
+{"event": "request", "wall": 0.404141698, "utc_ticks": "639257121167000000", "load": true, "cycle": 0}
+{"event": "native-ready", "wall": 2.6592631, "utc_ticks": "639257121189550000", "seconds": 2.255037002, "worker_native": 2.032167099, "worker_mesh": 0.2119525}
+{"event": "scene-submit", "wall": 2.7634595, "utc_ticks": "639257121190600000"}
+{"event": "scene-commit", "wall": 2.763691697, "utc_ticks": "639257121190600000"}
+{"event": "materials-ready", "wall": 2.763792098, "utc_ticks": "639257121190600000"}
+{"event": "gpu-ready", "wall": 3.049861699, "utc_ticks": "639257121193450000", "seconds": 2.645715501, "rendered_frames": 3, "cycle": 1, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 3.354824599, "utc_ticks": "639257121196510000", "load": true, "cycle": 1}
+{"event": "native-ready", "wall": 5.521589801, "utc_ticks": "639257121218170000", "seconds": 2.166692901, "worker_native": 1.954862703, "worker_mesh": 0.204643399}
+{"event": "scene-submit", "wall": 5.627044998, "utc_ticks": "639257121219230000"}
+{"event": "scene-commit", "wall": 5.627286598, "utc_ticks": "639257121219230000"}
+{"event": "materials-ready", "wall": 5.6274083, "utc_ticks": "639257121219230000"}
+{"event": "gpu-ready", "wall": 5.872955199, "utc_ticks": "639257121221690000", "seconds": 2.518127602, "rendered_frames": 4, "cycle": 2, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "request", "wall": 6.158439998, "utc_ticks": "639257121224550000", "load": true, "cycle": 2}
+{"event": "native-ready", "wall": 8.2418116, "utc_ticks": "639257121245380000", "seconds": 2.0833221, "worker_native": 1.918265399, "worker_mesh": 0.157857701}
+{"event": "scene-submit", "wall": 8.315350898, "utc_ticks": "639257121246120000"}
+{"event": "scene-commit", "wall": 8.315570697, "utc_ticks": "639257121246120000"}
+{"event": "materials-ready", "wall": 8.315666098, "utc_ticks": "639257121246120000"}
+{"event": "gpu-ready", "wall": 8.529125098, "utc_ticks": "639257121248250000", "seconds": 2.370681603, "rendered_frames": 4, "cycle": 3, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "finished", "wall": 8.815916598, "utc_ticks": "639257121251120000"}

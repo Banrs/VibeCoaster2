@@ -1,0 +1,17 @@
+{
+  "headSha": "89209ae840f3251266cc6f47b69eef9d5ae24e3b",
+  "url": "https://github.com/Banrs/VibeCoaster2/actions/runs/35791234171",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "Native core (windows-latest)",
+      "conclusion": "success",
+      "url": "https://github.com/Banrs/VibeCoaster2/actions/runs/35791234171/job/106959951774"
+    },
+    {
+      "name": "Native core (macos-latest)",
+      "conclusion": "success",
+      "url": "https://github.com/Banrs/VibeCoaster2/actions/runs/35791234171/job/106959952005"
+    }
+  ]
+}
