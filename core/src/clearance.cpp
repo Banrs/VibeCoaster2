@@ -10,9 +10,6 @@ struct Box {
     std::array<Vec3, 3> axis;
     std::array<double, 3> half;
 };
-struct Range {
-    double lo, hi;
-};
 struct Sweep {
     Box box;
     double begin, end;
@@ -87,33 +84,9 @@ Vec3 extent(const Box &b) {
     }
     return e;
 }
-Range sineRange(double lo, double hi) {
-    if (hi - lo >= 2 * pi)
-        return {-1, 1};
-    Range r{std::min(std::sin(lo), std::sin(hi)), std::max(std::sin(lo), std::sin(hi))};
-    const auto first = static_cast<long long>(std::ceil((lo - pi / 2) / pi)),
-               last = static_cast<long long>(std::floor((hi - pi / 2) / pi));
-    for (auto k = first; k <= last; ++k) {
-        const double v = (k % 2) ? -1. : 1.;
-        r.lo = std::min(r.lo, v);
-        r.hi = std::max(r.hi, v);
-    }
-    return r;
-}
-double upperGround(Vec3 lo, Vec3 hi, double plateau) {
-    const double minAbs = lo.x <= 0 && hi.x >= 0 ? 0 : std::min(std::abs(lo.x), std::abs(hi.x)),
-                 maxAbs = std::max(std::abs(lo.x), std::abs(hi.x));
-    const double wMin = 18 + 332 * smooth((minAbs - 250) / 275),
-                 wMax = 18 + 332 * smooth((maxAbs - 250) / 275);
-    const double q = std::clamp(.5 + hi.y / (2 * (hi.y >= 0 ? wMin : wMax)), 0., 1.);
-    const double terrace = plateau * std::pow(q, 5) * (126 + q * (-420 + q * (540 + q * (-315 + 70 * q))));
-    const auto x = sineRange(lo.x / 270, hi.x / 270), y = sineRange(lo.y / 220, hi.y / 220),
-               xy = sineRange((lo.x + lo.y) / 410, (hi.x + hi.y) / 410);
-    return terrace + 1.4 * std::max({x.lo * y.lo, x.lo * y.hi, x.hi * y.lo, x.hi * y.hi}) + .8 * xy.hi + 1e-9;
-}
 bool terrainClear(const Box &box, double plateau, double &certifiedGap, int depth = 0) {
     const auto e = extent(box);
-    const double gap = box.center.z - e.z - upperGround(box.center - e, box.center + e, plateau);
+    const double gap = box.center.z - e.z - terrainUpperBound(box.center - e, box.center + e, plateau);
     if (gap >= .25) {
         certifiedGap = std::min(certifiedGap, gap);
         return true;

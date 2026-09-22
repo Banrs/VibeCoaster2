@@ -22,6 +22,7 @@ struct Design {
     std::vector<std::string> notes;
     std::shared_ptr<Simulation> baseline;
 };
+void validateAuthoring(const Design &, const Cancel &cancel = {});
 Design generate(const Recipe &, const Cancel &cancel = {});
 Program launch(const State &, double targetSpeed, double seconds);
 } // namespace coaster

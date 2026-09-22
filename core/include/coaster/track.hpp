@@ -1,5 +1,6 @@
 #pragma once
 #include "coaster/motion.hpp"
+#include "coaster/terrain.hpp"
 
 namespace coaster {
 struct Frame {
@@ -30,5 +31,4 @@ struct ReplayResult {
         portCurvature{}, portThird{}, portUpThird{};
 };
 ReplayResult assessReplay(const Track &, double independentStep = .01, const Cancel &cancel = {});
-double ground(double x, double y, double plateau = 210);
 } // namespace coaster

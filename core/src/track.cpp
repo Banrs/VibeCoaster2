@@ -215,13 +215,4 @@ ReplayResult assessReplay(const Track &track, double step, const Cancel &cancel)
     }
     return result;
 }
-double ground(double x, double y, double plateau) {
-    // Fixed site geography, independent of the generated rail positions.
-    // One escarpment at y=0. Its shoulder broadens to a natural slope inland.
-    const double shoulder = 18 + 332 * smooth((std::abs(x) - 250) / 275);
-    const double q = std::clamp((y + shoulder) / (2 * shoulder), 0., 1.);
-    const double terrace = plateau * std::pow(q, 5) * (126 + q * (-420 + q * (540 + q * (-315 + 70 * q))));
-    const double relief = 1.4 * std::sin(x / 270) * std::sin(y / 220) + .8 * std::sin((x + y) / 410);
-    return terrace + relief;
-}
 } // namespace coaster

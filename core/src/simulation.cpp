@@ -75,6 +75,24 @@ void include(Vec3 x, Vec3 &lo, Vec3 &hi) {
     hi = {std::max(hi.x, x.x), std::max(hi.y, x.y), std::max(hi.z, x.z)};
 }
 } // namespace
+ForceEnvelope assessForceEnvelope(Vec3 lo, Vec3 hi) {
+    ForceEnvelope result;
+    if (!finite(lo) || !finite(hi) || lo.x > hi.x || lo.y > hi.y || lo.z > hi.z) {
+        result.maximumExcessPercent = std::numeric_limits<double>::infinity();
+        return result;
+    }
+    result.nominalPassed =
+        lo.x >= -4.5 && hi.x <= 4.5 && lo.y >= -1.5 && hi.y <= 1.5 && lo.z >= -1.5 && hi.z <= 5;
+    // The scaled thresholds (454.5, 151.5 and 505) are exactly representable.
+    // This also conservatively rejects decimal boundary inputs such as 1.515,
+    // where multiplying the nominal limit by 1.01 can round the bound upward.
+    result.peakAllowancePassed = lo.x * 100 > -454.5 && hi.x * 100 < 454.5 && lo.y * 100 > -151.5 &&
+                                 hi.y * 100 < 151.5 && lo.z * 100 > -151.5 && hi.z * 100 < 505;
+    result.maximumExcessPercent =
+        100 * std::max({0., (-lo.x - 4.5) / 4.5, (hi.x - 4.5) / 4.5, (-lo.y - 1.5) / 1.5, (hi.y - 1.5) / 1.5,
+                        (-lo.z - 1.5) / 1.5, (hi.z - 5) / 5});
+    return result;
+}
 Simulation simulate(const Track &track, const Scenario &scenario, double dt, const Cancel &cancel,
                     bool assess) {
     if (!(dt > 0 && dt <= .01) || scenario.dragScale <= 0 || scenario.massScale <= 0)
@@ -197,8 +215,10 @@ Simulation simulate(const Track &track, const Scenario &scenario, double dt, con
             result.failures.push_back("F2291-25 scoped acceleration assessment failed at seat " +
                                       std::to_string(i));
         const auto lo = result.minimum[i], hi = result.maximum[i], rate = result.rate[i];
-        if (lo.x < -4.5 || hi.x > 4.5 || lo.y < -1.5 || hi.y > 1.5 || lo.z < -1.5 || hi.z > 5)
-            result.failures.push_back("Nominal force envelope exceeded at seat " + std::to_string(i));
+        result.envelope[i] = assessForceEnvelope(lo, hi);
+        if (!result.envelope[i].peakAllowancePassed)
+            result.failures.push_back("Project peak magnitude allowance exceeded at seat " +
+                                      std::to_string(i));
         if (std::max({rate.x, rate.y, rate.z}) > 20)
             result.failures.push_back("Component rate exceeded at seat " + std::to_string(i));
     }

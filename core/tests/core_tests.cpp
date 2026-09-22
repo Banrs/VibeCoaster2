@@ -13,6 +13,23 @@ void near(double a, double b, double e, const char *why) {
 } // namespace
 int main() {
     try {
+        const auto nominal = assessForceEnvelope({-4.5, -1.5, -1.5}, {4.5, 1.5, 5});
+        check(nominal.nominalPassed && nominal.peakAllowancePassed && nominal.maximumExcessPercent == 0,
+              "Nominal envelope boundary");
+        const auto allowed = assessForceEnvelope({0, 0, 1}, {0, 0, 5.049});
+        check(!allowed.nominalPassed && allowed.peakAllowancePassed, "Below-one-percent peak allowance");
+        check(!assessForceEnvelope({0, 0, 1}, {0, 0, 5 * 1.01}).peakAllowancePassed,
+              "Exact one-percent peak was accepted");
+        check(!assessForceEnvelope({-4.5 * 1.01, 0, 1}, {0, 0, 1}).peakAllowancePassed,
+              "Negative X exact allowance boundary");
+        check(!assessForceEnvelope({0, -1.5 * 1.01, -1.5 * 1.01}, {0, 0, 1}).peakAllowancePassed,
+              "Negative Y/Z exact allowance boundary");
+        check(assessForceEnvelope({0, 0, 1}, {std::nextafter(4.5 * 1.01, 0.), 0, 1}).peakAllowancePassed,
+              "Strict interior peak boundary");
+        check(!assessForceEnvelope({0, -1.515, 1}, {0, 0, 1}).peakAllowancePassed,
+              "Literal one-percent Y boundary was accepted through rounding");
+        check(!assessForceEnvelope({0, 0, -1.515}, {0, 0, 1}).peakAllowancePassed,
+              "Literal one-percent Z boundary was accepted through rounding");
         State s;
         s.v = 0;
         auto p = launch(s, 50, 1.4);

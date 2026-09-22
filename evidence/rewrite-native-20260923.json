@@ -1,8 +1,8 @@
 {
   "nativeCandidatePass": true,
   "seed": 42,
-  "authorSeconds": 5.5833848,
-  "totalSeconds": 5.8329706,
+  "authorSeconds": 1.7591751,
+  "totalSeconds": 2.0769445,
   "length": 8312.66848,
   "duration": 191.9395833,
   "active": 179.9958333,
@@ -12,20 +12,20 @@
   "replayPosition": 2.045073878e-05,
   "replaySpeed": 0.3020534573,
   "sourceEnergyResidual": 2.961715211e-07,
-  "minimumGround": 0.2500470103,
+  "minimumGround": 0.2500032842,
   "terrainHits": 0,
   "trackHits": 0,
   "minimumTrackGap": 0.9848967734,
-  "ordinaryMeanRailHeight": 3.304502367,
-  "ordinaryMaxRailHeight": 4.752353445,
+  "ordinaryMeanRailHeight": 3.305563832,
+  "ordinaryMaxRailHeight": 4.752386106,
   "clifftopActive": 38.64583333,
   "lipBraking": 3.8,
   "trainEnergyResidual": 0.0002596339084,
   "closed": true,
   "seats": [
-    {"min": [-1.171507417,-0.8750892573,-1.381600501], "max": [4.456589038,1.350431724,4.350968988], "rate": [19.08384923,11.51081729,12.47814682], "astmPass": true, "diagnostics": 0},
-    {"min": [-1.171507418,-0.8729644882,-1.36413901], "max": [4.456589038,1.352937135,4.088742715], "rate": [19.06257954,11.47989073,12.43189062], "astmPass": true, "diagnostics": 0},
-    {"min": [-1.171507417,-0.8733491241,-1.422175352], "max": [4.456589038,1.354986193,4.073864292], "rate": [19.06257954,11.52985469,12.63520813], "astmPass": true, "diagnostics": 0}
+    {"min": [-1.171507417,-0.8750892573,-1.381600501], "max": [4.456589038,1.350431724,4.350968988], "rate": [19.08384923,11.51081729,12.47814682], "astmPass": true, "nominalEnvelopePass": true, "peakAllowancePass": true, "maximumPeakExcessPercent": 0, "diagnostics": 0},
+    {"min": [-1.171507418,-0.8729644882,-1.36413901], "max": [4.456589038,1.352937135,4.088742715], "rate": [19.06257954,11.47989073,12.43189062], "astmPass": true, "nominalEnvelopePass": true, "peakAllowancePass": true, "maximumPeakExcessPercent": 0, "diagnostics": 0},
+    {"min": [-1.171507417,-0.8733491241,-1.422175352], "max": [4.456589038,1.354986193,4.073864292], "rate": [19.06257954,11.52985469,12.63520813], "astmPass": true, "nominalEnvelopePass": true, "peakAllowancePass": true, "maximumPeakExcessPercent": 0, "diagnostics": 0}
   ],
   "elements": [
     {"id": "launch-180", "seconds": 1.4, "maxZ": 4.000000883, "end": [490.6128172,-642.835803,4.000000883], "speed": 50.0000029},

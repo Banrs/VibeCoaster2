@@ -261,6 +261,7 @@ Design loadDesign(const std::filesystem::path &path, const Cancel &cancel) {
     // A checksum never accepts geometry. Rebuild from source and independently
     // replay before the caller runs the complete ride acceptance pipeline.
     d.track = compile(std::move(source), .02, cancel);
+    validateAuthoring(d, cancel);
     const auto proof = assessReplay(d.track, .01, cancel);
     if (proof.position > .005 || proof.forward > 1e-4 || proof.up > 1e-4 || proof.portPosition > .001 ||
         proof.portTangent > 1e-5 || proof.portUp > 1e-5 || proof.portCurvature > 1e-5 ||

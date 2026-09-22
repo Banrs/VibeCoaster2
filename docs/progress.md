@@ -40,7 +40,10 @@ approximately 174.2–174.7 s; these are operating scenarios, not the nominal
 180-second authoring target. No scoped ASTM rule was relaxed.
 
 Continuous occupied-box bounds certify terrain and nonlocal track clearance.
-The former 25 m local exclusion has been reduced to 6 m, with a regression for
+The shared terrain uses the same indexed triangles for rendering and clearance,
+with a 1 mm render-precision allowance, 5 m ride-area cells and a coarse distant
+horizon. Independent tests cover triangle and grid boundaries. The former
+25 m local exclusion has been reduced to 6 m, with a regression for
 a crossing only 20 m away along the route. This does not yet certify support,
 station, full vehicle articulation or all hardware clearances.
 
@@ -49,6 +52,12 @@ spatial and temporal steps gives about 0.0019 mm replay error; the finite-train
 work-energy residual falls from 0.000260 to 0.0000648 J/kg. The reported source
 speed interpolation discrepancy is an authoring-reference quantity, not an
 energy reset in the separate train simulation.
+
+Nominal force compliance, strictly below-1% peak magnitude compliance and the
+maximum excess percentage are reported separately. Exact scaled comparisons
+reject decimal 1% boundaries; dedicated fixtures caught and fixed a rounding
+error. Route authoring still prefers nominal targets. ASTM and rate checks are
+unchanged.
 
 The protected default camelback profile is retained. At 290 km/h a bounded
 study found that moving the existing crown relief slightly later resolves a
@@ -63,7 +72,8 @@ Escarpment performance comparison.
 
 Mixed-source persistence tests cover round trips, fresh nominal assessment,
 cancellation after writing a temporary replacement, byte corruption and a
-rechecksummed design buried in the terrain. Failed/cancelled replacement keeps
+rechecksummed design buried in the terrain. A new failing-then-fixed regression
+also rejects a height target that disagrees with the saved authored source. Failed/cancelled replacement keeps
 the existing save. The 235 retained acceleration fixtures also pass.
 
 ## Unreal and performance
@@ -74,12 +84,13 @@ cancellation, retained previous scenes, save/load, front/rear views and a GPU
 fence following actual back-buffer rendering. Scene resources are explicitly
 released during replacement, and the material has strong UObject ownership.
 
-Earlier preview fences reported roughly 1.5–1.8 s, but visual inspection showed
-fallback colours and unfinished material compilation. Those timings are not
-accepted load evidence. The local runtime now checks material resources before
-starting its final rendered-frame fence. The standalone editor material-cache
-state is still being repaired and retested; these runtime edits are not part
-of this native checkpoint. No p99 or final GPU-readiness claim exists.
+The material/readiness defects were repaired and actual front/rear traversal
+completed on a development build. Recent preview loads with the shared terrain
+and visible authoring trace measured about 2.0–2.2 seconds, with normal process
+exit. A first load after material rebuilding took 5.77 seconds. These runs are
+nominal-only previews with a small sample count, not p99 or release acceptance.
+See [runtime-verification.md](runtime-verification.md) for exact scope and the
+remaining checks. The newest terrain/camera changes still need full traversal.
 A preserved default package loaded the archived fixture in about 3.992 s to its
 old scene-commit event. That experiment did not reproduce the reported 20–30 s
 saved-load delay and did not establish old GPU readiness. The archived 25.204 s
@@ -89,8 +100,8 @@ must remain separate in subsequent measurements.
 ## Remaining acceptance work
 
 Complete activation validation must include operating and refinement checks,
-recipe/source semantics, explicit peak-allowance reporting, and physical motor
-coverage. Support/station clearance, rendered-terrain agreement, ravine terrain
+remaining recipe/source semantics and physical motor
+coverage. Support/station clearance and a fixed ravine with deliberately routed track
 and visual composition require further work. Full front/rear GPU traversals,
 save/load/cancel retention, sufficient cold/warm load-tail samples, the matched
 generation baseline, packaged builds and exact Play executable identity remain
@@ -98,7 +109,8 @@ open. A native pass is never labelled final ride acceptance.
 
 The parent repository, VibeCoasterjs, archived implementation and playable
 fallbacks remain untouched. The independent rewrite branch is
-`codex/fresh-rewrite` in `Banrs/VibeCoaster2`.
+`codex/fresh-rewrite` in `Banrs/VibeCoaster2`. Native checkpoint `9075744` passed
+both Windows and macOS CI: https://github.com/Banrs/VibeCoaster2/actions/runs/35753504989 .
 
 The computer-use helper remains unavailable because sandbox setup cannot add
 its protection to `.git`, which is owned by `CodexSandboxOnline`. A narrowly

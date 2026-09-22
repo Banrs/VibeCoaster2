@@ -41,6 +41,20 @@ int main() {
                 "Mixed source round trip changed geometry");
         require(loaded.track.source.size() == design.track.source.size(), "Mixed source count changed");
         require(std::filesystem::file_size(path) < 1024 * 1024, "Source save unexpectedly large");
+        // Changing a recipe target without changing the authored source is
+        // an integrity-valid semantic mismatch, not an edited ride.
+        const auto mismatchPath = folder / "metadata-mismatch.vcd";
+        auto mismatch = design;
+        mismatch.recipe.openingHeight += 5;
+        saveDesign(mismatch, mismatchPath);
+        bool metadataRejected = false;
+        try {
+            loadDesign(mismatchPath);
+        } catch (const std::runtime_error &e) {
+            metadataRejected = std::string(e.what()).find("authoring") != std::string::npos;
+        }
+        require(metadataRejected, "A checksum accepted a height target that was never authored");
+        std::filesystem::remove(mismatchPath);
         bool cancelled = false;
         try {
             saveDesign(design, path, [&] { return hasTemporary(folder); });

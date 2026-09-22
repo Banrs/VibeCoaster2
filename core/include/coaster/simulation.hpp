@@ -11,12 +11,18 @@ struct Sample {
     double time{}, s{}, speed{};
     std::array<Vec3, 3> force;
 };
+struct ForceEnvelope {
+    bool nominalPassed{}, peakAllowancePassed{};
+    double maximumExcessPercent{};
+};
+ForceEnvelope assessForceEnvelope(Vec3 minimum, Vec3 maximum);
 struct Simulation {
     bool completed{}, assessed{};
     double dt{}, duration{}, active{}, terminal{}, clifftopActive{}, lip{}, maxSpeed{}, launchTime{},
         energyResidual{};
     std::array<Vec3, 3> minimum, maximum, rate;
     std::array<AccelerationAssessment, 3> acceleration;
+    std::array<ForceEnvelope, 3> envelope;
     std::vector<Sample> playback;
     std::vector<double> entrySpeeds;
     std::vector<std::string> failures;

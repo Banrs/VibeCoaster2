@@ -58,6 +58,10 @@ int main(int argc, char **argv) {
             std::cout << "    {\"min\": [" << a.x << ',' << a.y << ',' << a.z << "], \"max\": [" << b.x << ','
                       << b.y << ',' << b.z << "], \"rate\": [" << q.x << ',' << q.y << ',' << q.z
                       << "], \"astmPass\": " << (sim.acceleration[i].passed ? "true" : "false")
+                      << ", \"nominalEnvelopePass\": " << (sim.envelope[i].nominalPassed ? "true" : "false")
+                      << ", \"peakAllowancePass\": "
+                      << (sim.envelope[i].peakAllowancePassed ? "true" : "false")
+                      << ", \"maximumPeakExcessPercent\": " << sim.envelope[i].maximumExcessPercent
                       << ", \"diagnostics\": " << sim.acceleration[i].diagnostics.size() << '}'
                       << (i < 2 ? "," : "") << '\n';
         }
@@ -101,8 +105,11 @@ int main(int argc, char **argv) {
                 controls << p.id << ',' << time + c.time << ',' << c.normal << ',' << c.drive << '\n';
             time += p.duration();
         }
-        if (mode == "save")
+        if (mode == "save") {
+            if (!accepted)
+                throw std::runtime_error("Candidate failed validation; existing save retained");
             saveDesign(design, "out/candidate.vcd");
+        }
         return mode == "probe" ? 0 : accepted ? 0 : 2;
     } catch (const std::exception &e) {
         std::cerr << "ERROR: " << e.what() << '\n';

@@ -110,6 +110,42 @@ void writeRecipe(const Recipe &r, const std::filesystem::path &path) {
     if (!f)
         throw std::runtime_error("Recipe write failed");
 }
+void validateAuthoring(const Design &design, const Cancel &cancel) {
+    validateRecipe(design.recipe);
+    std::set<std::string> ids;
+    for (const auto &p : design.track.source) {
+        poll(cancel);
+        if (p.id.empty() || !ids.insert(p.id).second)
+            throw std::runtime_error("Ride authoring IDs are empty or duplicated");
+    }
+    struct Required {
+        const char *id;
+        Role role;
+        double height;
+    };
+    const std::array<Required, 4> required{{{"opening", Role::Opening, design.recipe.openingHeight},
+                                            {"camelback", Role::Camelback, design.recipe.camelbackHeight},
+                                            {"loop", Role::Loop, design.recipe.loopHeight},
+                                            {"immelmann", Role::Immelmann, design.recipe.immelmannHeight}}};
+    for (const auto &target : required) {
+        const auto found = std::find_if(design.track.source.begin(), design.track.source.end(),
+                                        [&](const Program &p) { return p.id == target.id; });
+        if (found == design.track.source.end() || found->role != target.role || !found->geometry.empty())
+            throw std::runtime_error(std::string("Ride authoring source is missing or has the wrong type: ") +
+                                     target.id);
+        const auto shot = shoot(*found, .005, cancel);
+        const double actual = shot.maximumHeight - found->initial.p.z;
+        if (!std::isfinite(actual) || std::abs(actual - target.height) > .03)
+            throw std::runtime_error(std::string("Ride authoring height mismatch: ") + target.id + " is " +
+                                     std::to_string(actual) + " m; recipe requests " +
+                                     std::to_string(target.height) + " m");
+    }
+    const auto ascent = std::find_if(design.track.source.begin(), design.track.source.end(),
+                                     [](const Program &p) { return p.id == "ascent-lsm"; });
+    if (ascent == design.track.source.end() || ascent->role != Role::Ascent || ascent->geometry.empty() ||
+        std::abs(shoot(*ascent, .005, cancel).end.p.z - ascent->initial.p.z - design.recipe.plateau) > .03)
+        throw std::runtime_error("Ride authoring ascent does not reach the requested plateau");
+}
 Program launch(const State &state, double targetSpeed, double seconds) {
     Program p;
     p.initial = state;
@@ -312,12 +348,17 @@ static Design author(const Recipe &recipe, const std::map<std::string, double> &
             // artificial cut at a curved endpoint during candidate evaluation.
             const auto local = compile({candidate, braking.entry, braking.stop}, .03, cancel);
             const auto evaluated = simulate(local, {}, 1. / 240, cancel);
-            if (!evaluated.failures.empty()) {
+            const bool nominal = std::all_of(evaluated.envelope.begin(), evaluated.envelope.end(),
+                                             [](const auto &e) { return e.nominalPassed; });
+            if (!evaluated.failures.empty() || !nominal) {
                 ++forceRejects;
                 if (forceRejects < 4)
-                    routeRejections += " force=" + evaluated.failures.front() +
-                                       " Y=" + std::to_string(evaluated.maximum[0].y) +
-                                       " rate=" + std::to_string(evaluated.rate[0].y);
+                    routeRejections +=
+                        " force=" +
+                        (evaluated.failures.empty() ? std::string("Nominal authoring target exceeded")
+                                                    : evaluated.failures.front()) +
+                        " Y=" + std::to_string(evaluated.maximum[0].y) +
+                        " rate=" + std::to_string(evaluated.rate[0].y);
                 return false;
             }
             auto trial = source;
@@ -403,6 +444,7 @@ Design generate(const Recipe &recipe, const Cancel &cancel) {
             for (const auto &q : physical->playback)
                 d.track.operationSpeed.push_back({q.s, q.speed});
             d.baseline = std::make_shared<Simulation>(simulate(d.track, {}, 1. / 960, cancel));
+            validateAuthoring(d, cancel);
             return d;
         }
         if (iteration == 11)
