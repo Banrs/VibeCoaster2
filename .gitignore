@@ -13,3 +13,4 @@
 *.obj
 *.pdb
 __pycache__/
+.swarm/

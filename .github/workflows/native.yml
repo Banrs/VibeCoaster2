@@ -1,10 +1,25 @@
 name: Native core
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 jobs:
   core:
-    runs-on: ubuntu-latest
+    name: Native core (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-      - run: cmake --build build --parallel 1
-      - run: ctest --test-dir build --output-on-failure --parallel 1
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build with one compiler worker
+        run: cmake --build build --config Release --parallel 1
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure --parallel 1
+      - name: Retain test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-test-log-${{ matrix.os }}
+          path: build/Testing/Temporary/

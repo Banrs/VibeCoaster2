@@ -44,11 +44,11 @@ Startup, process-cold and warm distributions must be reported separately.
 Empirical p99 and its sample count are required; a few medians prove no tail
 guarantee. No performance target is currently established for this rewrite.
 
-Acceptance still pending: complete route; edited height/seed/style/speed
-corpus including seed 77; finite train energy; full swept clearance; independent
-replay; temporal/spatial refinement; trims/full and 20% lower drag; native and
-Unreal tests; save/load/cancel; GPU front/rear traversal; cold/warm loading tails;
-matched Escarpment generation baseline; CI; package and Play identity proof.
+Native route, representative edits, replay, operating scenarios and refinement
+now have passing development evidence in [progress.md](progress.md). Final
+acceptance still requires the complete activation pipeline, full scene/hardware
+clearance, GPU front/rear traversal, cold/warm loading tails, the matched
+Escarpment generation baseline, packages and exact Play identity.
 
 Authoring split: force-critical crests, inversions and the protected camelback
 use FVD. Spatial splines are appropriate for grounded routing, deliberate
@@ -61,3 +61,5 @@ Its separate force and geometric sections, inherited boundary state, physical
 roll orientation and energy treatment are useful design references. Its GPL
 code is not copied into this MIT implementation. The local force equations are
 an independent RK4 implementation informed by the reviewed MIT archive.
+
+Station decision: the user specified the same relative location as Falcon's Flight: lower park at the foot of the escarpment. Include the purposeful ascent LSM before the clifftop act; the final journey returns at park level. Train model retained explicitly: six 1500 kg cars, 3.4 m spacing, provisional CdA 3.0 m^2 for the whole train, air density 1.225 kg/m^3 and rolling coefficient 0.004. These remain calibration assumptions.

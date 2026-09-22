@@ -1,0 +1,9 @@
+PASS case=0 seed=42 style=balanced speed=300 seconds=12.0318
+PASS case=1 seed=77 style=balanced speed=300 seconds=5.69671
+PASS case=2 seed=77 style=balanced speed=300 seconds=5.61371
+PASS case=3 seed=42 style=flow speed=300 seconds=6.09133
+PASS case=4 seed=77 style=intense speed=300 seconds=7.09144
+PASS case=5 seed=42 style=balanced speed=290 seconds=6.14335
+PASS case=6 seed=42 style=balanced speed=305 seconds=6.35397
+PASS case=7 seed=42 style=balanced speed=300 seconds=7.01161
+PASS case=8 seed=42 style=balanced speed=300 seconds=6.10022

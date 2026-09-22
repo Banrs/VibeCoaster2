@@ -1,13 +1,31 @@
 # VibeCoaster2
 
-Fresh C++20 / Unreal 5.8 rewrite, descended from the preserved repository history.
+C++20 / Unreal 5.8 coaster authoring rewrite with mixed FVD and spatial-spline
+sources, independent finite-train dynamics and scoped F2291-25 acceleration
+assessment.
 
-Work in progress. No rewritten ride or package has yet passed acceptance.
+The current native corpus passes nine representative recipes and persistence
+regressions. The default circuit delivers approximately 180 s active riding,
+3.8 s lip braking and 8.14 s terminal braking. Runtime and release acceptance
+remain open; this is a development preview.
 
-The archived implementation and playable fallbacks remain untouched at
-`D:\Coding\Codex\vibecoasterlegacy\fresh-rewrite-checkpoint-20260922-091930`.
+Build the portable core with CMake 3.24 or later and run CTest:
 
-Acceptance requires 180 seconds of purposeful active riding plus 5–10 seconds
-of terminal braking, independently assessed dynamics and swept clearance,
-working editable geometry, and saved loading below 5 seconds at p99 through
-actual GPU scene readiness. Native completion is not GPU readiness.
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --parallel 1
+ctest --test-dir build -C Release --output-on-failure --parallel 1
+```
+
+GitHub CI targets Windows and macOS. On the configured development Windows
+machine, `scripts/build.ps1 -Test` uses the installed MSVC toolchain. Unreal
+builds also use one compiler worker.
+
+See [rewrite decisions](docs/rewrite.md), [current evidence and open work](docs/progress.md)
+and [acceleration scope](docs/acceleration-standard.md). A checksum establishes
+save integrity; it never establishes physical validity. Final acceptance also
+requires full scene clearance, GPU traversal, saved-load p99 below 5 s, a tested
+package and exact Play executable identity.
+
+The archived implementation, launchers and fallback profiles are preserved
+outside this repository. The parent workspace and VibeCoasterjs are untouched.
