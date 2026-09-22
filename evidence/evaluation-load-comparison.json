@@ -1,0 +1,44 @@
+[
+  {
+    "variant": "before",
+    "sample": 1,
+    "load": 2.7953042,
+    "validation": 2.7756057,
+    "pass": true
+  },
+  {
+    "variant": "after",
+    "sample": 1,
+    "load": 2.369573,
+    "validation": 2.3498,
+    "pass": true
+  },
+  {
+    "variant": "before",
+    "sample": 2,
+    "load": 2.8431068,
+    "validation": 2.8233452,
+    "pass": true
+  },
+  {
+    "variant": "after",
+    "sample": 2,
+    "load": 2.3642144,
+    "validation": 2.3445163,
+    "pass": true
+  },
+  {
+    "variant": "before",
+    "sample": 3,
+    "load": 2.8081355,
+    "validation": 2.7881188,
+    "pass": true
+  },
+  {
+    "variant": "after",
+    "sample": 3,
+    "load": 2.3680433,
+    "validation": 2.3483187,
+    "pass": true
+  }
+]

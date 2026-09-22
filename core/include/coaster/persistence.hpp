@@ -1,5 +1,5 @@
 #pragma once
-#include "coaster/simulation.hpp"
+#include "coaster/validation.hpp"
 
 namespace coaster {
 void saveDesign(const Design &, const std::filesystem::path &, const Cancel &cancel = {});

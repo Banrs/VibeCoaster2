@@ -1,119 +1,114 @@
 # Rewrite progress
 
-This is a development checkpoint, not a final acceptance or certification claim.
-The original ride, loading-tail, runtime, packaging and Play-identity requirements
-remain the goal. Windows and macOS are the current CI targets; Linux is deferred.
+Development checkpoint. The original ride, scene-clearance, loading-tail,
+packaging and Play-identity requirements remain the goal. Windows and macOS are
+the CI targets; Linux is deferred.
 
-## Authorship and station
+## Authorship and site
 
-The station is in the lower park, like Falcon's Flight. A powered ascent leads
-to the clifftop. The fixed site has one 210 m escarpment and modest relief; its
-height is never fitted to the rail samples.
+The station is in the lower park, like Falcon's Flight. A purposeful powered
+ascent reaches the 210 m plateau. Terrain is independent of the rail samples:
+one escarpment, modest relief and a fixed 14 m ravine. The descending full roll
+is routed to (790, -660, -8) m within that ravine; an FVD hill climbs back out.
 
 Force-critical hills, inversions, the cliff and protected camelback use FVD.
-Spatial splines handle placement, grounded turns, the descending roll and the
-station return. Both compile into the same position/orientation representation
-and are assessed using the same independent finite-train simulation. OpenFVD
-was consulted as a design reference; its GPL source was not copied.
+Spatial splines handle placement, grounded turns, the roll and station return.
+Both compile into the same position/orientation representation. Editable recipe
+parameters, stable element IDs, solved controls and inherited states survive
+persistence. Seed 77 changes the layout and height edits change measured geometry.
+OpenFVD was consulted as a design reference; its GPL code was not copied.
 
-The recipe retains seed, style and real height/speed parameters. Solved source
-controls, semantic roles and inherited entry states survive the mixed-source
-save format. Seed 77 changes the layout; height edits change measured geometry.
+## Native evidence
 
-## Current native evidence
+All nine representative cases pass: seeds 42/77, balanced/flow/intense,
+290/300/305 km/h, 65/75/85 m openings, and a combined seed-77 edit with an 80 m
+opening, 140 m loop and 100 m Immelmann. Every case passes nominal, full-mode,
+20% lower-drag trims/full, temporal-only, spatial-only and combined refinement.
+This corpus does not prove every combination in the authoring ranges feasible.
 
-The current nine-case corpus passes: seeds 42/77, balanced/flow/intense,
-290/300/305 km/h, 65/75/85 m opening hills, and a combined seed-77 edit with an
-80 m opening, 140 m loop and 100 m Immelmann. This is representative coverage,
-not proof that every combination in the authoring ranges is feasible.
+The default is 179.9990 s active, 3.8 s lip braking and 8.1417 s terminal braking
+on a closed 8,310.97 m circuit. It reaches 180 km/h in 1.3833 s and 300.0002 km/h
+at the main boost. Lower-drag operating scenarios shorten the active duration
+to approximately 174–175 s; 180 s is the nominal authoring target.
 
-The default result is 179.9958 s active, 3.8 s lip braking and 8.1438 s terminal
-braking, with a closed 8,312.67 m circuit. It reaches 180 km/h in 1.3833 s and
-300.0002 km/h at the main boost. The terminal descent stays above the valley
-crossing before descending to the station. The return includes two lower
-height elements and a broad crossing crest.
+Continuous front/middle/rear force histories pass the retained scoped F2291-25
+assessment, project peak envelopes and 20 g/s rate caps. Nominal compliance,
+strictly sub-1% peak allowance and maximum excess are separately reported.
+Exact decimal 1% boundaries are rejected. No scoped ASTM threshold was relaxed.
+The default needs no peak allowance.
 
-Front, middle and rear seats pass the retained scoped F2291-25 assessment,
-nominal component envelopes and 20 g/s rate caps. The default also passes
-full/trims and 20% lower-drag scenarios. Lower drag shortens the active ride to
-approximately 174.2–174.7 s; these are operating scenarios, not the nominal
-180-second authoring target. No scoped ASTM rule was relaxed.
+Expanded operating checks exposed failures in taller opening hills, the faster
+Immelmann/ravine sequence and the lower-speed terminal descent. Bounded changes
+to force targets, roll progression, routing and terminal curvature resolved them.
+The default protected camelback remains intact. Its established 290 km/h crown
+adjustment retains the same relief duration and peak.
+
+Independent source replay is within about 0.021 mm on the default, and refined
+replay is about 0.0019 mm. Halving the time step reduces the finite-train
+work-energy residual from about 0.000260 to 0.0000648 J/kg. Source reference
+velocities never reset the independent finite-train energy evolution.
 
 Continuous occupied-box bounds certify terrain and nonlocal track clearance.
-The shared terrain uses the same indexed triangles for rendering and clearance,
-with a 1 mm render-precision allowance, 5 m ride-area cells and a coarse distant
-horizon. Independent tests cover triangle and grid boundaries. The former
-25 m local exclusion has been reduced to 6 m, with a regression for
-a crossing only 20 m away along the route. This does not yet certify support,
-station, full vehicle articulation or all hardware clearances.
+Rendering and clearance share the same indexed terrain triangles, including a
+1 mm rendering precision allowance. Tests cover ravine shoulders, cell edges,
+nearby nonadjacent crossings and cancellation. Support, station, complete
+vehicle articulation and hardware clearance are still separate open checks.
 
-Independent source replay is within about 0.021 mm on the default. Halving
-spatial and temporal steps gives about 0.0019 mm replay error; the finite-train
-work-energy residual falls from 0.000260 to 0.0000648 J/kg. The reported source
-speed interpolation discrepancy is an authoring-reference quantity, not an
-energy reset in the separate train simulation.
+Saved format 3 records fixed-site revision 2. Earlier development saves are
+explicitly rejected instead of being reinterpreted against changed terrain.
+Loading rebuilds its operating reference and all seven dynamics assessments,
+independent replay and terrain/track clearance. Evidence is published only after
+every check passes; no saved approval is trusted. Independent checks use up to
+eight workers, while cancellation callbacks are serialized.
 
-Nominal force compliance, strictly below-1% peak magnitude compliance and the
-maximum excess percentage are reported separately. Exact scaled comparisons
-reject decimal 1% boundaries; dedicated fixtures caught and fixed a rounding
-error. Route authoring still prefers nominal targets. ASTM and rate checks are
-unchanged.
+Regressions cover integrity-valid height/speed/role mismatches, buried geometry,
+unsupported save/site versions, corruption, late save cancellation, worker-thread
+cancellation and stale-evidence removal. A failing test exposed numerical fitting
+swallowing cancellation; cancellation now bypasses trial-recovery catches.
+The 235 retained acceleration fixtures pass. The audit command reports the fresh
+validation results without recomputing them.
 
-The protected default camelback profile is retained. At 290 km/h a bounded
-study found that moving the existing crown relief slightly later resolves a
-front-seat post-negative-history failure. Its duration and peak were retained;
-the history evaluator was unchanged. Full-route checks subsequently passed.
+## Runtime evidence and timing
 
-The return solver now caches its affine heading weights, deduplicates roots
-and re-solves the previous route family during train-speed calibration. Every
-candidate still undergoes physical and clearance checks. Recent local runs
-were roughly 5–7 s; these are development observations, not the final matched
-Escarpment performance comparison.
+Unreal 5.8.2 builds with one compiler worker. The preview supports asynchronous
+generation/loading, editable recipe controls, save/load, cancellation, retained
+previous scenes and front/rear views. Material completeness, actual back-buffer
+frames and a GPU fence determine readiness. Material and GPU timeouts restore
+the prior scene. Resources are explicitly released on replacement and shutdown.
 
-Mixed-source persistence tests cover round trips, fresh nominal assessment,
-cancellation after writing a temporary replacement, byte corruption and a
-rechecksummed design buried in the terrain. A new failing-then-fixed regression
-also rejects a height target that disagrees with the saved authored source. Failed/cancelled replacement keeps
-the existing save. The 235 retained acceleration fixtures also pass.
+The current terrain/route/cameras completed full front and rear traversals of
+191.94 s each, with about 45,000 rendered frames per view and process exit 0.
+The automated flow also passed seed-77/intense generation, save/reload, restored
+authoring controls, CPU/upload/GPU cancellation and corrupt-load rejection.
+Every cancelled or rejected replacement retained the playing, rendered prior
+ride. These tests use the real runtime handlers; they are not manual mouse tests.
 
-## Unreal and performance
+Three fully validated preview loads reached GPU readiness in 2.387, 2.532 and
+2.547 s. Exact polynomial derivative evaluation reduced matched native loads
+of one unchanged save from median 2.808 to 2.368 s in three paired samples.
+These are small development samples, not p99 or release acceptance. An earlier
+first request after material rebuilding took 5.77 s; that tail remains recorded.
 
-Unreal 5.8.2 and MSVC are installed locally. Builds use one compiler worker.
-The fresh module provides editable controls, asynchronous generation/loading,
-cancellation, retained previous scenes, save/load, front/rear views and a GPU
-fence following actual back-buffer rendering. Scene resources are explicitly
-released during replacement, and the material has strong UObject ownership.
+A preserved default package loaded its archived fixture in about 3.992 s to the
+old scene-commit event. This did not reproduce the reported 20–30 s saved-load
+delay or establish old GPU readiness. An archived 25.204 s event is generation,
+not loading. Startup, process-cold and warm measurements must remain separate.
 
-The material/readiness defects were repaired and actual front/rear traversal
-completed on a development build. Recent preview loads with the shared terrain
-and visible authoring trace measured about 2.0–2.2 seconds, with normal process
-exit. A first load after material rebuilding took 5.77 seconds. These runs are
-nominal-only previews with a small sample count, not p99 or release acceptance.
-See [runtime-verification.md](runtime-verification.md) for exact scope and the
-remaining checks. The newest terrain/camera changes still need full traversal.
-A preserved default package loaded the archived fixture in about 3.992 s to its
-old scene-commit event. That experiment did not reproduce the reported 20–30 s
-saved-load delay and did not establish old GPU readiness. The archived 25.204 s
-log is labelled generation, not saved loading. Startup and file-cache state
-must remain separate in subsequent measurements.
+See [runtime-verification.md](runtime-verification.md) and the retained evidence
+for exact scope. The preceding `6296602` checkpoint passed Windows/macOS CI:
+https://github.com/Banrs/VibeCoaster2/actions/runs/35769490814 .
 
 ## Remaining acceptance work
 
-Complete activation validation must include operating and refinement checks,
-remaining recipe/source semantics and physical motor
-coverage. Support/station clearance and a fixed ravine with deliberately routed track
-and visual composition require further work. Full front/rear GPU traversals,
-save/load/cancel retention, sufficient cold/warm load-tail samples, the matched
-generation baseline, packaged builds and exact Play executable identity remain
-open. A native pass is never labelled final ride acceptance.
+Full support/station/vehicle clearance, physical motor coverage, further visual
+composition, sufficient cold/warm load-tail samples, the matched Escarpment
+generation baseline, versioned packages and exact tested Play executable identity
+remain open. Native and automated GPU passes alone are not final ride acceptance.
 
 The parent repository, VibeCoasterjs, archived implementation and playable
-fallbacks remain untouched. The independent rewrite branch is
-`codex/fresh-rewrite` in `Banrs/VibeCoaster2`. Native checkpoint `9075744` passed
-both Windows and macOS CI: https://github.com/Banrs/VibeCoaster2/actions/runs/35753504989 .
+fallbacks remain untouched. Work is on `codex/fresh-rewrite` in `Banrs/VibeCoaster2`.
 
-The computer-use helper remains unavailable because sandbox setup cannot add
-its protection to `.git`, which is owned by `CodexSandboxOnline`. A narrowly
-scoped owner-only repair was prepared, but has not been run; it awaits the
-specific approval requested after automatic review rejected the administrative
+Computer use remains blocked by sandbox setup's inability to protect `.git`,
+whose owner is `CodexSandboxOnline`. An owner-only repair is prepared but awaits
+the specific approval requested after automatic review rejected the administrative
 ownership change. No sandbox or filesystem security controls were disabled.

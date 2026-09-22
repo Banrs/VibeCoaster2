@@ -117,7 +117,8 @@ Program terminalEntry(const State &state, const Cancel &cancel, const TerminalSh
     const double yaw = std::atan2(state.t.y, state.t.x);
     // Preserve the crest's C4 height jet, ease to a shallow crossing grade,
     // then descend after clearing the valley track. Terrain stays unchanged.
-    constexpr double flatten = 30, descentStart = 95, shallowGrade = -.008;
+    constexpr double descentStart = 95, shallowGrade = -.008;
+    const double flatten = shape.flattenDistance;
     const double shoulderHeight = shape.shoulderHeight;
     std::array<double, 5> inherited{};
     const double u = (crestWidth - tailLength) / crestWidth;

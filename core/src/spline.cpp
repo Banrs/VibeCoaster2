@@ -133,6 +133,12 @@ double S(double u) {
     u = std::clamp(u, 0., 1.);
     return std::pow(u, 5) * (126 + u * (-420 + u * (540 + u * (-315 + 70 * u))));
 }
+double rollEase(double u) {
+    u = std::clamp(u, 0., 1.);
+    // C3 endpoint continuity with a lower peak roll speed than the ninth-
+    // degree placement ease. The roll still covers one complete revolution.
+    return u * u * u * u * (35 + u * (-84 + u * (70 - 20 * u)));
+}
 double Sd(double u) {
     u = std::clamp(u, 0., 1.);
     return 630 * std::pow(u * (1 - u), 4);
@@ -183,7 +189,7 @@ Program terrainSpline(const State &state, const SplineIntent &input, const Cance
             const double speed2 = std::max(25., state.v * state.v - 2 * gravity * input.exitHeight * S(u));
             const double bank = -std::atan2(speed2 * std::cos(pitch) * yawS, gravity * std::cos(pitch)) +
                                 input.bankBias * std::pow(std::sin(pi * u), 4) +
-                                input.rollTurns * 2 * pi * S(u);
+                                input.rollTurns * 2 * pi * rollEase(u);
             return std::array<double, 4>{pitch, yaw, bank, 0};
         };
         p.geometry.clear();
@@ -233,5 +239,28 @@ Program terrainSpline(const State &state, const SplineIntent &input, const Cance
     const auto jets = replaySpline(p, 1, cancel);
     p.geometricDuration = jets.back().time;
     return p;
+}
+Program splineTo(const State &state, Vec3 target, double rollTurns, const Cancel &cancel) {
+    const Vec3 delta = target - state.p;
+    if (!finite(target) || !std::isfinite(rollTurns))
+        throw std::runtime_error("Invalid fixed spline destination");
+    const double bearing = std::atan2(delta.y, delta.x), heading = std::atan2(state.t.y, state.t.x);
+    const double turn = 2 * std::remainder(bearing - heading, 2 * pi);
+    std::array<double, 2> parameters{std::hypot(delta.x, delta.y) * 1.03, turn};
+    Program result;
+    auto build = [&](const auto &q) {
+        return terrainSpline(state, {q[0], q[1], 0, delta.z, 0, 0, 0, rollTurns}, cancel);
+    };
+    auto residual = [&](const auto &q) {
+        poll(cancel);
+        const auto end = shootSpline(build(q), 1, cancel).end.p;
+        return std::array<double, 2>{(end.x - target.x) / 100, (end.y - target.y) / 100};
+    };
+    if (!solve<2>(parameters, {{{100, 1200}, {-1.5, 1.5}}}, residual))
+        throw std::runtime_error("Spline cannot reach its fixed site destination");
+    result = build(parameters);
+    if (norm(shootSpline(result, .5, cancel).end.p - target) > .005)
+        throw std::runtime_error("Fixed spline destination did not converge");
+    return result;
 }
 } // namespace coaster

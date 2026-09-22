@@ -456,10 +456,12 @@ Program loop(const State &state, double height, double yaw, const Cancel &cancel
     controls(selected);
     return r;
 }
-Program immelmann(const State &state, double height, double exitHeight, const Cancel &cancel) {
+Program immelmann(const State &state, double height, double exitHeight, const Cancel &cancel, double normal) {
     Program r;
     r.initial = state;
-    constexpr double ramp = 1.4, normal = 4.;
+    constexpr double ramp = 1.4;
+    if (!std::isfinite(normal) || normal < 3.5 || normal > 4.2)
+        throw std::runtime_error("Unsupported Immelmann normal-force target");
     auto controls = [&](const std::array<double, 5> &p) {
         const double apex = ramp + p[0] + p[1], roll = apex + p[2], pull = roll + ramp;
         r.controls = {{0, 1},     {ramp, normal}, {ramp + p[0], normal}, {apex, .6},

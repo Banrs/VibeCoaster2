@@ -1,1 +1,6 @@
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.14.39
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+persistence_tests.cpp
 PASS mixed-source save/load, fresh physics, late cancellation and rechecksummed invalid geometry

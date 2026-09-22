@@ -72,7 +72,8 @@ void saveDesign(const Design &design, const std::filesystem::path &path, const C
     validateRecipe(design.recipe);
     Bytes b;
     b.integer(magic);
-    b.integer(2);
+    b.integer(3);
+    b.integer(terrainRevision);
     const auto &r = design.recipe;
     b.integer(r.seed);
     b.text(r.style);
@@ -175,8 +176,10 @@ Design loadDesign(const std::filesystem::path &path, const Cancel &cancel) {
     if (checksum(std::span(b.data).first(b.data.size() - 8)) != expected)
         throw std::runtime_error("Saved design integrity check failed");
     b.pos = 0;
-    if (b.integer() != magic || b.integer() != 2)
+    if (b.integer() != magic || b.integer() != 3)
         throw std::runtime_error("Unsupported saved design version");
+    if (b.integer() != terrainRevision)
+        throw std::runtime_error("Saved design uses a different fixed site revision");
     Design d;
     const auto seed = b.integer();
     if (seed > 4294967295ULL)
@@ -261,25 +264,9 @@ Design loadDesign(const std::filesystem::path &path, const Cancel &cancel) {
     // A checksum never accepts geometry. Rebuild from source and independently
     // replay before the caller runs the complete ride acceptance pipeline.
     d.track = compile(std::move(source), .02, cancel);
-    validateAuthoring(d, cancel);
-    const auto proof = assessReplay(d.track, .01, cancel);
-    if (proof.position > .005 || proof.forward > 1e-4 || proof.up > 1e-4 || proof.portPosition > .001 ||
-        proof.portTangent > 1e-5 || proof.portUp > 1e-5 || proof.portCurvature > 1e-5 ||
-        proof.portThird > 1e-5 || proof.portUpThird > 1e-4)
-        throw std::runtime_error("Saved source replay/continuity validation failed");
-    const auto operation = simulate(d.track, {}, 1. / 240, cancel, false);
-    if (!operation.completed)
-        throw std::runtime_error("Saved operation reference cannot finish");
-    for (const auto &q : operation.playback)
-        d.track.operationSpeed.push_back({q.s, q.speed});
-    d.baseline = std::make_shared<Simulation>(simulate(d.track, {}, 1. / 960, cancel));
-    const auto clearance = assessClearance(d.track, d.recipe.plateau, .5, cancel);
-    if (!d.baseline->failures.empty() || !d.track.closed ||
-        std::abs(d.baseline->active - d.recipe.activeSeconds) > .05 || d.baseline->terminal < 5 ||
-        d.baseline->terminal > 10 || clearance.terrainHits || clearance.trackHits)
-        throw std::runtime_error("Saved design failed fresh nominal physical/clearance validation");
-    d.notes.push_back("Fresh nominal validation passed; operating scenarios and convergence remain "
-                      "activation requirements");
+    validateRide(d, cancel);
+    d.notes.push_back(
+        "Fresh source, operating scenarios, spatial/temporal refinement and terrain/track checks passed");
     return d;
 }
 } // namespace coaster

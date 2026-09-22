@@ -30,6 +30,38 @@ int main() {
               "Literal one-percent Y boundary was accepted through rounding");
         check(!assessForceEnvelope({0, 0, -1.515}, {0, 0, 1}).peakAllowancePassed,
               "Literal one-percent Z boundary was accepted through rounding");
+        Track parabola;
+        Span curved;
+        curved.p[1] = {100, 0, 0};
+        curved.p[2] = {0, 0, 20};
+        curved.u[0] = {0, 0, 1};
+        curved.length = 100;
+        parabola.spans.push_back(curved);
+        parabola.length = 100;
+        for (double distance : {0., 9., 50., 99., 100.}) {
+            const auto f = parabola.at(distance);
+            const double slope = .004 * distance, n = std::sqrt(1 + slope * slope);
+            const Vec3 t{1 / n, 0, slope / n};
+            const Vec3 td = Vec3{-slope, 0, 1} * (.004 / std::pow(n, 3));
+            const Vec3 tdd = Vec3{2 * slope * slope - 1, 0, -3 * slope} * (.004 * .004 / std::pow(n, 5));
+            check(norm(f.p - Vec3{distance, 0, .002 * distance * distance}) < 1e-10 &&
+                      norm(f.t - t) < 1e-12 && norm(f.k - td) < 1e-12 &&
+                      norm(f.u - Vec3{-t.z, 0, t.x}) < 1e-12 && norm(f.upS - Vec3{-td.z, 0, td.x}) < 1e-12 &&
+                      norm(f.upSS - Vec3{-tdd.z, 0, tdd.x}) < 1e-12,
+                  "Analytic curved frame or its derivatives disagree");
+        }
+        bool fitCancelled = false;
+        try {
+            std::array<double, 1> parameter{0};
+            solve<1>(parameter, {{{-2, 2}}}, [](const auto &q) {
+                if (q[0] < -.5)
+                    throw Cancelled();
+                return std::array<double, 1>{q[0] + 1};
+            });
+        } catch (const Cancelled &) {
+            fitCancelled = true;
+        }
+        check(fitCancelled, "Numerical fitting swallowed cancellation during a trial step");
         State s;
         s.v = 0;
         auto p = launch(s, 50, 1.4);

@@ -1,59 +1,71 @@
 # Runtime verification
 
-The fresh Unreal 5.8.2 module is a development preview. Its nominal source,
-physics and terrain/track checks do not yet constitute the complete release
-acceptance pipeline. The UI deliberately labels full validation as pending.
+The Unreal 5.8.2 preview runs fresh source, nominal and operating dynamics,
+separate spatial/temporal refinement and terrain/track checks before replacement.
+Support/station/hardware clearance and release verification remain open.
 
-The authoring overview shows a depth-tested orange FVD trace and blue spatial
-spline trace. These screen-width lines are an inspection overlay and are hidden
-in the front/rear views. Physical rails retain their actual mesh dimensions.
+The overview uses a depth-tested orange FVD trace and blue spatial-spline trace.
+These screen-width inspection lines are hidden in front/rear views; physical
+rail dimensions remain unchanged.
 
-## Reproducing development checks
+## Reproduction
 
 Build `VibeCoasterEditor` with `-MaxParallelActions=1`. Prepare the owned map and
-verified vertex-colour material using `scripts/make-content.py` through Unreal's
-Python commandlet. Asset preparation with `-nullrhi` is not GPU verification.
+vertex-colour material with `scripts/make-content.py` through Unreal's Python
+commandlet. Asset preparation with `-nullrhi` is not GPU verification.
 
-Run the project in a real window with `-game`, a separate `-UserDir`, and:
+Run a real window with `-game`, a separate `-UserDir`, and:
 
-- `-VibeLoad=<absolute saved design>` selects the source fixture.
+- `-VibeLoad=<absolute saved design>` selects the frozen source fixture.
 - `-VibeVerify=<new absolute output directory>` records JSONL events and images.
-- `-VibeCycles=N` repeats saved loading; the supported range is 1–2000.
+- `-VibeCycles=N` repeats saved loading; the range is 1–2000.
 - `-VibeView=0`, `1` or `2` selects overview, front or rear inspection view.
 - `-VibeRideVerify` traverses the complete ride from front and rear, recording
-  rendered-frame counts and fifteen captured points per pass.
-- `-VibeQuit` exits after completion; failure uses a nonzero process status.
+  frame counts and fifteen captures per pass.
+- `-VibeFlowVerify` exercises seed-77/intense generation, save/reload, restored
+  authoring controls, cancellation during CPU work/upload/GPU handoff, and
+  corrupt-load rejection. It checks that the prior ride stays visible and plays
+  and renders forward. It invokes the same handlers as UI actions; this is
+  automated runtime coverage, not manual mouse testing.
+- `-VibeQuit` exits after completion; failures use a nonzero process status.
 
-Freeze each benchmark fixture and record its hash, executable/module identity,
-asset identity, commit, display configuration and background workload. Keep
-process startup, initial UI readiness, requests, native validation, mesh work,
-material readiness and GPU completion as separate measurements.
+Freeze the fixture and record its hash, executable/module and asset identities,
+commit, display configuration and background workload. Keep startup, initial UI
+readiness, requests, native checks, mesh work, material readiness and GPU completion
+separate. Working-tree preview identities must not be presented as packaged release
+identities.
 
-## What the GPU marker establishes
+## Readiness and retention
 
-The marker follows complete game-thread material maps, verification of the
-same material's complete map on the render thread, actual back-buffer frames
-from the game window, and a GPU fence. It does not use elapsed sleeps as a
-substitute for readiness. A material-preparation timeout rejects the request.
-The previous scene remains visible during CPU/material preparation and is
-retained until the replacement is acknowledged by the GPU.
+The marker follows complete game-thread material maps, verification of the same
+map on the render thread, actual back-buffer frames from the game window and a GPU
+fence. It never substitutes elapsed sleeps for readiness. Material-preparation and
+GPU-acknowledgement timeouts reject the request and restore the previous scene.
 
-Early preview fences were invalid performance evidence: they allowed fallback
-materials. Visual inspection caught this. The asset script also used an invalid
-named vertex-colour output; it now checks every graph connection and saves the
-verified graph. The runtime now releases its retained material reference before
-UObject teardown, after removing the render callback and draining render work.
+The previous ride remains visible during CPU/material preparation and is retained
+until GPU acknowledgement. Cancellation at CPU, upload and post-visibility-commit
+stages is exercised. A corrupted saved file also leaves the previous ride playing.
+A late native save-cancellation test verifies that the existing file bytes survive.
 
-## Current evidence and limits
+Early preview fences allowed fallback materials and are excluded from final
+performance evidence. Visual inspection also caught an invalid vertex-colour graph
+connection. The asset script now checks connections and the runtime waits for the
+actual shader map. Its retained native material reference is released after removing
+the render callback and draining render work, before UObject teardown.
 
-The earlier complete traversal in `development-traversal-events.jsonl` records
-both 191.94-second passes and roughly 45,000 rendered frames each, followed by
-normal completion. It predates the latest terrain and inspection-camera edits;
-it is evidence of the development traversal mechanism, not final release proof.
+## Current evidence
 
-Recent nominal-only preview loads are around 2.0–2.2 seconds, with a clean exit.
-The first request after rebuilding the material required 5.77 seconds; that
-shader-compilation tail is retained in the local run record. These few samples
-are not a p99 claim. Full operating/refinement activation checks, complete scene
-clearance, cancellation flows, sufficient cold/warm samples and packaged
-executable/Play identity remain required before release acceptance.
+`validated-traversal-events.jsonl` records both 191.94-second passes on the fixed
+ravine route with the current terrain and cameras, about 45,000 rendered frames per
+view, and normal completion. Its matching identity file records the fixture and
+module hashes. These remain development preview results.
+
+`validated-flow-events.jsonl` records generation, save/reload, control restoration,
+all three cancellation stages and corrupt-load rejection. The process exits 0.
+`runtime-retained-ride.png` shows the retained seed-77/intense ride after rejection.
+
+Three current fully validated preview loads measured 2.387, 2.532 and 2.547 seconds
+through GPU readiness. An earlier first request after material rebuilding took
+5.77 seconds; that shader-compilation tail remains in the local record. These few
+samples are not a p99 claim. Complete scene clearance, sufficient process-cold/warm
+samples, packaged builds and exact Play identity remain required for release.

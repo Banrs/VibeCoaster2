@@ -3,6 +3,7 @@
 #include <vector>
 
 namespace coaster {
+inline constexpr unsigned terrainRevision = 2;
 // Fixed site: 5 m cells in the ride area, progressively coarser toward the
 // distant horizon. Geometry and clearance use the same A-C triangle diagonal.
 const std::vector<double> &terrainXCoordinates();

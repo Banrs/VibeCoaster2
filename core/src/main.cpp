@@ -17,6 +17,8 @@ int main(int argc, char **argv) {
         if (argc > 4)
             r.openingHeight = std::stod(argv[4]);
         auto design = mode == "load" ? loadDesign(argv[2]) : generate(r);
+        if (!design.validation)
+            validateRide(design);
         r = design.recipe;
         const auto authored = std::chrono::steady_clock::now();
         const auto replay = assessReplay(design.track);
@@ -36,7 +38,7 @@ int main(int argc, char **argv) {
                   << "{\n  \"nativeCandidatePass\": " << (accepted ? "true" : "false")
                   << ",\n  \"seed\": " << r.seed
                   << ",\n  \"authorSeconds\": " << std::chrono::duration<double>(authored - start).count()
-                  << ",\n  \"totalSeconds\": "
+                  << ",\n  \"validationSeconds\": " << design.validation->seconds << ",\n  \"totalSeconds\": "
                   << std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()
                   << ",\n  \"length\": " << design.track.length << ",\n  \"duration\": " << sim.duration
                   << ",\n  \"active\": " << sim.active << ",\n  \"terminal\": " << sim.terminal

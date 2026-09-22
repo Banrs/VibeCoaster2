@@ -11,7 +11,7 @@ struct JourneyHint {
     double middleOffset{};
 };
 struct TerminalShape {
-    double shoulderHeight{7.2}, deceleration{2};
+    double shoulderHeight{7.2}, deceleration{2}, flattenDistance{30};
 };
 struct BrakingParts {
     Program entry, stop;

@@ -5,7 +5,9 @@ sources, independent finite-train dynamics and scoped F2291-25 acceleration
 assessment.
 
 The current native corpus passes nine representative recipes and persistence
-regressions. The default circuit delivers approximately 180 s active riding,
+regressions, including fresh operating scenarios and separate spatial/temporal
+refinement on every case. Saved loads run those checks again before scene
+replacement. The default circuit delivers approximately 180 s active riding,
 3.8 s lip braking and 8.14 s terminal braking. Runtime and release acceptance
 remain open; this is a development preview.
 

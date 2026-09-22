@@ -79,7 +79,16 @@ double siteElevation(double x, double y, double plateau) {
     const double shoulder = 18 + 332 * smooth((std::abs(x) - 250) / 275);
     const double q = std::clamp((y + shoulder) / (2 * shoulder), 0., 1.);
     const double terrace = plateau * std::pow(q, 5) * (126 + q * (-420 + q * (540 + q * (-315 + 70 * q))));
-    return terrace + 1.4 * std::sin(x / 270) * std::sin(y / 220) + .8 * std::sin((x + y) / 410);
+    auto terraceEase = [](double value) {
+        const double u = std::clamp(value, 0., 1.);
+        return std::pow(u, 5) * (126 + u * (-420 + u * (540 + u * (-315 + 70 * u))));
+    };
+    // Fixed modest ravine, independent of every authored rail or seed. Its
+    // broad floor and smooth shoulders remain identical across recipe edits.
+    const double along = terraceEase((x - 520) / 100) * terraceEase((940 - x) / 100);
+    const double across = terraceEase((120 - std::abs(y + 660)) / 65);
+    return terrace + 1.4 * std::sin(x / 270) * std::sin(y / 220) + .8 * std::sin((x + y) / 410) -
+           14 * along * across;
 }
 double ground(double x, double y, double plateau) {
     const auto &xs = terrainXCoordinates();

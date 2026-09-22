@@ -26,6 +26,7 @@ class AVibeWorld : public AActor {
     void Request(bool Load);
     void Cancel();
     void Save();
+    void VerifyFlow(double Now);
     void Event(const FString &Name, const FString &Fields = FString());
 };
 UCLASS()

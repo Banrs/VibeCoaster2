@@ -1,0 +1,10 @@
+{
+  "baseCommit": "6296602b5db19967fe85fd4399293c5c967d4a7c",
+  "workingTreeChanges": true,
+  "moduleSha256": "93D3E9B1056A6A51EA611A9BD60CB526E2A1277EEA7ABE2EF88D9B428998E03D",
+  "fixtureSha256": "058967F0836BE874F30617AD3138C27811FDE04F57282319E9B75C3BE46AF572",
+  "engine": "5.8.2-56702186",
+  "resolution": "1600x900",
+  "purpose": "Generation/save/load, authoring controls, CPU/upload/GPU cancellation, corrupt-load retention",
+  "exitCode": 0
+}

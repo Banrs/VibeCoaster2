@@ -6,8 +6,10 @@
 
 namespace coaster {
 using Cancel = std::function<bool()>;
-struct Cancelled : std::runtime_error {
-    Cancelled() : std::runtime_error("Cancelled") {}
+// Cancellation is control flow, not a failed numerical trial. In particular,
+// line-search recovery must not consume it as a runtime_error.
+struct Cancelled : std::exception {
+    const char *what() const noexcept override { return "Cancelled"; }
 };
 inline void poll(const Cancel &cancel) {
     if (cancel && cancel())
@@ -93,5 +95,6 @@ Program hill(const State &, const HillShape &, const Cancel &cancel = {});
 Program dive(const State &, double drop, double exitPitch, const Cancel &cancel = {},
              double crestNormal = -.8);
 Program loop(const State &, double height, double yaw, const Cancel &cancel = {});
-Program immelmann(const State &, double height, double exitHeight, const Cancel &cancel = {});
+Program immelmann(const State &, double height, double exitHeight, const Cancel &cancel = {},
+                  double normal = 4);
 } // namespace coaster

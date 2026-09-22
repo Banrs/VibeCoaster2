@@ -10,9 +10,10 @@ constexpr std::array<double, 3> seats{8.5, 0, -8.5};
 constexpr double seatHeight = 1.2;
 struct Dynamics {
     double a{}, potentialSlope{}, drive{}, loss{}, metric{1}, metricS{}, potential{};
+    std::size_t element{};
 };
 Dynamics acceleration(const Track &track, double s, double v, const Scenario &scenario,
-                      std::array<std::size_t, 6> &hints) {
+                      std::array<std::size_t, 7> &hints) {
     Dynamics d;
     d.metric = 0;
     for (std::size_t i = 0; i < carOffsets.size(); ++i) {
@@ -23,7 +24,8 @@ Dynamics acceleration(const Track &track, double s, double v, const Scenario &sc
         d.potentialSlope += gravity * first.z / 6;
         d.potential += gravity * (f.p.z + .5 * f.u.z) / 6;
     }
-    const auto center = track.at(s);
+    const auto center = track.at(s, hints[6]);
+    d.element = center.element;
     const auto &p = track.source[center.element];
     // A distributed drive command acts on the train, with finite train mass
     // and offset energy. Spatial motor coverage is a separate hardware audit.
@@ -113,7 +115,7 @@ Simulation simulate(const Track &track, const Scenario &scenario, double dt, con
     double s = 0, v = track.source.front().initial.v, t = 0, previousS = 0, previousV = v, initialEnergy = 0,
            workNet = 0;
     std::size_t nextEntry = 1;
-    std::array<std::size_t, 6> hints{};
+    std::array<std::size_t, 7> hints{};
     std::array<std::size_t, 3> seatHints{};
     std::array<Vec3, 3> previous{};
     // Time-commanded launch avoids the singular inverse t(s) at standstill.
@@ -174,7 +176,7 @@ Simulation simulate(const Track &track, const Scenario &scenario, double dt, con
             result.duration = t;
             break;
         }
-        const auto role = track.source[track.at(s).element].role;
+        const auto role = track.source[dynamics.element].role;
         if (isTerminal(role))
             result.terminal += dt;
         else if (role != Role::Lip)

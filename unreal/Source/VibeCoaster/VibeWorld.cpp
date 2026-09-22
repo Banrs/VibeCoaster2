@@ -133,11 +133,16 @@ struct FVibeState {
     double RideTime = 0, Started = FPlatformTime::Seconds(), RequestStarted = 0, LastTick = Started,
            NextAction = 0;
     bool Paused = true, Loading = false, Committing = false, Auto = false, Quit = false, MenuReady = false;
-    bool RideVerify = false;
+    bool RideVerify = false, FlowVerify = false, FlowCancelIssued = false;
+    int FlowStep = 0, FlowFrameStart = 0;
+    bool FlowExpectedFailure = false;
+    FString FlowOriginalPath, FlowInvalidPath;
+    double FlowNextTime = 0, FlowRideStart = 0;
+    std::shared_ptr<coaster::Design> FlowPrior;
     int RidePass = 0, RideFrameStart = 0, NextRideShot = 0;
     double RideWallStart = 0;
     bool AwaitResources = false;
-    double NextMaterialReport = 0;
+    double NextMaterialReport = 0, SceneCommitStarted = 0;
     int View = 0, Upload = 0, Cycles = 1, Completed = 0;
 };
 AVibeWorld::AVibeWorld() {
@@ -188,7 +193,10 @@ void AVibeWorld::BeginPlay() {
     S.Quit = FParse::Param(FCommandLine::Get(), TEXT("VibeQuit"));
     S.Auto = !S.Output.IsEmpty();
     S.RideVerify = FParse::Param(FCommandLine::Get(), TEXT("VibeRideVerify"));
-    if (S.RideVerify)
+    S.FlowVerify = FParse::Param(FCommandLine::Get(), TEXT("VibeFlowVerify"));
+    if (S.FlowVerify)
+        S.RideVerify = false;
+    if (S.RideVerify || S.FlowVerify)
         S.Cycles = 1;
     if (S.Auto) {
         S.Output = FPaths::ConvertRelativePathToFull(S.Output);
@@ -279,11 +287,10 @@ void AVibeWorld::Request(bool Load) {
             Job->Phase = 0;
             auto D = Load ? coaster::loadDesign(Path, Cancel) : coaster::generate(Recipe, Cancel);
             Job->Phase = 1;
-            if (!D.baseline || !D.baseline->assessed || !D.baseline->failures.empty())
-                throw std::runtime_error("Ride dynamics failed validation");
-            const auto Clearance = coaster::assessClearance(D.track, D.recipe.plateau, .5, Cancel);
-            if (Clearance.terrainHits || Clearance.trackHits || !D.track.closed)
-                throw std::runtime_error("Circuit clearance or closure failed");
+            if (!Load)
+                coaster::validateRide(D, Cancel);
+            if (!D.validation)
+                throw std::runtime_error("Fresh ride validation evidence is missing");
             Job->NativeSeconds = FPlatformTime::Seconds() - Started;
             Job->Design = std::make_shared<coaster::Design>(std::move(D));
             Job->Phase = 2;
@@ -368,10 +375,15 @@ void AVibeWorld::Tick(float DeltaSeconds) {
             S.Loading = false;
             Event(TEXT("saved"));
         } else if (!S.Job->Error.IsEmpty() || S.Job->Cancel) {
-            S.Status = S.Job->Error.IsEmpty() ? TEXT("Cancelled. Previous ride retained.") : S.Job->Error;
             S.Loading = false;
-            Event(TEXT("request-failed"), TEXT(",\"error\":") + Quote(S.Status));
-            if (S.Auto && S.Quit)
+            const bool WasCancelled = S.Job->Cancel || S.Job->Error == TEXT("Cancelled");
+            S.Status = WasCancelled ? TEXT("Cancelled. Previous ride retained.")
+                                    : S.Job->Error + TEXT(". Previous ride retained.");
+            const bool ExpectedFailure =
+                S.FlowVerify && S.FlowExpectedFailure && S.Job->Error.Contains(TEXT("integrity"));
+            Event(WasCancelled ? TEXT("cancelled") : TEXT("request-failed"),
+                  TEXT(",\"error\":") + Quote(S.Status));
+            if (S.Auto && S.Quit && !ExpectedFailure && !(WasCancelled && S.FlowVerify && S.FlowCancelIssued))
                 FPlatformMisc::RequestExitWithStatus(false, 2);
         } else {
             S.Staged.Root = GetWorld()->SpawnActor<AActor>();
@@ -439,6 +451,7 @@ void AVibeWorld::Tick(float DeltaSeconds) {
             if (S.Active.Root.IsValid())
                 S.Active.Root->SetActorHiddenInGame(true);
             S.ViewDesign = S.Staged.Design;
+            S.SceneCommitStarted = Now;
             Event(TEXT("scene-commit"));
             S.AwaitResources = false;
             S.Ready->CheckMaterial = true;
@@ -456,6 +469,14 @@ void AVibeWorld::Tick(float DeltaSeconds) {
         }
     }
     if (S.Committing && S.Upload == 5 && !S.AwaitResources &&
+        !S.Ready->Complete.load(std::memory_order_acquire) && Now - S.SceneCommitStarted > 30) {
+        Cancel();
+        S.Status = TEXT("The renderer did not acknowledge the scene. Previous ride retained.");
+        Event(TEXT("request-failed"), TEXT(",\"error\":") + Quote(S.Status));
+        if (S.Auto && S.Quit)
+            FPlatformMisc::RequestExitWithStatus(false, 2);
+    }
+    if (S.Committing && S.Upload == 5 && !S.AwaitResources &&
         S.Ready->Complete.load(std::memory_order_acquire)) {
         ReleaseScene(S.Active);
         S.Active = std::move(S.Staged);
@@ -470,7 +491,7 @@ void AVibeWorld::Tick(float DeltaSeconds) {
         S.Committing = false;
         S.Loading = false;
         ++S.Completed;
-        S.Status = TEXT("Preview ready · full validation pending");
+        S.Status = TEXT("Preview ready \u00b7 scene clearance pending");
         S.Job.reset();
         Event(TEXT("gpu-ready"),
               FString::Printf(TEXT(",\"seconds\":%.9f,\"rendered_frames\":%d,\"cycle\":%d"),
@@ -542,7 +563,9 @@ void AVibeWorld::Tick(float DeltaSeconds) {
     PlaceCars(S.Active, S.RideTime);
     if (S.Committing)
         PlaceCars(S.Staged, 0);
-    if (S.Auto && !S.Loading && S.NextAction > 0 && Now >= S.NextAction) {
+    if (S.FlowVerify)
+        VerifyFlow(Now);
+    if (S.Auto && !S.FlowVerify && !S.Loading && S.NextAction > 0 && Now >= S.NextAction) {
         S.NextAction = 0;
         if (S.Completed < S.Cycles)
             Request(true);
@@ -550,6 +573,157 @@ void AVibeWorld::Tick(float DeltaSeconds) {
             Event(TEXT("finished"));
             FPlatformMisc::RequestExitWithStatus(false, 0);
         }
+    }
+}
+void AVibeWorld::VerifyFlow(double Now) {
+    auto &S = *State;
+    auto Require = [&](bool Okay, const TCHAR *Message) {
+        if (Okay)
+            return true;
+        S.Status = Message;
+        Event(TEXT("flow-failed"), TEXT(",\"error\":") + Quote(S.Status));
+        S.Auto = false;
+        S.FlowVerify = false;
+        S.Paused = true;
+        if (S.Quit)
+            FPlatformMisc::RequestExitWithStatus(false, 2);
+        return false;
+    };
+    auto BeginCancellation = [&](int Step) {
+        S.FlowStep = Step;
+        S.FlowCancelIssued = false;
+        S.FlowPrior = S.Active.Design;
+        S.FlowRideStart = S.RideTime = 20;
+        S.FlowFrameStart = S.Ready->AllFrames.load();
+        S.Paused = false;
+        S.FlowNextTime = Now + .08;
+        Request(true);
+    };
+    if (S.FlowStep == 0) {
+        if (S.Loading || !S.Active.Design)
+            return;
+        Event(TEXT("flow-start"));
+        S.FlowOriginalPath = S.InputPath;
+        S.Recipe.seed = 77;
+        S.Recipe.style = "intense";
+        S.FlowStep = 1;
+        Request(false);
+        return;
+    }
+    if (S.FlowStep == 1) {
+        if (S.Loading)
+            return;
+        if (!Require(S.Active.Design && S.Active.Design->validation && S.Recipe.seed == 77 &&
+                         S.Recipe.style == "intense",
+                     TEXT("Generated recipe did not become ready")))
+            return;
+        S.FlowPrior = S.Active.Design;
+        Event(TEXT("flow-generate-pass"));
+        FScreenshotRequest::RequestScreenshot(S.Output / TEXT("flow-generated.png"), true, false);
+        S.FlowStep = 2;
+        Save();
+        return;
+    }
+    if (S.FlowStep == 2) {
+        if (S.Loading)
+            return;
+        if (!Require(S.Job && S.Job->Phase == 5 && IFileManager::Get().FileExists(*S.SavePath),
+                     TEXT("Saved design was not committed")))
+            return;
+        Event(TEXT("flow-save-pass"));
+        S.InputPath = S.SavePath;
+        S.FlowStep = 3;
+        Request(true);
+        return;
+    }
+    if (S.FlowStep == 3) {
+        if (S.Loading)
+            return;
+        const auto Selected = S.StylePicker->GetSelectedItem();
+        if (!Require(S.Active.Design && S.Active.Design != S.FlowPrior && S.Active.Design->validation &&
+                         S.Recipe.seed == 77 && S.Recipe.style == "intense" && Selected.IsValid() &&
+                         *Selected == TEXT("intense") &&
+                         std::abs(S.Active.Design->track.length - S.FlowPrior->track.length) < 1e-7,
+                     TEXT("Saved round trip or authoring controls changed")))
+            return;
+        Event(TEXT("flow-roundtrip-pass"));
+        S.InputPath = S.FlowOriginalPath;
+        BeginCancellation(4);
+        return;
+    }
+    if (S.FlowStep >= 4 && S.FlowStep <= 6) {
+        if (!S.FlowCancelIssued && S.Loading) {
+            const bool AtStage = S.FlowStep == 4   ? (!S.Committing && Now >= S.FlowNextTime)
+                                 : S.FlowStep == 5 ? (S.Committing && S.Upload >= 2 && S.Upload < 5)
+                                                   : (S.Committing && S.Upload == 5 && !S.AwaitResources);
+            if (AtStage) {
+                S.FlowCancelIssued = true;
+                Cancel();
+                S.FlowNextTime = Now + .08;
+                return;
+            }
+        }
+        if (S.Loading || Now < S.FlowNextTime)
+            return;
+        const int Frames = S.Ready->AllFrames.load() - S.FlowFrameStart;
+        if (!Require(S.FlowCancelIssued && S.Active.Design == S.FlowPrior && S.ViewDesign == S.FlowPrior &&
+                         S.Active.Root.IsValid() && !S.Active.Root->IsHidden() && !S.Committing &&
+                         !S.Paused && S.RideTime > S.FlowRideStart && Frames >= 2,
+                     TEXT("Cancellation did not preserve the playing previous ride")))
+            return;
+        const TCHAR *Stage = S.FlowStep == 4 ? TEXT("cpu") : S.FlowStep == 5 ? TEXT("upload") : TEXT("gpu");
+        Event(TEXT("flow-cancel-pass"),
+              FString::Printf(TEXT(",\"stage\":\"%s\",\"rendered_frames\":%d,\"ride_advanced\":%.6f"), Stage,
+                              Frames, S.RideTime - S.FlowRideStart));
+        if (S.FlowStep < 6)
+            BeginCancellation(S.FlowStep + 1);
+        else {
+            TArray<uint8> Bytes;
+            S.FlowInvalidPath = S.SavePath + TEXT(".invalid-test");
+            if (!Require(FFileHelper::LoadFileToArray(Bytes, *S.SavePath) && Bytes.Num() > 32,
+                         TEXT("Could not prepare the rejected-load fixture")))
+                return;
+            Bytes[Bytes.Num() / 2] ^= 1;
+            if (!Require(FFileHelper::SaveArrayToFile(Bytes, *S.FlowInvalidPath),
+                         TEXT("Could not write the rejected-load fixture")))
+                return;
+            S.FlowStep = 7;
+            S.FlowExpectedFailure = true;
+            S.FlowCancelIssued = false;
+            S.FlowNextTime = Now + .08;
+            S.FlowRideStart = S.RideTime;
+            S.FlowFrameStart = S.Ready->AllFrames.load();
+            S.InputPath = S.FlowInvalidPath;
+            Request(true);
+        }
+        return;
+    }
+    if (S.FlowStep == 7) {
+        if (S.Loading || Now < S.FlowNextTime)
+            return;
+        if (!Require(S.Job && S.Job->Error.Contains(TEXT("integrity")) && S.Active.Design == S.FlowPrior &&
+                         S.ViewDesign == S.FlowPrior && S.Active.Root.IsValid() &&
+                         !S.Active.Root->IsHidden() && !S.Paused && S.RideTime > S.FlowRideStart &&
+                         S.Ready->AllFrames.load() - S.FlowFrameStart >= 2,
+                     TEXT("Rejected loading did not preserve the playing previous ride")))
+            return;
+        IFileManager::Get().Delete(*S.FlowInvalidPath);
+        S.InputPath = S.FlowOriginalPath;
+        S.FlowExpectedFailure = false;
+        S.FlowStep = 8;
+        S.FlowNextTime = Now + .4;
+        Event(TEXT("flow-rejection-pass"));
+        FScreenshotRequest::RequestScreenshot(S.Output / TEXT("flow-retained.png"), true, false);
+        Event(TEXT("flow-pass"));
+        return;
+    }
+    if (S.FlowStep == 8 && Now >= S.FlowNextTime) {
+        S.FlowStep = 9;
+        S.NextAction = 0;
+        S.Paused = true;
+        Event(TEXT("finished"));
+        if (S.Quit)
+            FPlatformMisc::RequestExitWithStatus(false, 0);
     }
 }
 void AVibeWorld::TogglePause() {

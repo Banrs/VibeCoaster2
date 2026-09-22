@@ -118,6 +118,55 @@ void validateAuthoring(const Design &design, const Cancel &cancel) {
         if (p.id.empty() || !ids.insert(p.id).second)
             throw std::runtime_error("Ride authoring IDs are empty or duplicated");
     }
+    struct SourceRole {
+        const char *id;
+        Role role;
+        bool spline;
+    };
+    const std::array<SourceRole, 20> story{{{"launch-180", Role::Launch, false},
+                                            {"opening", Role::Opening, false},
+                                            {"ascent-lsm", Role::Ascent, true},
+                                            {"plateau-sweep", Role::Clifftop, true},
+                                            {"plateau-weave", Role::Clifftop, true},
+                                            {"edge", Role::Edge, false},
+                                            {"ridge-turn", Role::Clifftop, true},
+                                            {"ridge-sweep", Role::Clifftop, true},
+                                            {"lip-brake", Role::Lip, false},
+                                            {"cliff", Role::Cliff, false},
+                                            {"lsm-300", Role::DownhillLaunch, false},
+                                            {"camelback", Role::Camelback, false},
+                                            {"wave", Role::Wave, false},
+                                            {"loop", Role::Loop, false},
+                                            {"valley-carve", Role::Journey, true},
+                                            {"immelmann", Role::Immelmann, false},
+                                            {"ravine-roll", Role::Ravine, true},
+                                            {"ravine-exit", Role::Airtime, false},
+                                            {"terminal-entry", Role::TerminalOverpass, true},
+                                            {"terminal", Role::Terminal, false}}};
+    auto at = design.track.source.begin();
+    for (const auto &required : story) {
+        at = std::find_if(at, design.track.source.end(),
+                          [&](const Program &p) { return p.id == required.id; });
+        if (at == design.track.source.end() || at->role != required.role ||
+            (!at->geometry.empty()) != required.spline)
+            throw std::runtime_error(std::string("Ride authoring sequence/type mismatch: ") + required.id);
+        ++at;
+    }
+    const auto &first = design.track.source.front();
+    if (first.id != "launch-180" || design.track.source.back().id != "terminal" ||
+        std::abs(first.initial.v) > 1e-9 || std::abs(first.duration() - 1.4) > 1e-9 ||
+        std::abs(shoot(first, .005, cancel).end.v - 50) > .001)
+        throw std::runtime_error("Ride authoring launch/terminal contract mismatch");
+    double brakingSeconds = 0, sourceSeconds = 0;
+    for (const auto &p : design.track.source) {
+        sourceSeconds += p.duration();
+        if (isTerminal(p.role))
+            brakingSeconds += p.duration();
+        if (p.role == Role::Lip && (p.duration() < 1 || p.duration() > 5))
+            throw std::runtime_error("Ride authoring lip braking is not brief");
+    }
+    if (sourceSeconds > 230 || std::abs(brakingSeconds - design.recipe.terminalSeconds) > .001)
+        throw std::runtime_error("Ride authoring braking duration mismatch");
     struct Required {
         const char *id;
         Role role;
@@ -216,8 +265,8 @@ static Design author(const Recipe &recipe, const std::map<std::string, double> &
         opening.height = recipe.openingHeight;
         opening.bankDegrees = -25 + 2 * variation + 2 * style - .8 * std::max(0., 300 - recipe.topSpeedKph);
         opening.positive = 3.6 + .1 * style;
-        opening.negative = -1.15;
-        opening.descentNegative = -1.20;
+        opening.negative = -1.15 + .009 * std::max(0., recipe.openingHeight - 75);
+        opening.descentNegative = -1.20 + .009 * std::max(0., recipe.openingHeight - 75);
         append(hill(state, opening, cancel), "opening", "Rounded hill and twisted descending turn",
                Role::Opening);
         append(ascent(state, recipe.plateau, 704, 50, cancel), "ascent-lsm",
@@ -300,12 +349,14 @@ static Design author(const Recipe &recipe, const std::map<std::string, double> &
         append(loop(state, recipe.loopHeight, rad(15), cancel), "loop", "Physically yawing loop", Role::Loop);
         append(terrainSpline(state, {400, rad(60)}, cancel), "valley-carve",
                "Low valley carve toward the ravine", Role::Journey);
-        append(immelmann(state, recipe.immelmannHeight, 35, cancel), "immelmann",
-               "Immelmann into the ravine shoulder", Role::Immelmann);
-        append(terrainSpline(state, {450, rad(20), 0, -35, 0, 0, 0, 1}, cancel), "ravine-roll",
+        append(immelmann(state, recipe.immelmannHeight, 35, cancel,
+                         4 - .02 * std::max(0., recipe.topSpeedKph - 300)),
+               "immelmann", "Immelmann into the ravine shoulder", Role::Immelmann);
+        append(splineTo(state, {790, -660, -8}, 1, cancel), "ravine-roll",
                "Descending full roll through the ravine", Role::Ravine);
         HillShape finale;
-        finale.height = 28;
+        finale.height = 40;
+        finale.exitHeight = 4 - state.p.z;
         finale.positive = 3.1 + .1 * style;
         finale.exitPositive = 3.2 + .1 * style;
         finale.negative = -1.08;
@@ -329,7 +380,8 @@ static Design author(const Recipe &recipe, const std::map<std::string, double> &
         if (const auto it = speeds.find("park-crest"); it != speeds.end())
             approachSpeed = it->second;
         const double speedReduction = std::clamp((300 - recipe.topSpeedKph) / 10, 0., 1.);
-        const TerminalShape terminalShape{7.2 + 2.3 * speedReduction, 2 + .5 * speedReduction};
+        const TerminalShape terminalShape{7.2 + 2.3 * speedReduction, 2 + .5 * speedReduction,
+                                          30 + 10 * speedReduction};
         const double stopReference = speeds.contains("terminal-entry") ? speeds.at("terminal-entry") : -1;
         const auto planned =
             planBrakes(approachSpeed, recipe.terminalSeconds, cancel, stopReference, terminalShape);

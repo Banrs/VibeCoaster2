@@ -70,6 +70,14 @@ int main(int argc, char **argv) {
                         require(std::abs(shoot(p, .005).maximumHeight - p.initial.p.z - height) < .03,
                                 "Edited height does not match geometry");
                 }
+                const auto ravine = std::find_if(d.track.source.begin(), d.track.source.end(),
+                                                 [](const auto &p) { return p.id == "ravine-roll"; });
+                require(ravine != d.track.source.end(), "Missing descending ravine roll");
+                const auto ravineEnd = shoot(*ravine, .005).end.p;
+                require(norm(ravineEnd - Vec3{790, -660, -8}) < .005,
+                        "Ravine roll misses the fixed site destination");
+                require(ravineEnd.z - ground(ravineEnd.x, ravineEnd.y, d.recipe.plateau) < 8,
+                        "Ravine exit is not close to its fixed floor");
                 const auto proof = assessReplay(d.track, .01);
                 require(proof.position < .005 && proof.forward < 1e-4 && proof.up < 1e-4 &&
                             proof.energy < .001,
@@ -78,28 +86,8 @@ int main(int argc, char **argv) {
                             proof.portCurvature < 1e-5 && proof.portThird < 1e-5 && proof.portUpThird < 1e-4,
                         "Source boundary derivative continuity failed");
                 require(d.baseline->terminal >= 5 && d.baseline->terminal <= 10, "Terminal braking duration");
-                if (i == 0) {
-                    for (const auto scenario :
-                         std::array<Scenario, 3>{{{1, 1, false}, {.8, 1, true}, {.8, 1, false}}}) {
-                        const auto operated = simulate(d.track, scenario);
-                        require(operated.failures.empty(), "Operating scenario force assessment failed");
-                    }
-                    auto fine = compile(d.track.source, .01);
-                    fine.operationSpeed = d.track.operationSpeed;
-                    const auto refined = simulate(fine, {}, 1. / 1920);
-                    require(refined.failures.empty(), "Refined force assessment failed");
-                    require(std::abs(refined.active - d.baseline->active) < .025,
-                            "Active timing did not converge");
-                    require(refined.energyResidual < d.baseline->energyResidual * .4,
-                            "Work-energy residual did not converge");
-                    for (std::size_t seat = 0; seat < 3; ++seat) {
-                        require(norm(refined.minimum[seat] - d.baseline->minimum[seat]) < .01 &&
-                                    norm(refined.maximum[seat] - d.baseline->maximum[seat]) < .01,
-                                "Seat force extrema did not converge");
-                        require(norm(refined.rate[seat] - d.baseline->rate[seat]) < .4,
-                                "Seat force rates did not converge");
-                    }
-                }
+                validateRide(d);
+                require(d.validation != nullptr, "Complete fresh dynamics evidence missing");
                 std::cout << "PASS case=" << i << " seed=" << cases[i].seed << " style=" << cases[i].style
                           << " speed=" << cases[i].topSpeedKph << " seconds="
                           << std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()

@@ -3,6 +3,9 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <atomic>
+#include <cstdint>
+#include <thread>
 using namespace coaster;
 namespace {
 void require(bool value, const char *message) {
@@ -14,6 +17,18 @@ std::vector<char> bytes(const std::filesystem::path &path) {
     if (!f)
         throw std::runtime_error("Missing test save");
     return {std::istreambuf_iterator<char>(f), {}};
+}
+void writeChecksummed(const std::filesystem::path &path, std::vector<char> data) {
+    std::uint64_t sum = 14695981039346656037ULL;
+    for (std::size_t i = 0; i < data.size() - 8; ++i) {
+        sum ^= static_cast<unsigned char>(data[i]);
+        sum *= 1099511628211ULL;
+    }
+    for (unsigned i = 0; i < 8; ++i)
+        data[data.size() - 8 + i] = static_cast<char>((sum >> (8 * i)) & 255);
+    std::ofstream f(path, std::ios::binary);
+    f.write(data.data(), std::streamsize(data.size()));
+    require(bool(f), "Could not write integrity-valid version fixture");
 }
 bool hasTemporary(const std::filesystem::path &folder) {
     for (const auto &file : std::filesystem::directory_iterator(folder))
@@ -35,7 +50,8 @@ int main() {
         saveDesign(design, path);
         const auto original = bytes(path);
         auto loaded = loadDesign(path);
-        require(loaded.baseline && loaded.baseline->assessed && loaded.baseline->failures.empty(),
+        require(loaded.validation && loaded.baseline && loaded.baseline->assessed &&
+                    loaded.baseline->failures.empty(),
                 "Fresh loaded assessment missing");
         require(std::abs(loaded.track.length - design.track.length) < 1e-7,
                 "Mixed source round trip changed geometry");
@@ -54,7 +70,69 @@ int main() {
             metadataRejected = std::string(e.what()).find("authoring") != std::string::npos;
         }
         require(metadataRejected, "A checksum accepted a height target that was never authored");
+        mismatch = design;
+        mismatch.recipe.topSpeedKph += 1;
+        saveDesign(mismatch, mismatchPath);
+        metadataRejected = false;
+        try {
+            loadDesign(mismatchPath);
+        } catch (const std::runtime_error &e) {
+            metadataRejected = std::string(e.what()).find("authoring") != std::string::npos;
+        }
+        require(metadataRejected, "A checksum accepted a top speed that was never authored");
+        mismatch = design;
+        auto wave = std::find_if(mismatch.track.source.begin(), mismatch.track.source.end(),
+                                 [](const auto &p) { return p.id == "wave"; });
+        wave->role = Role::Journey;
+        saveDesign(mismatch, mismatchPath);
+        metadataRejected = false;
+        try {
+            loadDesign(mismatchPath);
+        } catch (const std::runtime_error &e) {
+            metadataRejected = std::string(e.what()).find("authoring") != std::string::npos;
+        }
+        require(metadataRejected, "A checksum accepted a missing required ride role");
         std::filesystem::remove(mismatchPath);
+        std::filesystem::remove(folder / "metadata-mismatch.vcd.previous");
+        auto cancelledValidation = loaded;
+        int validationPolls = 0;
+        bool validationCancelled = false;
+        try {
+            validateRide(cancelledValidation, [&] { return ++validationPolls > 300; });
+        } catch (const Cancelled &) {
+            validationCancelled = true;
+        }
+        require(validationCancelled && !cancelledValidation.validation,
+                "Cancelled validation retained stale acceptance evidence");
+        cancelledValidation = loaded;
+        const auto caller = std::this_thread::get_id();
+        std::atomic<bool> workerObserved{false};
+        validationCancelled = false;
+        try {
+            validateRide(cancelledValidation, [&] {
+                if (std::this_thread::get_id() == caller)
+                    return false;
+                workerObserved = true;
+                return true;
+            });
+        } catch (const Cancelled &) {
+            validationCancelled = true;
+        }
+        require(validationCancelled && workerObserved && !cancelledValidation.validation,
+                "Parallel validation did not propagate cancellation or retained stale evidence");
+        for (const auto [offset, message] :
+             std::array<std::pair<std::size_t, const char *>, 2>{{{8, "version"}, {16, "site revision"}}}) {
+            auto old = original;
+            old[offset] = 1;
+            writeChecksummed(brokenPath, std::move(old));
+            bool versionRejected = false;
+            try {
+                loadDesign(brokenPath);
+            } catch (const std::runtime_error &e) {
+                versionRejected = std::string(e.what()).find(message) != std::string::npos;
+            }
+            require(versionRejected, "A valid checksum reinterpreted an unsupported save/site version");
+        }
         bool cancelled = false;
         try {
             saveDesign(design, path, [&] { return hasTemporary(folder); });

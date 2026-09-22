@@ -42,6 +42,18 @@ template <std::size_t N> Vec3 evaluate(const std::array<Vec3, N> &c, double x, i
         result = result * x + c[std::size_t(i)] * (fact[std::size_t(i)] / fact[std::size_t(i - derivative)]);
     return result;
 }
+template <std::size_t N, std::size_t D>
+std::array<Vec3, D> evaluateDerivatives(const std::array<Vec3, N> &c, double x) {
+    // Generalized Horner evaluation shares work between the exact polynomial
+    // derivatives. No lookup table, finite difference or resampling is used.
+    std::array<Vec3, D> result{};
+    for (std::size_t i = N; i-- > 0;) {
+        for (std::size_t j = D; --j > 0;)
+            result[j] = result[j] * x + result[j - 1] * double(j);
+        result[0] = result[0] * x + c[i];
+    }
+    return result;
+}
 struct VectorJet {
     Vec3 a, b, c;
 };
@@ -52,10 +64,12 @@ VectorJet normalize(VectorJet v) {
 }
 Frame sample(const Span &s, double x) {
     const double h = s.length;
-    const auto p = evaluate(s.p, x, 0) + s.origin, p1 = evaluate(s.p, x, 1) / h,
-               p2 = evaluate(s.p, x, 2) / (h * h), p3 = evaluate(s.p, x, 3) / (h * h * h);
+    const auto position = evaluateDerivatives<10, 4>(s.p, x);
+    const auto orientation = evaluateDerivatives<8, 3>(s.u, x);
+    const auto p = position[0] + s.origin, p1 = position[1] / h, p2 = position[2] / (h * h),
+               p3 = position[3] / (h * h * h);
     const auto tangent = normalize({p1, p2, p3});
-    const VectorJet up{evaluate(s.u, x, 0), evaluate(s.u, x, 1) / h, evaluate(s.u, x, 2) / (h * h)};
+    const VectorJet up{orientation[0], orientation[1] / h, orientation[2] / (h * h)};
     const double d = dot(up.a, tangent.a), dd = dot(up.b, tangent.a) + dot(up.a, tangent.b),
                  ddd = dot(up.c, tangent.a) + 2 * dot(up.b, tangent.b) + dot(up.a, tangent.c);
     const auto oriented = normalize({up.a - tangent.a * d, up.b - tangent.b * d - tangent.a * dd,

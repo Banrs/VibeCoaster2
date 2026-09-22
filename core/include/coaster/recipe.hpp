@@ -16,11 +16,13 @@ Recipe readRecipe(const std::filesystem::path &);
 void writeRecipe(const Recipe &, const std::filesystem::path &);
 void validateRecipe(const Recipe &);
 struct Simulation;
+struct RideValidation;
 struct Design {
     Recipe recipe;
     Track track;
     std::vector<std::string> notes;
     std::shared_ptr<Simulation> baseline;
+    std::shared_ptr<const RideValidation> validation;
 };
 void validateAuthoring(const Design &, const Cancel &cancel = {});
 Design generate(const Recipe &, const Cancel &cancel = {});
