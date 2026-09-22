@@ -1,15 +1,13 @@
 # VibeCoaster2
 
-Standalone C++20 hybrid FVD/spline coaster generator and Unreal 5.8 viewer. The approved default-generator engineering plan is delivered as **2.0.0-default.1**. [Delivery report](docs/checkpoints/07-default.md), [measured evidence](docs/checkpoints/07-default.json) and [exact Play identity](docs/checkpoints/07-play-target.json) identify tested code commit `a532c8c`.
+Fresh C++20 / Unreal 5.8 rewrite, descended from the preserved repository history.
 
-Open **Play VibeCoaster2.lnk**; **F9** loads the saved seed 42 ride and **Space** starts or pauses it. **Enter** generates, **Tab** opens setup, **1/2/3** select front/middle/rear, **M** toggles overview, **R** restarts, and **F5** saves. It uses `UserData-Default`. Separate **Rift**, **Foundation**, **Escarpment** and **Highlands** shortcuts preserve earlier packages/profiles. The sibling source is untouched.
+Work in progress. No rewritten ride or package has yet passed acceptance.
 
-Five warm matched runs give **9.675 s generation** and **3.793 s saved loading**, measured from request to accepted scene: **69.3% / 56.7% faster than Escarpment**. Whole-process startup and the 0.9 control are reported separately. The full native suite, eight-case corpus, Unreal contracts and actual GPU front/rear checks pass. The active design/acceptance contract remains [NEXT_SESSION.md](NEXT_SESSION.md); detailed art, GUI layout editing and VR follow this foundation.
+The archived implementation and playable fallbacks remain untouched at
+`D:\Coding\Codex\vibecoasterlegacy\fresh-rewrite-checkpoint-20260922-091930`.
 
-The Escarpment package is fallback evidence: its 300 km/h baseline reaches 180 km/h in 1.397000 s, peaks at 300.54 km/h, and completes in 201.27 s. Its reported caps are Gz −1.5…+5, Gy ±1.5, Gx ±4.5, and 20 g/s per component. See [the fallback verification report](docs/verification.md), [the evidence index](docs/checkpoints/README.md), and [the machine-readable report](docs/verification.json). Those reports describe shipped snapshots and do not replace the current contract in `NEXT_SESSION.md`.
-
-Approved camelback image, trace, and fit data remain under [docs/references](docs/references). Historical proposals and generated experiments are indexed as evidence; they are not implementation instructions. The revised native baseline passes the implemented F2291-25 acceleration assessment described in [the standard record](docs/acceleration-standard.md). F2291-26 conformity and whole-standard certification are unclaimed.
-
-Build the core with `native/CMakeLists.txt`. Package Unreal with `native/unreal/scripts/package.ps1`; run the representative corpus with `native/core/tests/redesign_corpus.py`.
-
-Export the editable default with `coaster_cli recipe --out ride.vcrecipe`, then compile edits with `coaster_cli generate --recipe ride.vcrecipe --out ride.coaster`. Saves retain the recipe and authored sources; loaded geometry receives fresh validation. Full GUI authoring follows this foundation.
+Acceptance requires 180 seconds of purposeful active riding plus 5–10 seconds
+of terminal braking, independently assessed dynamics and swept clearance,
+working editable geometry, and saved loading below 5 seconds at p99 through
+actual GPU scene readiness. Native completion is not GPU readiness.

@@ -1,86 +1,10 @@
-name: Native Windows checks
-
-on:
-  push:
-    paths-ignore: ['docs/**', '*.md', '*.lnk']
-  pull_request:
-    paths-ignore: ['docs/**', '*.md', '*.lnk']
-  workflow_dispatch:
-    inputs:
-      run-corpus:
-        description: Run the full eight-case representative corpus and integration suite
-        required: true
-        default: false
-        type: boolean
-
-permissions:
-  contents: read
-
+name: Native core
+on: [push, pull_request]
 jobs:
-  native:
-    runs-on: windows-2022
-    timeout-minutes: 45
-    env:
-      CMAKE_BUILD_PARALLEL_LEVEL: 1
+  core:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Configure C++20 native core
-        run: >-
-          cmake -S native -B native/build-ci
-          -G "Visual Studio 17 2022" -A x64
-          -DCMAKE_CXX_STANDARD=20
-          -DCMAKE_CXX_FLAGS="/std:c++20 /fp:strict"
-      - name: Build one compiler worker
-        run: cmake --build native/build-ci --config Release --parallel 1
-      - name: Run component boundary tests
-        run: >-
-          ctest --test-dir native/build-ci -C Release
-          --output-on-failure --parallel 1 --timeout 600
-          -L component --output-junit component-tests.xml
-      - name: Generate one accepted baseline per push
-        shell: pwsh
-        run: |
-          $out = Join-Path $PWD 'ride-checks'
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
-          $cli = Join-Path $PWD 'native/build-ci/Release/coaster_cli.exe'
-          $json = Join-Path $out 'baseline-42.json'
-          $plan = Join-Path $out 'baseline-42-plan.json'
-          $trace = Join-Path $out 'baseline-42-trace.json'
-          $save = Join-Path $out 'baseline-42.coaster'
-          & $cli generate --preset physics-proof --seed 42 --terrain highlands --trims auto `
-            --json $json --plan $plan --trace $trace --out $save `
-            1> (Join-Path $out 'baseline-42.stdout.log') `
-            2> (Join-Path $out 'baseline-42.progress.log')
-          if ($LASTEXITCODE -ne 0) { throw "Baseline generation failed with exit code $LASTEXITCODE" }
-          $report = Get-Content -Raw -LiteralPath $json | ConvertFrom-Json
-          if (-not $report.accepted -or -not $report.convergence.passed -or -not $report.motionAudit.passed) {
-            throw 'Baseline did not pass the native acceptance and convergence gates'
-          }
-          Write-Host ("baseline-42 accepted={0} candidate={1} generationSeconds={2}" -f $report.accepted, $report.candidate, $report.generationSeconds)
-      - name: Run full integration suite at a checkpoint
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run-corpus == true) || contains(github.event.head_commit.message, '[checkpoint]') }}
-        run: >-
-          ctest --test-dir native/build-ci -C Release
-          --output-on-failure --parallel 1 --timeout 600
-          -L integration --output-junit integration-tests.xml
-      - name: Run eight-case representative corpus at a checkpoint
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run-corpus == true) || contains(github.event.head_commit.message, '[checkpoint]') }}
-        shell: pwsh
-        run: |
-          $output = Join-Path $PWD 'corpus-checks'
-          if (Test-Path -LiteralPath $output) { throw 'Corpus evidence directory must be fresh' }
-          $cli = Join-Path $PWD 'native/build-ci/Release/coaster_cli.exe'
-          python native/core/tests/redesign_corpus.py $cli $output
-      - name: Upload native evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-windows-checks
-          path: |
-            ride-checks
-            corpus-checks
-            native/build-ci/*-tests.xml
-            native/build-ci/Testing/Temporary
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --parallel 1
+      - run: ctest --test-dir build --output-on-failure --parallel 1

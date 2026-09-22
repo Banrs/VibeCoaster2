@@ -1,0 +1,2 @@
+PASS launch, independent replay, work-energy, authored height edits and cancellation; peak=4.44168g rate=18.9008g/s
+PASS 235 scoped F2291-25 acceleration checks

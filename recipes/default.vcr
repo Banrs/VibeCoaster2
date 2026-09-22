@@ -1,0 +1,12 @@
+# VibeCoaster editable recipe, SI metres except speed in km/h.
+version=1
+seed=42
+style=balanced
+plateau=210
+openingHeight=75
+camelbackHeight=224.65474672444046
+loopHeight=135
+immelmannHeight=95
+topSpeedKph=300
+activeSeconds=180
+terminalSeconds=7
