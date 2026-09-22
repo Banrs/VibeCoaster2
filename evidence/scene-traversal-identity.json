@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "a4c33e531a76b46df40d9820f7296b27d151cbe6",
+  "workingTreeChanges": true,
+  "mode": "Ride",
+  "cycles": 3,
+  "executable": "UnrealEditor.exe",
+  "executableSha256": "6F9C95C131F37CBDC384ADE02FCF6ED828BAA366B25234D0D85E212244CAC9AA",
+  "fixture": "validation-fixture.vcd",
+  "fixtureSha256": "058967F0836BE874F30617AD3138C27811FDE04F57282319E9B75C3BE46AF572",
+  "resolution": "1600x900",
+  "cacheState": "Fresh process/profile; OS file and driver caches are uncontrolled",
+  "moduleSha256": "7C0619D17B543A8DB8BCCA1A31B96BA317C36A91193AB9EC6972A0076C99567F",
+  "materialSha256": "154EFA281CB03109D1791A6D8E638F82EBDC929B7C873E459D330AC514B75E85",
+  "exitCode": 0
+}

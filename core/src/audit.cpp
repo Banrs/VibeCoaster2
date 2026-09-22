@@ -41,6 +41,13 @@ int main(int argc, char **argv) {
                   << " terrainHits=" << v.clearance.terrainHits << " trackHits=" << v.clearance.trackHits
                   << " groundGap=" << v.clearance.minimumGround << " trackGap=" << v.clearance.minimumNonlocal
                   << '\n';
+        std::cout << "source-ports position=" << v.replay.portPosition << " tangent=" << v.replay.portTangent
+                  << " curvature=" << v.replay.portCurvature << " third=" << v.replay.portThird
+                  << " up=" << v.replay.portUp << " upFirst=" << v.replay.portUpFirst
+                  << " upSecond=" << v.replay.portUpSecond << " upThird=" << v.replay.portUpThird << '\n';
+        std::cout << "scene-clearance seconds=" << v.checkSeconds[8] << " parts=" << v.scene.parts.size()
+                  << " supports=" << v.scene.supportAnchors.size()
+                  << " minimumGap=" << v.scene.minimumCertifiedGap << '\n';
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

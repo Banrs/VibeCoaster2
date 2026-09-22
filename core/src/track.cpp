@@ -193,23 +193,28 @@ ReplayResult assessReplay(const Track &track, double step, const Cancel &cancel)
     ReplayResult result;
     double distance = 0;
     std::size_t hint = 0;
-    Jet prior{};
+    Jet prior{}, origin{};
     bool hasPrior = false;
+    auto comparePorts = [&](const Jet &a, const Jet &b) {
+        result.portPosition = std::max(result.portPosition, norm(a.position[0] - b.position[0]));
+        result.portTangent = std::max(result.portTangent, norm(a.position[1] - b.position[1]));
+        result.portCurvature = std::max(result.portCurvature, norm(a.position[2] - b.position[2]));
+        result.portThird = std::max(result.portThird, norm(a.position[3] - b.position[3]));
+        result.portUp = std::max(result.portUp, norm(a.up[0] - b.up[0]));
+        result.portUpFirst = std::max(result.portUpFirst, norm(a.up[1] - b.up[1]));
+        result.portUpSecond = std::max(result.portUpSecond, norm(a.up[2] - b.up[2]));
+        result.portUpThird = std::max(result.portUpThird, norm(a.up[3] - b.up[3]));
+    };
     for (const auto &p : track.source) {
         auto jets = replay(p, step, cancel);
         if (p.role == Role::Terminal)
             while (jets.size() > 2 && jets.back().s - jets[jets.size() - 2].s < 1e-6)
                 jets.erase(jets.end() - 2);
         const auto &first = jets.front();
-        if (hasPrior) {
-            result.portPosition = std::max(result.portPosition, norm(first.position[0] - prior.position[0]));
-            result.portTangent = std::max(result.portTangent, norm(first.position[1] - prior.position[1]));
-            result.portUp = std::max(result.portUp, norm(first.up[0] - prior.up[0]));
-            result.portCurvature =
-                std::max(result.portCurvature, norm(first.position[2] - prior.position[2]));
-            result.portThird = std::max(result.portThird, norm(first.position[3] - prior.position[3]));
-            result.portUpThird = std::max(result.portUpThird, norm(first.up[3] - prior.up[3]));
-        }
+        if (hasPrior)
+            comparePorts(first, prior);
+        else
+            origin = first;
         for (const auto &q : jets) {
             const auto f = track.at(distance + q.s - p.initial.s, hint);
             result.position = std::max(result.position, norm(f.p - q.position[0]));
@@ -227,6 +232,8 @@ ReplayResult assessReplay(const Track &track, double step, const Cancel &cancel)
         hasPrior = true;
         distance += prior.s - p.initial.s;
     }
+    if (track.closed && hasPrior)
+        comparePorts(origin, prior);
     return result;
 }
 } // namespace coaster

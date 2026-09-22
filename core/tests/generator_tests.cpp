@@ -1,4 +1,5 @@
 #include "coaster/persistence.hpp"
+#include "coaster/scene.hpp"
 #include <iostream>
 #include <fstream>
 #include <chrono>
@@ -83,11 +84,17 @@ int main(int argc, char **argv) {
                             proof.energy < .001,
                         "Independent source replay diverged");
                 require(proof.portPosition < .001 && proof.portTangent < 1e-5 && proof.portUp < 1e-5 &&
-                            proof.portCurvature < 1e-5 && proof.portThird < 1e-5 && proof.portUpThird < 1e-4,
+                            proof.portCurvature < 1e-5 && proof.portThird < 1e-5 &&
+                            proof.portUpFirst < 1e-5 && proof.portUpSecond < 1e-5 && proof.portUpThird < 1e-4,
                         "Source boundary derivative continuity failed");
                 require(d.baseline->terminal >= 5 && d.baseline->terminal <= 10, "Terminal braking duration");
                 validateRide(d);
                 require(d.validation != nullptr, "Complete fresh dynamics evidence missing");
+                const auto &scene = d.validation->scene;
+                require(scene.supportAnchors.size() == std::size_t(std::ceil((d.track.length - 8) / 18)),
+                        "A support interval was silently omitted");
+                require(scene.minimumCertifiedGap >= .25 && !scene.parts.empty(),
+                        "Rendered scene structures lack a continuous clearance proof");
                 std::cout << "PASS case=" << i << " seed=" << cases[i].seed << " style=" << cases[i].style
                           << " speed=" << cases[i].topSpeedKph << " seconds="
                           << std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()

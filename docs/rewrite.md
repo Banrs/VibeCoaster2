@@ -46,9 +46,8 @@ guarantee. No performance target is currently established for this rewrite.
 
 Native route, representative edits, replay, operating scenarios and refinement
 now have passing development evidence in [progress.md](progress.md). Final
-acceptance still requires full scene/hardware
-clearance, GPU front/rear traversal, cold/warm loading tails, the matched
-Escarpment generation baseline, packages and exact Play identity.
+acceptance still requires physical hardware coverage, cold/warm loading tails,
+the matched Escarpment generation baseline, packages and exact Play identity.
 
 Authoring split: force-critical crests, inversions and the protected camelback
 use FVD. Spatial splines are appropriate for grounded routing, deliberate

@@ -1,14 +1,23 @@
 # Runtime verification
 
 The Unreal 5.8.2 preview runs fresh source, nominal and operating dynamics,
-separate spatial/temporal refinement and terrain/track checks before replacement.
-Support/station/hardware clearance and release verification remain open.
+separate spatial/temporal refinement, terrain/track and shared support/station
+clearance checks before replacement. Physical motor coverage and release
+verification remain open.
 
 The overview uses a depth-tested orange FVD trace and blue spatial-spline trace.
 These screen-width inspection lines are hidden in front/rear views; physical
 rail dimensions remain unchanged.
 
 ## Reproduction
+
+On Windows, `scripts/verify-runtime.ps1 -Mode Loads -Cycles 3` runs the existing
+editor build with a new isolated output/profile directory. `-Mode Ride` verifies
+both complete traversals; `-Mode Flow` checks generation/save/load/cancellation and
+rejection. `-Executable` with `-Packaged` selects an already-built game package.
+The script records hashes, source state, startup, completion-marker consistency,
+process exit and required events. OS file/driver caches are explicitly uncontrolled.
+
 
 Build `VibeCoasterEditor` with `-MaxParallelActions=1`. Prepare the owned map and
 vertex-colour material with `scripts/make-content.py` through Unreal's Python
@@ -27,6 +36,7 @@ Run a real window with `-game`, a separate `-UserDir`, and:
   corrupt-load rejection. It checks that the prior ride stays visible and plays
   and renders forward. It invokes the same handlers as UI actions; this is
   automated runtime coverage, not manual mouse testing.
+- `-VibeAutoLoad` optionally starts loading without enabling verification mode.
 - `-VibeQuit` exits after completion; failures use a nonzero process status.
 
 Freeze the fixture and record its hash, executable/module and asset identities,
@@ -55,6 +65,16 @@ the render callback and draining render work, before UObject teardown.
 
 ## Current evidence
 
+The newest `scene-*-events.jsonl`, matching identities and summaries cover the
+shared checked/rendered structures, vehicle parts and closed-station continuity.
+Both complete traversals and the generation/save/load/cancel/rejection flow passed
+with process exit 0. Every requested load includes those fresh scene checks.
+The latest three loads were 2.434, 2.585 and 2.501 s; initial UI startup was 9.66 s.
+These small development samples do not establish p99.
+
+The following retained files describe the preceding development checkpoint:
+
+
 `validated-traversal-events.jsonl` records both 191.94-second passes on the fixed
 ravine route with the current terrain and cameras, about 45,000 rendered frames per
 view, and normal completion. Its matching identity file records the fixture and
@@ -67,5 +87,5 @@ all three cancellation stages and corrupt-load rejection. The process exits 0.
 Three current fully validated preview loads measured 2.387, 2.532 and 2.547 seconds
 through GPU readiness. An earlier first request after material rebuilding took
 5.77 seconds; that shader-compilation tail remains in the local record. These few
-samples are not a p99 claim. Complete scene clearance, sufficient process-cold/warm
+samples are not a p99 claim. Physical hardware coverage, sufficient process-cold/warm
 samples, packaged builds and exact Play identity remain required for release.

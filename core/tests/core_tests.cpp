@@ -1,4 +1,5 @@
 #include "coaster/persistence.hpp"
+#include "coaster/spline.hpp"
 #include <iostream>
 
 using namespace coaster;
@@ -50,6 +51,17 @@ int main() {
                       norm(f.upSS - Vec3{-tdd.z, 0, tdd.x}) < 1e-12,
                   "Analytic curved frame or its derivatives disagree");
         }
+        State circleStart;
+        circleStart.p = {0, 0, 4};
+        circleStart.v = 50;
+        auto firstHalf = terrainSpline(circleStart, {200, pi});
+        auto secondHalf = terrainSpline(shoot(firstHalf).end, {200, pi});
+        secondHalf.role = Role::Terminal;
+        secondHalf.geometry.back().value[2] += .1;
+        const auto mismatchedClosure = compile({firstHalf, secondHalf});
+        check(mismatchedClosure.closed, "Closed-position fixture did not close");
+        check(assessReplay(mismatchedClosure).portUp > .09,
+              "A position-closed circuit hid its station orientation discontinuity");
         bool fitCancelled = false;
         try {
             std::array<double, 1> parameter{0};

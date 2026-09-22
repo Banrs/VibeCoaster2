@@ -28,7 +28,7 @@ struct Track {
 Track compile(std::vector<Program>, double step = .02, const Cancel &cancel = {});
 struct ReplayResult {
     double position{}, forward{}, up{}, speed{}, energy{}, portPosition{}, portTangent{}, portUp{},
-        portCurvature{}, portThird{}, portUpThird{};
+        portCurvature{}, portThird{}, portUpFirst{}, portUpSecond{}, portUpThird{};
 };
 ReplayResult assessReplay(const Track &, double independentStep = .01, const Cancel &cancel = {});
 } // namespace coaster

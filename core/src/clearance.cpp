@@ -1,9 +1,12 @@
 #include "coaster/simulation.hpp"
+#include "coaster/scene.hpp"
+#include "coaster/vehicle.hpp"
+#include <cstdint>
 #include <unordered_map>
 
 namespace coaster {
 namespace {
-// A car/occupied containment volume in metres, including its undercarriage.
+// A coarse guideway/occupied containment volume in metres.
 // The continuous bounds below sweep the whole box, not only its corners.
 struct Box {
     Vec3 center;
@@ -253,6 +256,134 @@ Clearance assessClearance(const Track &track, double plateau, double spacing, co
     }
     result.ordinaryMeanHeight = ordinaryLength ? ordinary / ordinaryLength : 0;
     result.continuous = true;
+    return result;
+}
+ClearanceObstacle beamObstacle(std::string id, Vec3 from, Vec3 to, double radius) {
+    if (!finite(from) || !finite(to) || !(radius > 0 && radius < 20) || norm(to - from) < 1e-6)
+        throw std::runtime_error("Invalid static beam");
+    const Vec3 t = unit(to - from), r = unit(cross(t, std::abs(t.z) < .9 ? Vec3{0, 0, 1} : Vec3{0, 1, 0})),
+               u = cross(r, t);
+    return {std::move(id), (from + to) * .5, {t, r, u}, {norm(to - from) * .5, radius, radius}};
+}
+struct ObstacleIndex::Impl {
+    const Track &track;
+    std::vector<Sweep> sweeps;
+    std::vector<double> derivatives;
+    std::unordered_map<Cell, std::vector<std::size_t>, Hash> grid;
+    double maximumRadius{};
+    explicit Impl(const Track &input, const Cancel &cancel) : track(input) {
+        if (track.spans.empty())
+            throw std::runtime_error("Cannot index an empty track");
+        for (std::size_t i = 0; i < track.spans.size(); ++i) {
+            poll(cancel);
+            derivatives.push_back(sweepDerivative(track, i));
+            const auto &span = track.spans[i];
+            const int count = std::max(1, int(std::ceil(span.length / .75)));
+            for (int j = 0; j < count; ++j) {
+                const auto sweep = enclose(track, i, span.begin + span.length * j / count,
+                                           span.begin + span.length * (j + 1) / count, derivatives[i]);
+                const auto p = sweep.box.center;
+                const auto &h = sweep.box.half;
+                maximumRadius = std::max(maximumRadius, std::hypot(h[0], h[1], h[2]));
+                const Cell cell{int(std::floor(p.x / 12)), int(std::floor(p.y / 12)),
+                                int(std::floor(p.z / 12))};
+                grid[cell].push_back(sweeps.size());
+                sweeps.push_back(sweep);
+            }
+        }
+    }
+    bool separatedFrom(const Sweep &sweep, const Box &object, double &gap, const Cancel &cancel,
+                       int depth = 0) const {
+        poll(cancel);
+        const double distance = separation(sweep.box, object);
+        if (distance >= .25) {
+            gap = std::min(gap, distance);
+            return true;
+        }
+        // The broad envelope also includes the guideway below the car. Static
+        // support attachments must instead clear every actual moving part and
+        // occupant volume. Refine against the same shapes used by rendering;
+        // keep the full 250 mm gap and exclude no nearby static objects.
+        const auto frame = track.at((sweep.begin + sweep.end) / 2);
+        const double radius = derivatives[sweep.span] * (sweep.end - sweep.begin) / 2;
+        auto rotated = [&](Vec3 v) { return vehicleVector(frame, v); };
+        bool allPartsClear = true;
+        double partsGap = 1e9;
+        for (const auto &part : vehicleGeometry().occupied) {
+            Box moving{frame.p + rotated(part.center),
+                       {rotated(part.axes[0]), rotated(part.axes[1]), rotated(part.axes[2])},
+                       part.half};
+            for (auto &half : moving.half)
+                half += radius;
+            const double partGap = separation(moving, object);
+            if (partGap < .25) {
+                allPartsClear = false;
+                break;
+            }
+            partsGap = std::min(partsGap, partGap);
+        }
+        if (allPartsClear) {
+            gap = std::min(gap, partsGap);
+            return true;
+        }
+        if (depth >= 12)
+            return false;
+        const double mid = (sweep.begin + sweep.end) / 2;
+        const auto a = enclose(track, sweep.span, sweep.begin, mid, derivatives[sweep.span]),
+                   b = enclose(track, sweep.span, mid, sweep.end, derivatives[sweep.span]);
+        double local = 1e9;
+        if (!separatedFrom(a, object, local, cancel, depth + 1) ||
+            !separatedFrom(b, object, local, cancel, depth + 1))
+            return false;
+        gap = std::min(gap, local);
+        return true;
+    }
+};
+ObstacleIndex::ObstacleIndex(const Track &track, const Cancel &cancel)
+    : data(std::make_shared<Impl>(track, cancel)) {}
+ObstacleResult ObstacleIndex::assess(const ClearanceObstacle &obstacle, const Cancel &cancel) const {
+    poll(cancel);
+    if (!finite(obstacle.center) || std::max({std::abs(obstacle.center.x), std::abs(obstacle.center.y),
+                                              std::abs(obstacle.center.z)}) > 25000)
+        throw std::runtime_error("Invalid static object position");
+    for (std::size_t i = 0; i < 3; ++i) {
+        if (!finite(obstacle.axes[i]) || std::abs(norm(obstacle.axes[i]) - 1) > 1e-8 ||
+            !(obstacle.half[i] > 0 && obstacle.half[i] <= 2000))
+            throw std::runtime_error("Invalid static object extent/frame");
+        for (std::size_t j = 0; j < i; ++j)
+            if (std::abs(dot(obstacle.axes[i], obstacle.axes[j])) > 1e-8)
+                throw std::runtime_error("Static object axes are not orthogonal");
+    }
+    Box box{obstacle.center, obstacle.axes, obstacle.half};
+    for (auto &half : box.half)
+        half += .001; // Bound rendering quantization consistently with terrain.
+    const auto extent0 = extent(box);
+    const double pad = data->maximumRadius + .25;
+    const Vec3 lo = box.center - extent0 - Vec3{pad, pad, pad},
+               hi = box.center + extent0 + Vec3{pad, pad, pad};
+    const Cell first{int(std::floor(lo.x / 12)), int(std::floor(lo.y / 12)), int(std::floor(lo.z / 12))},
+        last{int(std::floor(hi.x / 12)), int(std::floor(hi.y / 12)), int(std::floor(hi.z / 12))};
+    const auto cells = std::uint64_t(last.x - first.x + 1) * std::uint64_t(last.y - first.y + 1) *
+                       std::uint64_t(last.z - first.z + 1);
+    if (cells > 2000000)
+        throw std::runtime_error("Static object exceeds supported spatial query size");
+    ObstacleResult result;
+    for (int x = first.x; x <= last.x; ++x)
+        for (int y = first.y; y <= last.y; ++y)
+            for (int z = first.z; z <= last.z; ++z) {
+                poll(cancel);
+                const auto found = data->grid.find({x, y, z});
+                if (found == data->grid.end())
+                    continue;
+                for (const auto index : found->second) {
+                    const auto &sweep = data->sweeps[index];
+                    if (!data->separatedFrom(sweep, box, result.minimumCertifiedGap, cancel)) {
+                        result.clear = false;
+                        result.firstTrackS = (sweep.begin + sweep.end) / 2;
+                        return result;
+                    }
+                }
+            }
     return result;
 }
 } // namespace coaster

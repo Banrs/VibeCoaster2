@@ -8,13 +8,15 @@
 namespace coaster {
 namespace {
 void requireReplay(const ReplayResult &p) {
-    for (double value : {p.position, p.forward, p.up, p.speed, p.energy, p.portPosition, p.portTangent,
-                         p.portUp, p.portCurvature, p.portThird, p.portUpThird})
+    for (double value :
+         {p.position, p.forward, p.up, p.speed, p.energy, p.portPosition, p.portTangent, p.portUp,
+          p.portCurvature, p.portThird, p.portUpFirst, p.portUpSecond, p.portUpThird})
         if (!std::isfinite(value))
             throw std::runtime_error("Ride replay evidence is not finite");
     if (!std::isfinite(p.position) || !std::isfinite(p.energy) || p.position > .005 || p.forward > 1e-4 ||
         p.up > 1e-4 || p.energy > .001 || p.portPosition > .001 || p.portTangent > 1e-5 || p.portUp > 1e-5 ||
-        p.portCurvature > 1e-5 || p.portThird > 1e-5 || p.portUpThird > 1e-4)
+        p.portCurvature > 1e-5 || p.portThird > 1e-5 || p.portUpFirst > 1e-5 || p.portUpSecond > 1e-5 ||
+        p.portUpThird > 1e-4)
         throw std::runtime_error("Ride source replay/continuity validation failed");
 }
 void requireSimulation(const Simulation &s, const char *name) {
@@ -71,6 +73,14 @@ void validateRide(Design &design, const Cancel &cancel) {
         evidence->replay = assessReplay(track, .01, c);
         evidence->refinedReplay = assessReplay(fine, .005, c);
         evidence->clearance = assessClearance(track, design.recipe.plateau, .5, c);
+    });
+    checks.push_back([&](const Cancel &c) {
+        try {
+            evidence->scene = authorStructures(track, design.recipe.plateau, c);
+        } catch (const std::runtime_error &error) {
+            throw std::runtime_error(std::string("Ride physical/clearance validation failed: ") +
+                                     error.what());
+        }
     });
     // Bound independent CPU checks, leaving a core for the interactive runtime.
     // Each check owns its output and reads immutable tracks. Even callbacks

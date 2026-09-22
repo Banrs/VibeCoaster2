@@ -1,4 +1,5 @@
 #include "VibeMesh.h"
+#include "coaster/vehicle.hpp"
 using coaster::Vec3;
 FVector VibePosition(Vec3 V) {
     return FVector(V.x, V.y, V.z) * 100;
@@ -38,6 +39,14 @@ void Box(FVibeMesh &M, Vec3 C, Vec3 T, Vec3 R, Vec3 U, Vec3 H, FLinearColor Colo
              {{0, 2, 3, 1}, {4, 5, 7, 6}, {0, 1, 5, 4}, {2, 6, 7, 3}, {0, 4, 6, 2}, {1, 3, 7, 5}}})
         Quad(M, P[Q[0]], P[Q[1]], P[Q[2]], P[Q[3]], Color);
 }
+void Solid(FVibeMesh &mesh, const coaster::ClearanceObstacle &shape, bool cylinder, FLinearColor color) {
+    if (cylinder)
+        Beam(mesh, shape.center - shape.axes[0] * shape.half[0], shape.center + shape.axes[0] * shape.half[0],
+             shape.half[1], color);
+    else
+        Box(mesh, shape.center, shape.axes[0], shape.axes[1], shape.axes[2],
+            {shape.half[0], shape.half[1], shape.half[2]}, color);
+}
 } // namespace
 FVibeMeshes BuildVibeMeshes(const coaster::Design &D, const coaster::Cancel &Cancel) {
     FVibeMeshes M;
@@ -58,21 +67,17 @@ FVibeMeshes BuildVibeMeshes(const coaster::Design &D, const coaster::Cancel &Can
         }
         Prior = F;
     }
-    // Provisional structural visualization; support member clearance has its
-    // own outstanding audit and is never inferred from rail-envelope success.
-    for (double S = 8; S < Track.length; S += 18) {
+    if (!D.validation)
+        throw std::runtime_error("Scene geometry requires fresh validation");
+    for (const auto &part : D.validation->scene.parts) {
         coaster::poll(Cancel);
-        const auto F = Track.at(S);
-        const Vec3 Top = F.p - F.u * 1.4;
-        Vec3 L = Top + F.r * 3.4, R = Top - F.r * 3.4;
-        Vec3 LB = L, RB = R;
-        LB.z = coaster::ground(L.x, L.y, D.recipe.plateau);
-        RB.z = coaster::ground(R.x, R.y, D.recipe.plateau);
-        if (L.z > LB.z + .4 && R.z > RB.z + .4) {
-            Beam(M.Supports, LB, L, .23, Support);
-            Beam(M.Supports, RB, R, .23, Support);
-            Beam(M.Supports, L, R, .24, Support);
-        }
+        const bool structural = part.material == coaster::SceneMaterial::Support;
+        const FLinearColor color =
+            structural                                          ? Support
+            : part.material == coaster::SceneMaterial::Platform ? FLinearColor(.48f, .47f, .43f)
+            : part.material == coaster::SceneMaterial::Roof     ? FLinearColor(.16f, .2f, .22f)
+                                                                : Tie;
+        Solid(structural ? M.Supports : M.Station, part.shape, part.cylinder, color);
     }
     // Shared indexed terrain: the clearance proof uses these exact vertices
     // and triangle diagonals; analytic normals only smooth its shading.
@@ -99,30 +104,17 @@ FVibeMeshes BuildVibeMeshes(const coaster::Design &D, const coaster::Cancel &Can
             const int A = X * NY + Y, B = (X + 1) * NY + Y, C = B + 1, D0 = A + 1;
             M.Terrain.Indices.Append({A, C, B, A, D0, C});
         }
-    const auto F = Track.at(0);
-    Box(M.Station, F.p - F.t * 10 - F.r * 3.5 - F.u * .5, F.t, F.r, F.u, {17, 1.8, .3},
-        FLinearColor(.48f, .47f, .43f));
-    for (double S : {-25., 3.})
-        for (double Side : {-5., -2.}) {
-            const Vec3 Base = F.p + F.t * S + F.r * Side - F.u * .2;
-            Beam(M.Station, Base, Base + Vec3{0, 0, 4.5}, .13, Tie);
-        }
-    Box(M.Station, F.p - F.t * 11 - F.r * 3.5 + F.u * 4.4, F.t, F.r, F.u, {16, 2.1, .15},
-        FLinearColor(.16f, .2f, .22f));
     return M;
 }
 FVibeMesh BuildVibeCar() {
-    FVibeMesh M;
-    const Vec3 T{1, 0, 0}, R{0, 1, 0}, U{0, 0, 1};
-    const FLinearColor Shell(.10f, .18f, .22f), Seat(.055f, .075f, .09f), Bar(.67f, .68f, .65f);
-    Box(M, {0, 0, .17}, T, R, U, {1.5, 1.05, .38}, Shell);
-    for (double X : {-.7, .7})
-        for (double Y : {-.57, .57}) {
-            Box(M, {X, Y, .62}, T, R, U, {.44, .38, .14}, Seat);
-            Box(M, {X - .55, Y, 1.04}, T, R, U, {.12, .39, .30}, Seat);
-            Box(M, {X - .55, Y, 1.37}, T, R, U, {.12, .29, .18}, Seat);
-            Box(M, {X - .55, Y, 1.64}, T, R, U, {.12, .18, .17}, Seat);
-            Beam(M, {X + .3, Y - .28, .86}, {X + .3, Y + .28, .86}, .055, Bar);
-        }
-    return M;
+    FVibeMesh mesh;
+    for (const auto &part : coaster::vehicleGeometry().parts) {
+        const auto &shape = part.shape;
+        const FLinearColor color =
+            part.material == coaster::VehicleMaterial::Shell  ? FLinearColor(.10f, .18f, .22f)
+            : part.material == coaster::VehicleMaterial::Seat ? FLinearColor(.055f, .075f, .09f)
+                                                              : FLinearColor(.67f, .68f, .65f);
+        Solid(mesh, shape, part.cylinder, color);
+    }
+    return mesh;
 }

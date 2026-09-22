@@ -1,9 +1,14 @@
-PASS case=0 seed=42 style=balanced speed=300 seconds=9.35916
-PASS case=1 seed=77 style=balanced speed=300 seconds=9.73378
-PASS case=2 seed=77 style=balanced speed=300 seconds=9.90027
-PASS case=3 seed=42 style=flow speed=300 seconds=9.42559
-PASS case=4 seed=77 style=intense speed=300 seconds=10.634
-PASS case=5 seed=42 style=balanced speed=290 seconds=10.735
-PASS case=6 seed=42 style=balanced speed=305 seconds=10.5556
-PASS case=7 seed=42 style=balanced speed=300 seconds=8.91059
-PASS case=8 seed=42 style=balanced speed=300 seconds=10.936
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.14.39
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+generator_tests.cpp
+PASS case=0 seed=42 style=balanced speed=300 seconds=9.90666
+PASS case=1 seed=77 style=balanced speed=300 seconds=9.85959
+PASS case=2 seed=77 style=balanced speed=300 seconds=9.6986
+PASS case=3 seed=42 style=flow speed=300 seconds=9.73984
+PASS case=4 seed=77 style=intense speed=300 seconds=10.9851
+PASS case=5 seed=42 style=balanced speed=290 seconds=11.3734
+PASS case=6 seed=42 style=balanced speed=305 seconds=10.5299
+PASS case=7 seed=42 style=balanced speed=300 seconds=9.12343
+PASS case=8 seed=42 style=balanced speed=300 seconds=11.1395

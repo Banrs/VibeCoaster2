@@ -51,13 +51,27 @@ velocities never reset the independent finite-train energy evolution.
 Continuous occupied-box bounds certify terrain and nonlocal track clearance.
 Rendering and clearance share the same indexed terrain triangles, including a
 1 mm rendering precision allowance. Tests cover ravine shoulders, cell edges,
-nearby nonadjacent crossings and cancellation. Support, station, complete
-vehicle articulation and hardware clearance are still separate open checks.
+nearby nonadjacent crossings and cancellation. Support/station checks now use
+continuous bounds refined against the same 35 vehicle parts rendered by Unreal,
+plus four conservative occupant volumes. The existing terrain/track envelope
+and the 250 mm static-object margin remain unchanged. No local-distance exclusion
+is applied to static scene objects.
+
+The default produces 462 connected support locations and 881 checked structure
+parts, including station piers embedded in the fixed terrain. Alternate columns,
+portals and cantilevers are selected by clearance; no support interval is omitted.
+The renderer consumes the checked geometry instead of rebuilding different supports.
+This verifies the explicit per-car geometry model, not structural strength,
+fatigue or a complete multibody/contact certification.
+
+A new regression exposed a missed station closure boundary. Independent replay
+now checks the closing join and every orientation derivative through third order;
+a position-closed but orientation-discontinuous fixture is rejected.
 
 Saved format 3 records fixed-site revision 2. Earlier development saves are
 explicitly rejected instead of being reinterpreted against changed terrain.
 Loading rebuilds its operating reference and all seven dynamics assessments,
-independent replay and terrain/track clearance. Evidence is published only after
+independent replay, terrain/track and shared scene clearance. Evidence is published only after
 every check passes; no saved approval is trusted. Independent checks use up to
 eight workers, while cancellation callbacks are serialized.
 
@@ -83,8 +97,15 @@ authoring controls, CPU/upload/GPU cancellation and corrupt-load rejection.
 Every cancelled or rejected replacement retained the playing, rendered prior
 ride. These tests use the real runtime handlers; they are not manual mouse tests.
 
-Three fully validated preview loads reached GPU readiness in 2.387, 2.532 and
-2.547 s. Exact polynomial derivative evaluation reduced matched native loads
+The latest three fully validated preview loads reached GPU readiness in 2.434,
+2.585 and 2.501 s, including support/station validation. Initial UI startup was
+9.66 s in that process and is reported separately. Completion timing now follows
+the final scene ownership/cleanup work; UTC markers permit independent startup
+measurement. A reusable verifier checks marker consistency, rendered-frame counts
+and flow outcomes. Saving also updates the subsequent Load target.
+
+Earlier development samples showed that exact polynomial derivative evaluation
+reduced matched native loads
 of one unchanged save from median 2.808 to 2.368 s in three paired samples.
 These are small development samples, not p99 or release acceptance. An earlier
 first request after material rebuilding took 5.77 s; that tail remains recorded.
@@ -95,13 +116,13 @@ delay or establish old GPU readiness. An archived 25.204 s event is generation,
 not loading. Startup, process-cold and warm measurements must remain separate.
 
 See [runtime-verification.md](runtime-verification.md) and the retained evidence
-for exact scope. The preceding `6296602` checkpoint passed Windows/macOS CI:
-https://github.com/Banrs/VibeCoaster2/actions/runs/35769490814 .
+for exact scope. The preceding `a4c33e5` checkpoint passed Windows/macOS CI:
+https://github.com/Banrs/VibeCoaster2/actions/runs/35775800852 .
 
 ## Remaining acceptance work
 
-Full support/station/vehicle clearance, physical motor coverage, further visual
-composition, sufficient cold/warm load-tail samples, the matched Escarpment
+Physical motor coverage, further visual composition, sufficient cold/warm load-tail
+samples, the matched Escarpment
 generation baseline, versioned packages and exact tested Play executable identity
 remain open. Native and automated GPU passes alone are not final ride acceptance.
 

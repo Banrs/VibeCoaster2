@@ -133,7 +133,7 @@ struct FVibeState {
     double RideTime = 0, Started = FPlatformTime::Seconds(), RequestStarted = 0, LastTick = Started,
            NextAction = 0;
     bool Paused = true, Loading = false, Committing = false, Auto = false, Quit = false, MenuReady = false;
-    bool RideVerify = false, FlowVerify = false, FlowCancelIssued = false;
+    bool RideVerify = false, FlowVerify = false, FlowCancelIssued = false, AutoLoad = false;
     int FlowStep = 0, FlowFrameStart = 0;
     bool FlowExpectedFailure = false;
     FString FlowOriginalPath, FlowInvalidPath;
@@ -192,6 +192,7 @@ void AVibeWorld::BeginPlay() {
     S.Cycles = FMath::Clamp(S.Cycles, 1, 2000);
     S.Quit = FParse::Param(FCommandLine::Get(), TEXT("VibeQuit"));
     S.Auto = !S.Output.IsEmpty();
+    S.AutoLoad = FParse::Param(FCommandLine::Get(), TEXT("VibeAutoLoad"));
     S.RideVerify = FParse::Param(FCommandLine::Get(), TEXT("VibeRideVerify"));
     S.FlowVerify = FParse::Param(FCommandLine::Get(), TEXT("VibeFlowVerify"));
     if (S.FlowVerify)
@@ -210,7 +211,7 @@ void AVibeWorld::BeginPlay() {
 #endif
     auto *Sun = GetWorld()->SpawnActor<ADirectionalLight>();
     Sun->GetLightComponent()->SetMobility(EComponentMobility::Movable);
-    Sun->SetActorRotation(FRotator(-42, -34, 0));
+    Sun->SetActorRotation(FRotator(-42, 34, 0));
     Sun->GetLightComponent()->SetIntensity(80000);
     Cast<UDirectionalLightComponent>(Sun->GetLightComponent())->SetAtmosphereSunLight(true);
     Sun->GetLightComponent()->SetLightColor(FLinearColor(1.f, .91f, .78f));
@@ -257,9 +258,11 @@ void AVibeWorld::BeginPlay() {
 void AVibeWorld::Event(const FString &Name, const FString &Fields) {
     if (State->Output.IsEmpty())
         return;
-    const FString Row = TEXT("{\"event\":") + Quote(Name) +
-                        FString::Printf(TEXT(",\"wall\":%.9f"), FPlatformTime::Seconds() - State->Started) +
-                        Fields + TEXT("}\n");
+    const FString Row =
+        TEXT("{\"event\":") + Quote(Name) +
+        FString::Printf(TEXT(",\"wall\":%.9f,\"utc_ticks\":\"%lld\""),
+                        FPlatformTime::Seconds() - State->Started, FDateTime::UtcNow().GetTicks()) +
+        Fields + TEXT("}\n");
     FFileHelper::SaveStringToFile(Row, *(State->Output / TEXT("events.jsonl")),
                                   FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(),
                                   FILEWRITE_Append);
@@ -360,7 +363,7 @@ void AVibeWorld::Tick(float DeltaSeconds) {
         S.MenuReady = true;
         S.Ready->Complete = false;
         Event(TEXT("ui-gpu-ready"));
-        if (S.Auto)
+        if (S.Auto || S.AutoLoad)
             Request(IFileManager::Get().FileExists(*S.InputPath));
     }
     if (S.Active.Design && !S.Paused)
@@ -372,6 +375,7 @@ void AVibeWorld::Tick(float DeltaSeconds) {
             // Cancellation after the atomic rename cannot undo a completed
             // save. Report the actual outcome instead of claiming cancellation.
             S.Status = TEXT("Saved. Ride remains ready.");
+            S.InputPath = S.SavePath;
             S.Loading = false;
             Event(TEXT("saved"));
         } else if (!S.Job->Error.IsEmpty() || S.Job->Cancel) {
@@ -491,11 +495,12 @@ void AVibeWorld::Tick(float DeltaSeconds) {
         S.Committing = false;
         S.Loading = false;
         ++S.Completed;
-        S.Status = TEXT("Preview ready \u00b7 scene clearance pending");
+        S.Status = TEXT("Preview ready \u00b7 hardware checks pending");
         S.Job.reset();
+        const double CompletedAt = FPlatformTime::Seconds();
         Event(TEXT("gpu-ready"),
               FString::Printf(TEXT(",\"seconds\":%.9f,\"rendered_frames\":%d,\"cycle\":%d"),
-                              Now - S.RequestStarted, S.Ready->Frames.load(), S.Completed));
+                              CompletedAt - S.RequestStarted, S.Ready->Frames.load(), S.Completed));
         if (S.Auto) {
             FScreenshotRequest::RequestScreenshot(
                 S.Output / FString::Printf(TEXT("scene-%04d.png"), S.Completed), true, false);
@@ -627,11 +632,11 @@ void AVibeWorld::VerifyFlow(double Now) {
     if (S.FlowStep == 2) {
         if (S.Loading)
             return;
-        if (!Require(S.Job && S.Job->Phase == 5 && IFileManager::Get().FileExists(*S.SavePath),
-                     TEXT("Saved design was not committed")))
+        if (!Require(S.Job && S.Job->Phase == 5 && IFileManager::Get().FileExists(*S.SavePath) &&
+                         S.InputPath == S.SavePath,
+                     TEXT("Saved design or the subsequent Load target was not committed")))
             return;
         Event(TEXT("flow-save-pass"));
-        S.InputPath = S.SavePath;
         S.FlowStep = 3;
         Request(true);
         return;
