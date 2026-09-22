@@ -444,12 +444,12 @@ void AVibeWorld::Tick(float DeltaSeconds) {
             Event(TEXT("material-wait"),
                   FString::Printf(
                       TEXT(",\"jobs\":%d,\"pending\":%d,\"resource\":%d,\"valid_map\":%d,\"complete_map\":%d,"
-                           "\"errors\":%d,\"platform\":%d"),
+                           "\"platform\":%d"),
                       GShaderCompilingManager ? GShaderCompilingManager->GetNumOutstandingJobs() : 0,
                       GShaderCompilingManager ? GShaderCompilingManager->GetNumPendingJobs() : 0,
                       Resource != nullptr, Resource ? Resource->HasValidGameThreadShaderMap() : false,
                       Resource ? Resource->IsGameThreadShaderMapComplete() : false,
-                      Resource ? Resource->GetCompileErrors().Num() : 0, int(GMaxRHIShaderPlatform)));
+                      int(GMaxRHIShaderPlatform)));
             S.NextMaterialReport = Now + 2;
         }
         if (ShadersReady) {
