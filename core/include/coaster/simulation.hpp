@@ -1,6 +1,7 @@
 #pragma once
 #include "coaster/recipe.hpp"
 #include "coaster/acceleration.hpp"
+#include "coaster/hardware.hpp"
 
 namespace coaster {
 struct Scenario {
@@ -23,6 +24,8 @@ struct Simulation {
     std::array<Vec3, 3> minimum, maximum, rate;
     std::array<AccelerationAssessment, 3> acceleration;
     std::array<ForceEnvelope, 3> envelope;
+    HardwarePlan hardware;
+    std::vector<HardwareDemand> demand;
     std::vector<Sample> playback;
     std::vector<double> entrySpeeds;
     std::vector<std::string> failures;

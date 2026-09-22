@@ -1,0 +1,44 @@
+{"event": "startup", "wall": 0.009116098, "utc_ticks": "639257112621580000", "engine": "5.8.2-56702186+++UE5+Release-5.8", "save": "isolated-profile/Saved/Designs/Current.vcd"}
+{"event": "ui-gpu-ready", "wall": 1.561062898, "utc_ticks": "639257112637090000"}
+{"event": "request", "wall": 1.561293799, "utc_ticks": "639257112637090000", "load": true, "cycle": 0}
+{"event": "native-ready", "wall": 3.5945387, "utc_ticks": "639257112657430000", "seconds": 2.0331387, "worker_native": 1.872329898, "worker_mesh": 0.1552286}
+{"event": "scene-submit", "wall": 3.6682075, "utc_ticks": "639257112658180000"}
+{"event": "scene-commit", "wall": 3.668421298, "utc_ticks": "639257112658180000"}
+{"event": "materials-ready", "wall": 3.668518998, "utc_ticks": "639257112658180000"}
+{"event": "gpu-ready", "wall": 3.928761199, "utc_ticks": "639257112660780000", "seconds": 2.367461298, "rendered_frames": 4, "cycle": 1, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "flow-start", "wall": 3.928987499, "utc_ticks": "639257112660780000"}
+{"event": "request", "wall": 3.9291238, "utc_ticks": "639257112660780000", "load": false, "cycle": 1}
+{"event": "native-ready", "wall": 12.065141, "utc_ticks": "639257112742140000", "seconds": 8.1359105, "worker_native": 7.945310201, "worker_mesh": 0.180472698}
+{"event": "scene-submit", "wall": 12.157560498, "utc_ticks": "639257112743060000"}
+{"event": "scene-commit", "wall": 12.157737598, "utc_ticks": "639257112743070000"}
+{"event": "materials-ready", "wall": 12.157879598, "utc_ticks": "639257112743070000"}
+{"event": "gpu-ready", "wall": 12.373275898, "utc_ticks": "639257112745220000", "seconds": 8.444148198, "rendered_frames": 4, "cycle": 2, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "flow-generate-pass", "wall": 12.373454299, "utc_ticks": "639257112745220000"}
+{"event": "saved", "wall": 12.6455203, "utc_ticks": "639257112747950000"}
+{"event": "flow-save-pass", "wall": 12.645672597, "utc_ticks": "639257112747950000"}
+{"event": "request", "wall": 12.645761799, "utc_ticks": "639257112747950000", "load": true, "cycle": 2}
+{"event": "native-ready", "wall": 14.678938799, "utc_ticks": "639257112768280000", "seconds": 2.0330786, "worker_native": 1.867703501, "worker_mesh": 0.1567945}
+{"event": "scene-submit", "wall": 14.760958899, "utc_ticks": "639257112769100000"}
+{"event": "scene-commit", "wall": 14.761195797, "utc_ticks": "639257112769100000"}
+{"event": "materials-ready", "wall": 14.7613458, "utc_ticks": "639257112769100000"}
+{"event": "gpu-ready", "wall": 14.994772799, "utc_ticks": "639257112771440000", "seconds": 2.349003401, "rendered_frames": 3, "cycle": 3, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "flow-roundtrip-pass", "wall": 14.9950126, "utc_ticks": "639257112771440000"}
+{"event": "request", "wall": 14.995315798, "utc_ticks": "639257112771440000", "load": true, "cycle": 3}
+{"event": "cancelled", "wall": 15.331857197, "utc_ticks": "639257112774810000", "error": "Cancelled. Previous ride retained."}
+{"event": "flow-cancel-pass", "wall": 15.398476597, "utc_ticks": "639257112775470000", "stage": "cpu", "rendered_frames": 7, "ride_advanced": 0.421254}
+{"event": "request", "wall": 15.398692798, "utc_ticks": "639257112775470000", "load": true, "cycle": 3}
+{"event": "native-ready", "wall": 17.5318936, "utc_ticks": "639257112796810000", "seconds": 2.133104999, "worker_native": 1.9625891, "worker_mesh": 0.157614801}
+{"event": "cancelled", "wall": 17.553032298, "utc_ticks": "639257112797020000"}
+{"event": "flow-cancel-pass", "wall": 17.632373698, "utc_ticks": "639257112797820000", "stage": "upload", "rendered_frames": 134, "ride_advanced": 2.233904}
+{"event": "request", "wall": 17.636387099, "utc_ticks": "639257112797860000", "load": true, "cycle": 3}
+{"event": "native-ready", "wall": 19.682494197, "utc_ticks": "639257112818310000", "seconds": 2.046005599, "worker_native": 1.881684899, "worker_mesh": 0.1587401}
+{"event": "scene-submit", "wall": 19.755022097, "utc_ticks": "639257112819040000"}
+{"event": "scene-commit", "wall": 19.755246598, "utc_ticks": "639257112819040000"}
+{"event": "materials-ready", "wall": 19.755341098, "utc_ticks": "639257112819040000"}
+{"event": "cancelled", "wall": 19.764106799, "utc_ticks": "639257112819130000"}
+{"event": "flow-cancel-pass", "wall": 19.879609298, "utc_ticks": "639257112820280000", "stage": "gpu", "rendered_frames": 127, "ride_advanced": 2.247195}
+{"event": "request", "wall": 19.8848725, "utc_ticks": "639257112820340000", "load": true, "cycle": 3}
+{"event": "request-failed", "wall": 19.896218598, "utc_ticks": "639257112820450000", "error": "Saved design integrity check failed. Previous ride retained."}
+{"event": "flow-rejection-pass", "wall": 19.963132497, "utc_ticks": "639257112821120000"}
+{"event": "flow-pass", "wall": 19.9632718, "utc_ticks": "639257112821120000"}
+{"event": "finished", "wall": 20.367728699, "utc_ticks": "639257112825170000"}

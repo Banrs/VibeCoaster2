@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "b354a0ecdfa5da7db8adc515e6635ccca52ebb64",
+  "workingTreeChanges": true,
+  "mode": "Loads",
+  "cycles": 3,
+  "executableSha256": "6F9C95C131F37CBDC384ADE02FCF6ED828BAA366B25234D0D85E212244CAC9AA",
+  "fixtureSha256": "058967F0836BE874F30617AD3138C27811FDE04F57282319E9B75C3BE46AF572",
+  "resolution": "2560x1440",
+  "benchmark": true,
+  "maxFps": 60,
+  "disableVSync": true,
+  "cacheState": "Fresh process/profile; OS file and driver caches are uncontrolled",
+  "moduleSha256": "238F8C95763E0416380863232CDFA387C13B31BD25E547626EE69A41A05308B7",
+  "materialSha256": "154EFA281CB03109D1791A6D8E638F82EBDC929B7C873E459D330AC514B75E85"
+}

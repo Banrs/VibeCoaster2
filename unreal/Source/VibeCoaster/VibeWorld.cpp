@@ -134,6 +134,7 @@ struct FVibeState {
            NextAction = 0;
     bool Paused = true, Loading = false, Committing = false, Auto = false, Quit = false, MenuReady = false;
     bool RideVerify = false, FlowVerify = false, FlowCancelIssued = false, AutoLoad = false;
+    bool GenerateVerify = false, Benchmark = false;
     int FlowStep = 0, FlowFrameStart = 0;
     bool FlowExpectedFailure = false;
     FString FlowOriginalPath, FlowInvalidPath;
@@ -186,6 +187,8 @@ void AVibeWorld::BeginPlay() {
     S.SavePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Designs/Current.vcd"));
     IFileManager::Get().MakeDirectory(*FPaths::GetPath(S.SavePath), true);
     S.InputPath = S.SavePath;
+    if (!IFileManager::Get().FileExists(*S.InputPath))
+        FParse::Value(FCommandLine::Get(), TEXT("VibeDefault="), S.InputPath);
     FParse::Value(FCommandLine::Get(), TEXT("VibeLoad="), S.InputPath);
     FParse::Value(FCommandLine::Get(), TEXT("VibeVerify="), S.Output);
     FParse::Value(FCommandLine::Get(), TEXT("VibeCycles="), S.Cycles);
@@ -193,6 +196,8 @@ void AVibeWorld::BeginPlay() {
     S.Quit = FParse::Param(FCommandLine::Get(), TEXT("VibeQuit"));
     S.Auto = !S.Output.IsEmpty();
     S.AutoLoad = FParse::Param(FCommandLine::Get(), TEXT("VibeAutoLoad"));
+    S.GenerateVerify = FParse::Param(FCommandLine::Get(), TEXT("VibeGenerateVerify"));
+    S.Benchmark = FParse::Param(FCommandLine::Get(), TEXT("VibeBenchmark"));
     S.RideVerify = FParse::Param(FCommandLine::Get(), TEXT("VibeRideVerify"));
     S.FlowVerify = FParse::Param(FCommandLine::Get(), TEXT("VibeFlowVerify"));
     if (S.FlowVerify)
@@ -364,7 +369,7 @@ void AVibeWorld::Tick(float DeltaSeconds) {
         S.Ready->Complete = false;
         Event(TEXT("ui-gpu-ready"));
         if (S.Auto || S.AutoLoad)
-            Request(IFileManager::Get().FileExists(*S.InputPath));
+            Request(!S.GenerateVerify && IFileManager::Get().FileExists(*S.InputPath));
     }
     if (S.Active.Design && !S.Paused)
         S.RideTime = std::min(S.RideTime + double(DeltaSeconds), S.Active.Design->baseline->duration);
@@ -495,15 +500,20 @@ void AVibeWorld::Tick(float DeltaSeconds) {
         S.Committing = false;
         S.Loading = false;
         ++S.Completed;
-        S.Status = TEXT("Preview ready \u00b7 hardware checks pending");
+        S.Status = TEXT("Preview ready \u00b7 scoped checks passed");
         S.Job.reset();
+        int32 ViewportWidth = 0, ViewportHeight = 0;
+        if (auto *Controller = GetWorld()->GetFirstPlayerController())
+            Controller->GetViewportSize(ViewportWidth, ViewportHeight);
         const double CompletedAt = FPlatformTime::Seconds();
-        Event(TEXT("gpu-ready"),
-              FString::Printf(TEXT(",\"seconds\":%.9f,\"rendered_frames\":%d,\"cycle\":%d"),
-                              CompletedAt - S.RequestStarted, S.Ready->Frames.load(), S.Completed));
+        Event(TEXT("gpu-ready"), FString::Printf(TEXT(",\"seconds\":%.9f,\"rendered_frames\":%d,\"cycle\":%d,"
+                                                      "\"viewport_width\":%d,\"viewport_height\":%d"),
+                                                 CompletedAt - S.RequestStarted, S.Ready->Frames.load(),
+                                                 S.Completed, ViewportWidth, ViewportHeight));
         if (S.Auto) {
-            FScreenshotRequest::RequestScreenshot(
-                S.Output / FString::Printf(TEXT("scene-%04d.png"), S.Completed), true, false);
+            if (!S.Benchmark)
+                FScreenshotRequest::RequestScreenshot(
+                    S.Output / FString::Printf(TEXT("scene-%04d.png"), S.Completed), true, false);
             if (S.RideVerify) {
                 S.RidePass = 1;
                 S.View = 1;
@@ -573,7 +583,7 @@ void AVibeWorld::Tick(float DeltaSeconds) {
     if (S.Auto && !S.FlowVerify && !S.Loading && S.NextAction > 0 && Now >= S.NextAction) {
         S.NextAction = 0;
         if (S.Completed < S.Cycles)
-            Request(true);
+            Request(!S.GenerateVerify);
         else if (S.Quit) {
             Event(TEXT("finished"));
             FPlatformMisc::RequestExitWithStatus(false, 0);

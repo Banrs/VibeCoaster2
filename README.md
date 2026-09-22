@@ -27,8 +27,15 @@ builds also use one compiler worker.
 See [rewrite decisions](docs/rewrite.md), [current evidence and open work](docs/progress.md)
 and [acceleration scope](docs/acceleration-standard.md). A checksum establishes
 save integrity; it never establishes physical validity. Final acceptance also
-requires physical motor coverage, saved-load p99 below 5 s, a tested
+requires saved-load p99 below 5 s, a tested
 package and exact Play executable identity.
 
 The archived implementation, launchers and fallback profiles are preserved
 outside this repository. The parent workspace and VibeCoasterjs are untouched.
+
+Drive commands now resolve onto spatially engaged train reaction points, with
+force, power and work demand reported for every assessed scenario. See
+[modeled hardware scope](docs/hardware-coverage.md). This preview does not select
+or certify manufacturer equipment. `scripts/package.ps1` builds a fresh versioned
+Windows archive from clean committed source. `Play.cmd` verifies the promoted
+package identity and payload before launching. Promotion follows GPU tests.

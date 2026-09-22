@@ -1,0 +1,74 @@
+{
+  "scope": "Development checkpoint before hardware coverage; final package measurement remains separate. Old endpoint is scene commit, new endpoint includes actual GPU readiness. OS caches uncontrolled. Six sequential fresh-process/profile runs per implementation; no compiler or other benchmark overlapped.",
+  "escarpmentIdentity": {
+    "executableSha256": "397DF917F27129F2A33ADD25552669D3303F457D563182ABFFBD10EACA204408",
+    "version": "2.0.0-escarpment.1",
+    "mode": "generation",
+    "seed": 42,
+    "terrainArgument": "highlands",
+    "resolution": "2560x1440",
+    "maxFps": 60,
+    "vsync": false,
+    "profile": "new isolated profile",
+    "cacheState": "OS file/driver caches uncontrolled"
+  },
+  "rewriteIdentity": {
+    "sourceCommit": "b354a0ecdfa5da7db8adc515e6635ccca52ebb64",
+    "workingTreeChanges": true,
+    "mode": "Generate",
+    "cycles": 1,
+    "executableSha256": "6F9C95C131F37CBDC384ADE02FCF6ED828BAA366B25234D0D85E212244CAC9AA",
+    "fixtureSha256": "058967F0836BE874F30617AD3138C27811FDE04F57282319E9B75C3BE46AF572",
+    "resolution": "2560x1440",
+    "maxFps": 60,
+    "disableVSync": true,
+    "cacheState": "Fresh process/profile; OS file and driver caches are uncontrolled",
+    "moduleSha256": "FDF2193B95A2A17AD95FE85D1FD0C2189C6D811ED1A315FD555D8321D3ACD9D6",
+    "materialSha256": "154EFA281CB03109D1791A6D8E638F82EBDC929B7C873E459D330AC514B75E85"
+  },
+  "samples": [
+    {
+      "sample": 1,
+      "escarpmentRequestToSceneCommitSeconds": 31.709699001163244,
+      "rewriteRequestToGpuSeconds": 7.531926401,
+      "rewriteProcessStartupSeconds": 10.0710681
+    },
+    {
+      "sample": 2,
+      "escarpmentRequestToSceneCommitSeconds": 31.45665580034256,
+      "rewriteRequestToGpuSeconds": 7.520829801,
+      "rewriteProcessStartupSeconds": 9.4255637
+    },
+    {
+      "sample": 3,
+      "escarpmentRequestToSceneCommitSeconds": 31.67016790062189,
+      "rewriteRequestToGpuSeconds": 7.522733502,
+      "rewriteProcessStartupSeconds": 9.5003251
+    },
+    {
+      "sample": 4,
+      "escarpmentRequestToSceneCommitSeconds": 31.937254700809717,
+      "rewriteRequestToGpuSeconds": 7.522284299,
+      "rewriteProcessStartupSeconds": 9.4828038
+    },
+    {
+      "sample": 5,
+      "escarpmentRequestToSceneCommitSeconds": 31.590275697410107,
+      "rewriteRequestToGpuSeconds": 7.533138301,
+      "rewriteProcessStartupSeconds": 9.5912848
+    },
+    {
+      "sample": 6,
+      "escarpmentRequestToSceneCommitSeconds": 31.388043500483036,
+      "rewriteRequestToGpuSeconds": 7.5791559,
+      "rewriteProcessStartupSeconds": 9.4436839
+    }
+  ],
+  "escarpmentMedianSeconds": 31.630221799016,
+  "rewriteMedianSeconds": 7.5273299515000005,
+  "reductionPercent": 76.20209558020181,
+  "escarpmentTrackLengthMeters": 8756.713958489156,
+  "escarpmentDurationSeconds": 201.26979166750374,
+  "rewriteTrackLengthMeters": 8310.965273,
+  "rewriteDurationSeconds": 191.940625
+}

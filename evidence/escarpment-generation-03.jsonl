@@ -1,0 +1,5 @@
+{"event": "begin", "wall_seconds": 0.07578770071268082, "app_version": "2.0.0-escarpment.1", "geometry_version": "2.0.0-escarpment.1"}
+{"event": "missing-reference-refused", "wall_seconds": 0.09117059782147408, "message": "ALL RECORDS unavailable: the measured I305/Pantherian force benchmark is missing.\nThis is not a failed seed search. PHYSICS-PROOF can test the other selected targets."}
+{"event": "generation-requested", "wall_seconds": 0.10777809843420982, "seed": "42", "terrain": "highlands"}
+{"event": "accepted-commit", "wall_seconds": 31.7779459990561, "geometry_sha1": "5D91E21834F674A6FB5C174D508F9BC2C06D64BB", "seed": "42", "terrain": "highlands", "duration_s": 201.26979166750374, "track_length_m": 8756.713958489156, "convergence_performed": true, "convergence_passed": true}
+{"event": "first-motion", "wall_seconds": 31.813314400613308, "ride_time": 0.15790409818291665, "distance_m": 38.5191753631572, "speed_ms": 0.5579234048297806}

@@ -4,7 +4,7 @@
 
 namespace coaster {
 // Fresh source/dynamics and scene-geometry evidence for the explicit model.
-// Physical motor coverage and release checks are separate; this is not whole-standard approval.
+// Includes modeled spatial drive coverage; this is not whole-standard approval.
 struct RideValidation {
     ReplayResult replay, refinedReplay;
     Clearance clearance;

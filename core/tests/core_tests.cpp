@@ -14,6 +14,39 @@ void near(double a, double b, double e, const char *why) {
 } // namespace
 int main() {
     try {
+        HardwarePlan hardware{
+            {{"motor", ActuatorKind::LinearMotor, 0, 100}, {"brake", ActuatorKind::Brake, 100, 200}},
+            {0, 1, -1}};
+        std::array<Frame, 6> reactionFrames;
+        for (auto &f : reactionFrames) {
+            f.t = {1, 0, 0};
+            f.u = {0, 0, 1};
+            f.upS = {-.2, 0, 0};
+        }
+        const auto delivery = deliverDrive(hardware, 0, 0, 20, reactionFrames, 60000);
+        check(delivery.engaged == 3, "Hardware ignored the train's finite entry footprint");
+        near(delivery.forcePerReaction, 60000 / (3 * 1.06), 1e-8, "Reaction Jacobian force allocation");
+        near(delivery.power, 1200000, 1e-8, "Hardware virtual work changed delivered power");
+        near(delivery.residual, 0, 1e-8, "Hardware generalized-force residual");
+        near(deliverDrive(hardware, 1, 150, 20, reactionFrames, -60000).power, -1200000, 1e-8,
+             "Brake energy absorption sign");
+        auto rejectedDrive = [&](std::size_t element, double s, double force) {
+            try {
+                deliverDrive(hardware, element, s, 20, reactionFrames, force);
+            } catch (const std::runtime_error &) {
+                return true;
+            }
+            return false;
+        };
+        check(rejectedDrive(0, 120, 60000), "Uncovered drive was accepted");
+        check(rejectedDrive(1, 150, 60000), "Brake supplied positive power");
+        check(rejectedDrive(2, 50, 60000), "Coast element acquired motor authority");
+        check(deliverDrive(hardware, 2, 50, 20, reactionFrames, 0).zone == -1,
+              "Coasting required an actuator");
+        HardwarePlan catchPlan{{{"launch", ActuatorKind::CableLaunch, -10.4, 40}}, {0}};
+        const auto caught = deliverDrive(catchPlan, 0, 0, 0, reactionFrames, 350000);
+        check(caught.engaged == 1, "Launch catch did not attach to the rear reaction point");
+        near(caught.power, 0, 0, "Stationary launch has nonzero mechanical power");
         const auto nominal = assessForceEnvelope({-4.5, -1.5, -1.5}, {4.5, 1.5, 5});
         check(nominal.nominalPassed && nominal.peakAllowancePassed && nominal.maximumExcessPercent == 0,
               "Nominal envelope boundary");

@@ -5,12 +5,12 @@
 
 namespace coaster {
 namespace {
-constexpr std::array<double, 6> carOffsets{-8.5, -5.1, -1.7, 1.7, 5.1, 8.5};
 constexpr std::array<double, 3> seats{8.5, 0, -8.5};
 constexpr double seatHeight = 1.2;
 struct Dynamics {
     double a{}, potentialSlope{}, drive{}, loss{}, metric{1}, metricS{}, potential{};
     std::size_t element{};
+    std::array<Frame, 6> cars;
 };
 Dynamics acceleration(const Track &track, double s, double v, const Scenario &scenario,
                       std::array<std::size_t, 7> &hints) {
@@ -18,6 +18,7 @@ Dynamics acceleration(const Track &track, double s, double v, const Scenario &sc
     d.metric = 0;
     for (std::size_t i = 0; i < carOffsets.size(); ++i) {
         const auto f = track.at(s + carOffsets[i], hints[i]);
+        d.cars[i] = f;
         const Vec3 first = f.t + f.upS * .5, second = f.k + f.upSS * .5;
         d.metric += dot(first, first) / 6;
         d.metricS += 2 * dot(first, second) / 6;
@@ -27,8 +28,8 @@ Dynamics acceleration(const Track &track, double s, double v, const Scenario &sc
     const auto center = track.at(s, hints[6]);
     d.element = center.element;
     const auto &p = track.source[center.element];
-    // A distributed drive command acts on the train, with finite train mass
-    // and offset energy. Spatial motor coverage is a separate hardware audit.
+    // Generalized demand is resolved onto spatially engaged reaction points
+    // below, after the initial time-commanded launch override.
     d.drive = center.drive / scenario.massScale;
     d.loss = (p.rolling * std::tanh(v / .2) + p.drag * scenario.dragScale * v * v) / scenario.massScale;
     if (p.role == Role::Ascent || p.role == Role::DownhillLaunch || p.role == Role::Lip) {
@@ -69,7 +70,6 @@ Dynamics acceleration(const Track &track, double s, double v, const Scenario &sc
             d.loss + d.potentialSlope + .5 * d.metricS * v * v + d.metric * positionDeceleration;
         d.drive = std::lerp(d.drive, std::min(0., controlled), smooth((3 - v) / 2));
     }
-    d.a = (d.drive - d.loss - d.potentialSlope - .5 * d.metricS * v * v) / d.metric;
     return d;
 }
 void include(Vec3 x, Vec3 &lo, Vec3 &hi) {
@@ -102,6 +102,10 @@ Simulation simulate(const Track &track, const Scenario &scenario, double dt, con
     Simulation result;
     result.dt = dt;
     result.assessed = assess;
+    if (assess) {
+        result.hardware = planHardware(track);
+        result.demand.resize(result.hardware.zones.size());
+    }
     result.entrySpeeds.assign(track.source.size(), std::numeric_limits<double>::quiet_NaN());
     result.entrySpeeds[0] = track.source.front().initial.v;
     for (auto &m : result.minimum)
@@ -120,6 +124,31 @@ Simulation simulate(const Track &track, const Scenario &scenario, double dt, con
     std::array<Vec3, 3> previous{};
     // Time-commanded launch avoids the singular inverse t(s) at standstill.
     const auto &first = track.source.front();
+    auto dynamicsAt = [&](double position, double speed, double time, double workStep) {
+        auto d = acceleration(track, position, speed, scenario, hints);
+        std::size_t commandElement = d.element;
+        if (time <= first.duration() && first.role == Role::Launch) {
+            d.drive = controlAt(first, time).drive / scenario.massScale;
+            commandElement = 0;
+        }
+        if (assess) {
+            const auto delivery = deliverDrive(result.hardware, commandElement, position, speed, d.cars,
+                                               d.drive * trainMass * scenario.massScale);
+            if (delivery.zone >= 0) {
+                auto &q = result.demand[std::size_t(delivery.zone)];
+                q.peakForce = std::max(q.peakForce, std::abs(delivery.force));
+                q.peakReactionForce = std::max(q.peakReactionForce, std::abs(delivery.forcePerReaction));
+                q.peakPower = std::max(q.peakPower, std::abs(delivery.power));
+                q.positiveWork += std::max(0., delivery.power) * workStep;
+                q.absorbedWork += std::max(0., -delivery.power) * workStep;
+                q.maximumWorkResidual = std::max(q.maximumWorkResidual, delivery.residual * speed);
+                q.minimumEngaged =
+                    q.minimumEngaged ? std::min(q.minimumEngaged, delivery.engaged) : delivery.engaged;
+            }
+        }
+        d.a = (d.drive - d.loss - d.potentialSlope - .5 * d.metricS * speed * speed) / d.metric;
+        return d;
+    };
     for (std::size_t index = 0; index < std::size_t(260 / dt); ++index) {
         poll(cancel);
         while (nextEntry < track.source.size() && s >= track.elementEnds[nextEntry - 1]) {
@@ -133,13 +162,7 @@ Simulation simulate(const Track &track, const Scenario &scenario, double dt, con
         q.time = t;
         q.s = s;
         q.speed = v;
-        auto dynamics = acceleration(track, s, v, scenario, hints);
-        if (t <= first.duration() && first.role == Role::Launch) {
-            dynamics.drive = controlAt(first, t).drive / scenario.massScale;
-            dynamics.a =
-                (dynamics.drive - dynamics.loss - dynamics.potentialSlope - .5 * dynamics.metricS * v * v) /
-                dynamics.metric;
-        }
+        const auto dynamics = dynamicsAt(s, v, t, 0);
         const double energy = .5 * dynamics.metric * v * v + dynamics.potential;
         if (index == 0)
             initialEnergy = energy;
@@ -187,12 +210,7 @@ Simulation simulate(const Track &track, const Scenario &scenario, double dt, con
             result.lip += dt;
         // Midpoint independent energy evolution on the canonical geometry.
         const double vm = std::max(0., v + dynamics.a * dt / 2), sm = s + v * dt / 2;
-        auto middle = acceleration(track, sm, vm, scenario, hints);
-        if (t + dt / 2 <= first.duration() && first.role == Role::Launch) {
-            middle.drive = controlAt(first, t + dt / 2).drive / scenario.massScale;
-            middle.a = (middle.drive - middle.loss - middle.potentialSlope - .5 * middle.metricS * vm * vm) /
-                       middle.metric;
-        }
+        const auto middle = dynamicsAt(sm, vm, t + dt / 2, dt);
         workNet += (middle.drive - middle.loss) * vm * dt;
         previousS = s;
         previousV = v;

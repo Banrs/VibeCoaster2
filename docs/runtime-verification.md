@@ -2,8 +2,8 @@
 
 The Unreal 5.8.2 preview runs fresh source, nominal and operating dynamics,
 separate spatial/temporal refinement, terrain/track and shared support/station
-clearance checks before replacement. Physical motor coverage and release
-verification remain open.
+clearance and modeled drive-coverage checks before replacement. Release
+verification remains open.
 
 The overview uses a depth-tested orange FVD trace and blue spatial-spline trace.
 These screen-width inspection lines are hidden in front/rear views; physical
@@ -89,3 +89,14 @@ through GPU readiness. An earlier first request after material rebuilding took
 5.77 seconds; that shader-compilation tail remains in the local record. These few
 samples are not a p99 claim. Physical hardware coverage, sufficient process-cold/warm
 samples, packaged builds and exact Play identity remain required for release.
+`-Mode Generate -Cycles N` explicitly authors a fresh default ride on every cycle.
+`-Width 2560 -Height 1440 -MaxFps 60 -DisableVSync` reproduces the generation
+comparison configuration. Actual viewport dimensions are asserted from runtime
+events; requested dimensions alone are insufficient.
+
+`-Benchmark` suppresses verification screenshots for timing series; actual GPU
+readiness checks remain identical. Image/traversal checks run separately. A packaged
+run resolves its source commit from the build manifest and checks its executable
+hash instead of attributing the binary to whatever checkout happens to be current.
+`Play.cmd -Verify` exercises the normal launcher, including payload hashes and the
+user-save/default fallback, and exits after recording actual GPU readiness.

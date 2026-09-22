@@ -121,10 +121,10 @@ https://github.com/Banrs/VibeCoaster2/actions/runs/35775800852 .
 
 ## Remaining acceptance work
 
-Physical motor coverage, further visual composition, sufficient cold/warm load-tail
-samples, the matched Escarpment
-generation baseline, versioned packages and exact tested Play executable identity
-remain open. Native and automated GPU passes alone are not final ride acceptance.
+Modeled drive coverage and a six-run matched Escarpment generation baseline are
+now complete. Sufficient process-cold/warm load-tail samples, versioned packages
+and exact tested Play executable identity remain open. Detailed equipment design
+is outside this simulation preview; its explicit scope is in hardware-coverage.md. Native and automated GPU passes alone are not final ride acceptance.
 
 The parent repository, VibeCoasterjs, archived implementation and playable
 fallbacks remain untouched. Work is on `codex/fresh-rewrite` in `Banrs/VibeCoaster2`.
@@ -133,3 +133,9 @@ Computer use remains blocked by sandbox setup's inability to protect `.git`,
 whose owner is `CodexSandboxOnline`. An owner-only repair is prepared but awaits
 the specific approval requested after automatic review rejected the administrative
 ownership change. No sandbox or filesystem security controls were disabled.
+The development generation comparison used fresh processes/profiles at actual
+2560x1440, 60 FPS, VSync off: rewrite median 7.527 s through GPU readiness versus
+Escarpment 31.630 s through its earlier scene-commit marker (76.20% reduction).
+Startup is excluded and recorded separately. Source and executable identities,
+all samples, and differing ride lengths/durations are retained in
+`evidence/generation-comparison-development.json`. Final-package timing is pending.

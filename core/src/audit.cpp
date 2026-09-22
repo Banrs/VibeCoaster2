@@ -13,6 +13,15 @@ int main(int argc, char **argv) {
             std::cout << name << " time=" << seconds << " step=" << s.dt << " active=" << s.active
                       << " terminal=" << s.terminal << " speed=" << s.maxSpeed * 3.6
                       << " energy=" << s.energyResidual << " failures=" << s.failures.size() << '\n';
+            for (std::size_t i = 0; i < s.demand.size(); ++i) {
+                const auto &q = s.demand[i];
+                const auto &zone = s.hardware.zones[i];
+                std::cout << "hardware " << zone.id << " interval=" << zone.begin << ',' << zone.end
+                          << " force_N=" << q.peakForce << " reaction_N=" << q.peakReactionForce
+                          << " power_W=" << q.peakPower << " input_J=" << q.positiveWork
+                          << " absorbed_J=" << q.absorbedWork << " engaged=" << q.minimumEngaged
+                          << " powerResidual_W=" << q.maximumWorkResidual << '\n';
+            }
             for (std::size_t i = 0; i < 3; ++i) {
                 const auto lo = s.minimum[i], hi = s.maximum[i], rate = s.rate[i];
                 std::cout << "seat " << i << " min=" << lo.x << ',' << lo.y << ',' << lo.z << " max=" << hi.x

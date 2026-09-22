@@ -1,0 +1,9 @@
+{"event": "startup", "wall": 0.008426402, "utc_ticks": "639257098467460000", "engine": "5.8.2-56702186+++UE5+Release-5.8", "save": "isolated-profile/Saved/Designs/Current.vcd"}
+{"event": "ui-gpu-ready", "wall": 1.062114801, "utc_ticks": "639257098478000000"}
+{"event": "request", "wall": 1.062289301, "utc_ticks": "639257098478000000", "load": false, "cycle": 0}
+{"event": "native-ready", "wall": 8.212420702, "utc_ticks": "639257098549500000", "seconds": 7.150019098, "worker_native": 6.986076299, "worker_mesh": 0.154436998}
+{"event": "scene-submit", "wall": 8.2957354, "utc_ticks": "639257098550340000"}
+{"event": "scene-commit", "wall": 8.2959591, "utc_ticks": "639257098550340000"}
+{"event": "materials-ready", "wall": 8.296061601, "utc_ticks": "639257098550340000"}
+{"event": "gpu-ready", "wall": 8.583122, "utc_ticks": "639257098553210000", "seconds": 7.520829801, "rendered_frames": 4, "cycle": 1, "viewport_width": 2560, "viewport_height": 1440}
+{"event": "finished", "wall": 9.237645499, "utc_ticks": "639257098559750000"}
