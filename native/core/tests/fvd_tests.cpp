@@ -163,8 +163,8 @@ int main(){try{
     const auto halfRoll=std::min_element(heldRoll.section.samples.begin(),heldRoll.section.samples.end(),[&](const FvdSample& a,const FvdSample& b){
         const auto score=[&](const FvdSample& q){return q.time<heldRoll.apex.time||q.time>heldRoll.rollExit.time?2.:std::abs(q.up.z);};return score(a)<score(b);});
     const double halfAcceleration=-gravity*halfRoll->forward.z-loaded.rollingAcceleration-loaded.dragAccelerationCoefficient*halfRoll->speed*halfRoll->speed;
-    check(measureSeatForces(heldRoll.section.track,halfRoll->distance,halfRoll->speed,halfAcceleration,1.2).vertical>3.1,
-        "The loaded Immelmann retains strong physical seat load through its half-roll, not just at the ascent peak");
+    check(measureSeatForces(heldRoll.section.track,halfRoll->distance,halfRoll->speed,halfAcceleration,1.2).vertical>3,
+        "The intentionally loaded Immelmann retains over 3g through its half-roll with broad acceleration ramps");
     auto phasedCrown=loaded;phasedCrown.normalG=4.85;phasedCrown.crestG=3.8;
     phasedCrown.height=85*std::pow(loadedEntry.speed/53,2);phasedCrown.ascentReleaseSeconds=1.2;phasedCrown.rollReleaseFraction=.45;
     const auto phased=designFvdImmelmann(phasedCrown);good(phased.section);

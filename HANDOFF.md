@@ -1,79 +1,63 @@
-# Current priority: grand station and environment models
+# Riftwake Default 3 accepted checkpoint
 
-The user paused train and ride-layout updates after rejecting the train styling. Current work is a grand premium station plus track, support, terrain, LSM and brake models. The existing accepted track is the baseline. Do not resume Riftwake generation or train refinement until requested.
+Updated 2026-09-25. The geometry continuation is complete and activated in the working editor-game profile. This file supersedes earlier paused/reapply directions. Do not reapply `docs/checkpoints/08-riftwake-paused.patch`; its work is integrated and further repaired.
 
-Unfinished layout/physics/pacing/version edits are preserved verbatim in out/paused-riftwake-layout/, with SHA-256 manifest and paused-layout.patch. Resume after asset work by applying that patch carefully; the last prescription is Wave exit1.5 to3.0g followed by one build/validation. No revised ride was accepted. Last complete diagnostic: out/riftwake-fourth-* at195.37s, rejected; latest sixth rejected atWave. All evidence remains in out/.
+## Current accepted result
 
-Station design: grand_station (Astra max); native integration: station_integration (Sol xhigh); Blender MCP/import lead: blender_models (Astra max); support families: open_supports; structure-only refresh API/helper: structure_refresh. All source edits for supports, station, visuals and loading remain live. All agents read efficient-subagent-waiting; no unnecessary tests/CI. Plan checkpoint96c102f pushed with CI skipped.
+- `out/riftwake-resume-06.vcdesign`, seed42, default candidate0: **181.961458 s**, **7 row modules / 14 riders**, 300.504 km/h peak, retained 0–180 km/h in1.397 s.
+- Clifftop active27.0529 s, lip5.7469 s. Distance-weighted mean rail-ground47.40975 m versus old54.80261 m (13.49% lower); 60Hz time-weighted48.38214 m versus old55.43613 m. Native minimum swept-ground+2.5616 m.
+- All native errors empty. Authorship, numerical acceleration histories, forces/rates, terrain/self/support/station clearances, temporal960/1920 Hz convergence, independent half-spacing spatial replay PASS. No force/clearance gates were relaxed.
+- `out/riftwake-nearby-43.vcdesign`: nearby seed43, normal defaults, candidate1,181.390625 s, all acceptance/refinement checks pass.
+- Live save **UserData-Development/Saved/VibeCoaster2/Designs/Accepted.vcdesign** is now the accepted14-rider ride. SHA256 DB3D4B55F055036A3D18ABDD54D3D1ADF5EC8EC8988F41F760ECB42DEF03A8CA.
+- Prior12-rider save and editor binaries preserved at `out/pre-riftwake-runtime/`. Prior save SHA256 0F7F7ADDD98EFB447C4DB5D234EBD8620D1E9C0BF849638EC1546CC3DFAA97EB. `out/riftwake-activation.json` records the atomic replacement. Existing root/Desktop shortcuts keep their direct UnrealEditor -game -CoasterLoad arguments and working profile.
+- No new standalone package; `dist/current.json` still points to the older standalone. Do not promote it without a real package and review.
 
-The user explicitly retains0-180km/h in1.4s. Train model direction is based on Falcon's Flight and Formula Rossa with an original modern theme, but further train modelling is paused. The previous working profile/shortcuts remain untouched.
+## What changed
 
-Baseline distance-weighted rail-ground mean54.80261m and trace time mean55.43715m; scratch comparison helper out/clearance-metrics-scratch.py. Saved-design native validation around2.5s in a few warm runs; process editor startup about12s. No p99 guarantee.
+- Default train now7 current single-row modules, each2 seats; `riderCapacity()` and report JSON derive14. Explicit6-row saves retain6/12; the previous accepted save was independently revalidated. True rigid four-car grouping remains deferred.
+- Added low early hills and fixed1000m hooked clifftop; retained protected camelback; gentler Loop/Immelmann; original outward-wing → ravine-transfer → counter-wing → low-carve signature with opposing45deg crests.
+- Terrain curves now use two broad exact septic pitch phases, fixed combined length/height, full endpoint jets, one semantic section and original crest-bank ownership. The prior cosine-clustered control edit collapsed curvature over0.75m and caused~1145rad/s³ angular jerk. Corrected local join now~0.211rad/s³; full ride rates pass. Existing native regression covers physical behavior.
+- Immelmann crest1.0g constructs the actual61.44m/s inherited port; broad40% roll-rate ramps reduce harsh roll. Changing only recovery or extra solver seeds did not solve the old0.6g request; this was not treated as impossibility proof.
+- Loop retains15deg final plane yaw, completed during ascent. That separates its branches with real Gy/twist integration; native isolated source clearance passed with extra1.75m margin. Full current ride passes independently.
+- Authored setup+.45rad and signature-approach-.45rad establish compact closure; feedback remains separate and signature internal shape is preserved. Default candidate0 accepts. Broad cliff-foot bench/ravine adjustments clear low track; lip braking13m/s² meets pacing.
+- Native support system is the new tubular/raked/shared-frame design, with16-sided canonical meshes. Tie saddles and LSM bridge clearance are integrated. Source version and DefaultGame.ini are2.0.0-default.3.
+- Native load retains independent revalidation with structures/station overlapped with geometry. No additional speculative performance refactor was adopted.
 
-Normal Windows sandbox helpers fail; approved elevated exec works. Git needs process-local safe.directory=D:/Coding/Codex/Vibecoaster2. Use explicit UTF-8 on Python text writes.
+## Verified evidence
 
-Historical checkpoint below is context only; its stopped/solo directions are superseded.
+- `docs/checkpoints/09-riftwake-default3.md` is the readable checkpoint report.
+- `out/riftwake-resume-06-{report,trace,plan}.json` and `out/riftwake-nearby-43-*` contain full numerical evidence.
+- Clean CLI build completed before source iterations. Final `organic_generation_tests --baseline-only out/riftwake-resume-06.vcdesign`:805317 checks (C3, continuous rendered forces, trim scenarios, persistence).
+- Inherited-port:51791 checks. Motion-spline:16893. Core analytic/capacity:2516. FVD/recipe/drive/track-web/clearance component suites pass. Station on old accepted baseline:1129 checks.
+- Organic support audit on old accepted track after clean integration:175 supports,67one-foot/56wishbones/52A-backstays,1623members,124inter-frame links; exact deterministic regeneration and mesh containment/winding pass.
+- UnrealEditor target rebuilt successfully with UE5.8/VS14.44. Two real2560x1440 runtime traversals passed automation. First visual review found opaque glass/material fallback. Fixed V2 material instancing flags and compiled with real RHI; importer now sets the usage flag and package content preparation uses real RHI.
+- Corrected result: `out/riftwake-runtime-review-fixed/result.json`. Full traversal, load, pause/restart, paused pose, save/generation/mesh/scene cancellation pass. Save hash unchanged after runtime. Assistant reviewed actual overview/station/opening/cliff/inversion/signature PNGs and confirmed clear POV and terrain shading. Human styling approval and keyboard-input review remain unclaimed.
+- Isolated runtime profile: `out/riftwake-runtime-profile`. No verifier/editor process remains running after final completion.
 
----
+## Remaining art, performance and packaging work
 
-# VibeCoaster2 - stopped checkpoint for the next sessions
+The user rejected prior train styling and huge grand-station concept. Those are still drafts, not approved design. The live geometry/core station is the original physical station builder scaled to7 rows (stop centre40.2m). Existing Unreal render/art source and V2 assets from the incoming handoff remain locally modified/untracked. Do not discard them with a reset or claim the model design is approved. The active editor binary was built from this working tree before the geometry checkpoint commit.
 
-**User stopped work on 24 September 2026 and requested local cleanup with no more tests. Do not resume builds, tests or delivery automatically.** All agent-owned build/runtime processes are stopped. The remaining remote Windows checkpoint run was cancelled at the user's request. No standalone Default2 package was completed or promoted.
+An independent functional station study is complete in `scratch/station-resume/`: `station_functional.py`, `functional-station-preview.png`, `README.md`. Seven row centres30.0…50.4m match40.2m stop. Covered queue/merge, aligned holding lanes/gates, dispatch cabin, separate unload/exit, stairs and step-free lifts. It is isolated; roof hidden only in cutaway. No canonical/runtime integration yet. Do not let further modelling block accepted geometry.
 
-## Repository and playable state
+The material bug was a missing InstancedStaticMeshes usage flag, making intended translucent visor opaque. The canonical eye/force point was correct and was not moved. Current generated V2 material assets were repaired by `scratch/repair-riftwake-materials.py`; receipt `out/riftwake-runtime-materials.json`. The persistent importer fix is in `native/unreal/scripts/import_v2_art.py`. Shader priming with the real RHI fixed the terrain fallback; no geometry or displacement changed.
 
-- Branch: `codex/legacy-authoring`.
-- Reviewed native recovery commit: `840644d0c2acf6bfc4af0eda7af1aa50d19843ca`.
-- Latest code/shortcut commit: `18d3fb28a389a4878cea2afbed2fe412f8ef8f4a`.
-- Both commits were pushed with explicit user approval. A final documentation/cleanup checkpoint is local only.
-- Release identity: `2.0.0-default.2`. Default1 saves remain readable and receive fresh validation.
-- Root `Play VibeCoaster2.lnk` and Desktop `VibeCoaster2.lnk` launch the **current local Default2 game**, automatically loading the corrected ride. They invoke UnrealEditor with the project, `-game`, `-UserDir="D:/Coding/Codex/Vibecoaster2/UserData-Development"` and `-CoasterLoad`. Press Space to ride.
-- The user specifically objected when these links still targeted Default1. **Do not restore that stale target.** Preserve `UserData-Development` and `native/unreal/Binaries` so the working shortcut remains usable.
-- Recreate the current links with `native/unreal/scripts/create_shortcuts.ps1 -Desktop -Development -UnrealRoot "D:/Games/Epic Games/UE_5.8"`.
-- `dist/current.json` still points to the preserved Default1 standalone package. Running the shortcut helper without `-Development` before a new promotion would revert the links to that old package.
+Loading review found possible future station broad-phase squared-distance/spatial indexing and duplicate track rebuilding, but impact is unmeasured; no speculative changes made. Native old-save load was2.32s in one warm sample. Editor startup still adds substantial time. Standalone work is needed for the earlier3s total startup ambition; not achieved or newly packaged here.
 
-## User direction
+## User priorities and working style
 
-The eventual game is like NoLimits 2 with fast automatic generation as a starting point for coaster design/refinement. Several coasters share one environment, no park management, and only optional/skippable queue-to-seat walking. This task is the basic generator. See docs/product-vision.md.
+Geometry and realistic force/roll transitions remain first, preserving authored inversions/signature intent and lower average terrain-relative height. Approximately180s is wanted,175–190 acceptable; keep explicitly retained extreme launch. Models and independent Luna refactor/optimization discovery may proceed in parallel with bounded ownership. No imposed geometry-first completion gate for independent reviews.
 
-Work solo. Do not reuse old agents. Graphify and efficient-subagent-waiting were read earlier; no graph/runtime was available. User instructions override forced delegation.
+User authorizes extensive Luna MAX work, Sol HIGH/XHIGH, Astra HIGH/XHIGH/MAX for hardest work; up to3Astra/6Sol, upwards of60Luna. Root integrates/reviews; delegate bounded work. Every agent reads `C:/Users/danie/.codex/skills/efficient-subagent-waiting/SKILL.md`, propagates it, and uses event-driven waits without status polling. Avoid needless broad suites/CI and photo micro-tuning. Commit/push meaningful checkpoints with `[skip ci]`. No agents/processes from this continuation need waiting after completion.
 
-Use approximately 1.33x FF scale and 1.2x speed (300+ km/h). Approximate element/phase force baselines: FF +15%, TRR +8 1/3%, others +10%; negative loads use magnitude. Check actual seats and phases. Up to 5% over project force/rate/pacing limits is allowed only alongside unchanged independent F2291 checks. Do not cherry-pick rounding. Stop fine-tuning tiny photo differences. Lower-drag stress acceptance is removed; configured drag and trims-off/fully-deployed hardware checks remain.
+## Workspace and tools
 
-## Selected result
+Repo D:/Coding/Codex/Vibecoaster2, branch codex/legacy-authoring, origin https://github.com/Banrs/VibeCoaster2.git. All original and continued geometry work is applied. Use process-local `git -c safe.directory=D:/Coding/Codex/Vibecoaster2`; do not change global safe.directory.
 
-`out/recovery-balanced-inversion.vcdesign` and report/trace/plan: seed42 highlands, 6166.9249 m, 133.9906 s, 300.534 km/h, Gz -1.42842 to +5.00165, maximum |Gy| .98962. All physical/source/spatial/refinement gates pass. The +5 g nominal excess is explicitly reported under the project allowance.
+Normal exec/apply_patch/Node/view_image helpers fail with helper_unknown_error setup refresh. Use `exec_command` with `sandbox_permissions=require_escalated` and concise authorized-work justification. Python text I/O explicitUTF8. Python: C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe. Native VS2022 CLI toolchain14.38 at D:/Toolchains/VS2022; UE5.8 at D:/Games/Epic Games/UE_5.8 uses14.44. `scratch/build-legacy-baseline.cmd` builds CLI; `scratch/build-riftwake-clean.cmd` clean rebuilds. Do not link stale scratch replacement objects into acceptance binaries.
 
-Camelback: one isotropic planar asymmetric fit, 3.53824 px RMS / 12.7918 px max against practical 4/16 px guards. All-seat ascending/airtime/recovery phases exceed their FF +15% baselines. Do not fit it again. Loop: normal4.85/crest2/recovery3.9, rise145/yaw33. Immelmann: normal4.85/crest3.8/roll-exit2/recovery3, rise85/yaw45, rollReleaseFraction .45. Both explicitly unload over1.2s into a solved real crown hold.
+Image inspection workaround: elevated Python/Pillow thumbnail JPEG into BytesIO, printbase64, then functions.image(dataURL + result.output.trim()) without text; keepJPEGsmall. Distinguish actual runtime captures from Blender.
 
-The exact pointwise reference comparison remains uncertain because recordings have no surveyed distance. Approximate per-phase goals and known limitations are documented in docs/reference-force-audit.md. The optional calibrated-reference intensity flag stays separate; no whole-standard legal-certification claim.
+No graphify graph/runtime exists; the skill was read and direct source inspection used. Blender5.2.1 at D:/Toolchains/Blender/blender-5.2.1-windows-x64/blender.exe; MCP loopback9876 and wrapper paths remain as previous handoff. The functional station render used a separate background Blender process, preserving shared scene.
 
-## Completed verification (do not rerun merely for handoff)
-
-- Final local component suites: **16/16**, `out/recovery-adaptive-components.log`; **66303 FVD checks**, `out/recovery-crown-seed-fvd-tests.log`.
-- Final local integration suites: **10/10**, `out/default2-final-integration.log`.
-- Final local corpus: **8/8**, save/reload and seed diversity, `out/recovery-final-generator-corpus/summary.json`.
-- Source `18d3fb2` Windows/macOS component + baseline CI: **both passed**, https://github.com/Banrs/VibeCoaster2/actions/runs/35996407473.
-- Full checkpoint CI for the identical native core at `840644d`: **macOS passed components, all integration tests and all8 corpus cases; Windows was cancelled on user request while its full suite was running**, https://github.com/Banrs/VibeCoaster2/actions/runs/35995677863. Downloaded macOS evidence: `out/default2-ci-macos`.
-- Default1-provenance corrected save successfully revalidated under runtime Default2: `out/default2-compatible-baseline-report.json`.
-- Both 2560x1440 front/rear Unreal traversals passed with geometry SHA1 `09CDA5902EC0D2B52E1BE049AF94125BDC382329`. Pause/restart/load/pose and generation/mesh/scene/save cancellation checks passed. Root inspected all46 captures per seat, retained in `out/recovery-final-generator-runtime-front` and `-rear`. Agent review: `out/recovery-final-generator-visual-review.json`. This is captured-frame review, not human approval, continuous-video review, keyboard testing or a GPU performance claim.
-- The actual shortcut startup path also passed its full traversal and load/pose/cancellation checks under app2.0.0-default.2, source18d3fb2. `out/default2-shortcut-startup/result.json` and its events confirm automatic loading of the same geometry. The unavailable-reference test is explicitly skipped for this already-loading startup flow; the ordinary front/rear tests exercised it.
-- All11 retained sources pass angular agreement at1/2/4/8 subdivisions: max velocity/acceleration/jerk disagreement3.11e-10/3.06e-8/1.39e-5 against unchanged1e-4/1e-3/1e-2 tolerances. `out/recovery-balanced-angular.log`.
-
-## Important implementation details
-
-A short crown-hold starting estimate fixes two reproducible nearby-speed Immelmann solve failures without changing requested forces or heights. Return composition adjusts bounded upstream authored bearings, then rebuilds the real FVD source and repeats every acceptance check; no points or endpoints are snapped.
-
-The 310km/h, airtime1.1, roll55 case passes after shortening only the final camelback constant-load hold by0.1s and multiplying signature airtime by0.95. These coarse bounded corrections are recorded in planning JSON and followed by full new validation. The default needs neither force correction. No force or standard limits were relaxed to pass that case.
-
-## Interrupted delivery and cleanup
-
-Standalone packaging from18d3fb2 was stopped during cooking. Its log is `out/default2-package.log`; build evidence is `native/unreal/Saved/BuildRuns/20260924-120626-375`. No `dist/2.0.0-default.2/.../package-manifest.json` was produced, and `dist/current.json` was not changed. Completing and verifying a standalone package is optional future work only when a new user request resumes it.
-
-Cleanup removed this session's three marked verification-profile copies, partial `native/unreal/Saved/Cooked/Windows`, one-use crown-probe files and regenerated contact sheets. Original screenshots, reports, accepted designs, source/reference inputs, working game binaries and build caches remain. Reusable runtime helpers moved to `out/default2-delivery-tools`. Receipt: `out/default2-cleanup-receipt.json`.
-
-The original Default1 package/profile, rejected rewrite branch/archive, RFDB exports and historical recovery evidence remain untouched. `out/default2-delivery-state.json` records the stopped status. Older session-state notes and earlier handoffs are superseded by this file.
-
-## Environment
-
-Work solo; no agents are needed or active. One compiler worker if work is explicitly resumed. Normal exec/image tools encounter a Windows sandbox-helper failure; elevated exec was used. Git requires process-local `safe.directory=D:/Coding/Codex/Vibecoaster2`. Python: `C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`. Unreal: `D:/Games/Epic Games/UE_5.8`. Native build helpers remain in scratch; package helper is `native/unreal/scripts/package.ps1`. No tests or builds remain running.
+User requested Fast OFF. Saved config still service_tier="default". This task's own log records gpt-6-astra/effortmax but omits active service tier; tools expose no speed switch. Do not claim Fast is confirmed off. Official guidance https://learn.chatgpt.com/docs/agent-configuration/speed .

@@ -20,7 +20,7 @@
 namespace coaster {
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
 constexpr const char* generatorVersion=COASTER_GENERATOR_VERSION;
-inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
+inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.2"||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
 
 enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
@@ -62,10 +62,11 @@ Track compile(const std::vector<AuthoredPoint>& points,bool closed=true);
 
 struct TrainConfig {
     bool operator==(const TrainConfig&) const=default;
-    int cars{6}; double carMass{1500},spacing{3.4},seatHeight{1.2};
+    int cars{7}; double carMass{1500},spacing{3.4},seatHeight{1.2};
     // Provisional drag and rolling resistance, tuned against generated rides.
     double dragCdA{3.0},rollingResistance{0.004},airDensity{1.225};
 };
+inline int riderCapacity(const TrainConfig& train){return 2*train.cars;}
 // Modelled two-abreast restrained adult seating. F2291-25 6.6.3 uses
 // published 95th-percentile anthropometry plus extended limb reach; 3.1.13
 // separately defines the clearance outside reach. See docs/clearance-model.md.

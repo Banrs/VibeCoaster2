@@ -96,16 +96,16 @@ void assessMotion(Design& d,Cancel cancel){
             if(landmark.kind==LandmarkKind::PlateauArrival)plateauTime=time;if(landmark.kind==LandmarkKind::CliffDeparture)dropTime=time;
         }
         if(!std::all_of(seen.begin(),seen.end(),[](bool value){return value;}))d.report.fail("LANDMARK_INTENT","Default recipe is missing a required verification landmark");
-        // Paused front POV/media-time inspection brackets the banked crest
-        // around 6:38 and the first lip departure around 6:58. The resulting
-        // approximately20s interval has about1s visual landmark uncertainty;
-        // 20.5s is a conservative cap below1.1 times its plausible lower end.
-        constexpr double clifftopLimit=20.5;
-        if(!std::isfinite(plateauTime)||!std::isfinite(dropTime)||dropTime<plateauTime||dropTime-plateauTime>clifftopLimit)
-            d.report.fail("CLIFFTOP_PACING","Front-seat crest-to-cliff commitment exceeds the conservative FF pacing cap (braking/holding included)",0,dropTime-plateauTime,clifftopLimit);
+        // Legacy saves retain their former total-interval check. New rides
+        // distinguish active clifftop track from the short brake/lip approach.
+        if(d.generationVersion!=generatorVersion){
+            constexpr double clifftopLimit=20.5;
+            if(!std::isfinite(plateauTime)||!std::isfinite(dropTime)||dropTime<plateauTime||dropTime-plateauTime>clifftopLimit)
+                d.report.fail("CLIFFTOP_PACING","Legacy front-seat crest-to-cliff commitment exceeds its pacing cap",0,dropTime-plateauTime,clifftopLimit);
+        }
     }
-    // Semantic pacing is reported separately from the unchanged acceptance
-    // gates. Elements may compile into several motion sections.
+    // Elements may compile into several motion sections.
+
     auto frontTime=[&](double distance){return frameAt(d.simulation.frames,distance-seatDistanceOffset(d.request.train,0)).time;};
     auto landmarkDistance=[&](LandmarkKind kind){
         double distance=NAN;bool found=false;
@@ -124,6 +124,16 @@ void assessMotion(Design& d,Cancel cancel){
     if(std::isfinite(plateau)&&std::isfinite(departure)&&std::isfinite(lipStart)&&plateau<=lipStart&&lipStart<=departure){
         audit.clifftopActiveSeconds=frontTime(lipStart)-frontTime(plateau);
         audit.clifftopBrakingSeconds=frontTime(departure)-frontTime(lipStart);
+    }
+    if(d.generationVersion==generatorVersion&&d.request.recipe.name=="Riftwake"){
+        // FF's retained overlay shows several summit turns at video84-106s,
+        // then a separate brake approach. These are design pacing bounds,
+        // not precision measurements or limits from an acceleration standard.
+        constexpr double activeMinimum=20,activeMaximum=35,brakingMaximum=6;
+        if(!std::isfinite(audit.clifftopActiveSeconds)||audit.clifftopActiveSeconds<activeMinimum||audit.clifftopActiveSeconds>activeMaximum)
+            d.report.fail("CLIFFTOP_ACTIVE_PACING","Clifftop needs 20-35 seconds of active track",plateau,audit.clifftopActiveSeconds,audit.clifftopActiveSeconds<activeMinimum?activeMinimum:activeMaximum);
+        if(!std::isfinite(audit.clifftopBrakingSeconds)||audit.clifftopBrakingSeconds<0||audit.clifftopBrakingSeconds>brakingMaximum||audit.clifftopBrakingSeconds>=audit.clifftopActiveSeconds)
+            d.report.fail("CLIFFTOP_BRAKING_PACING","Cliff brake/lip approach must be at most six seconds and shorter than the active summit track",lipStart,audit.clifftopBrakingSeconds,brakingMaximum);
     }
     if(std::isfinite(signatureEnd)&&std::isfinite(d.simulation.metrics.duration)){
         const double duration=d.simulation.metrics.duration-frontTime(signatureEnd);

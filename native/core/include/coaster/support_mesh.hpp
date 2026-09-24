@@ -4,7 +4,7 @@
 
 namespace coaster {
 struct SupportMeshBuffer {std::vector<Vec3> positions,normals;std::vector<uint32_t> indices;};
-// Portable CPU adapter: a closed eight-sided approximation entirely inside the
+// Portable CPU adapter: a closed sixteen-sided approximation entirely inside the
 // canonical tapered circular solid. UE reflects coordinates/winding once later.
 inline SupportMeshBuffer supportMemberMesh(const SupportMember& member){
     const Vec3 delta=member.top-member.base;const double length=norm(delta);
@@ -13,7 +13,7 @@ inline SupportMeshBuffer supportMemberMesh(const SupportMember& member){
         throw std::runtime_error("Invalid canonical support mesh member");
     const Vec3 axis=delta/length;
     const Vec3 u=unit(cross(axis,std::abs(axis.z)<.9?Vec3{0,0,1}:Vec3{0,1,0}));
-    const Vec3 v=cross(axis,u);constexpr uint32_t sides=8;
+    const Vec3 v=cross(axis,u);constexpr uint32_t sides=16;
     SupportMeshBuffer mesh;
     auto vertex=[&](Vec3 p,Vec3 n){mesh.positions.push_back(p);mesh.normals.push_back(n);};
     auto triangle=[&](uint32_t a,uint32_t b,uint32_t c){mesh.indices.insert(mesh.indices.end(),{a,b,c});};

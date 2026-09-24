@@ -30,6 +30,11 @@ static void coverage(const Track& t,const ClearanceSweep& sweep,size_t stride=1)
                 auto a=q.position+q.tangent*v.x+q.right*v.y+q.up*v.z,b=m.position+m.tangent*v.x+m.right*v.y+m.up*v.z;
                 check(norm(a-b)<.06,"New web corners remain inside continuous motion pad");
             }
+            for(const auto& saddle:trackTieSaddlesLocal())for(Vec3 v:trackWebCorners(saddle)){
+                check(norm(v)<.9,"Tie saddle corners preserve canonical hardware radius");
+                auto a=q.position+q.tangent*v.x+q.right*v.y+q.up*v.z,b=m.position+m.tangent*v.x+m.right*v.y+m.up*v.z;
+                check(norm(a-b)<.06,"Tie saddle corners remain inside continuous motion pad");
+            }
             for(Vec3 v:std::array<Vec3,4>{{{.07,.825,-.27},{.16,.16,-.71},{.085,.735,.085},{.085,-.735,-.085}}}){
                 auto a=q.position+q.tangent*v.x+q.right*v.y+q.up*v.z,b=m.position+m.tangent*v.x+m.right*v.y+m.up*v.z;
                 check(norm(a-b)<.06,"Canonical hardware remains inside unchanged .06m pad");
@@ -80,6 +85,8 @@ int main(){try{standaloneBranches();
 
     for(const auto& web:trackWebsLocal())for(const auto corner:trackWebCorners(web))
         check(std::abs(corner.x)<=1.275&&std::abs(corner.y)<=1.5&&corner.z>=-spineDepth-spineRadius&&corner.z<=2.4,"Hardware rejection box encloses every canonical web corner before padding");
+    for(const auto& saddle:trackTieSaddlesLocal())for(const auto corner:trackWebCorners(saddle))
+        check(norm(corner)<.9&&std::abs(corner.x)<=1.275&&std::abs(corner.y)<=1.5&&corner.z>=-spineDepth-spineRadius&&corner.z<=2.4,"Hardware rejection box encloses every canonical tie-saddle corner before padding");
     std::vector<AuthoredPoint> points;for(int i=0;i<=100;++i){double a=.119*(i-50);points.push_back({{double(i),0,50},a,Element::Return,rotate({0,0,1},{1,0,0},a)});}Track t=compile(points,false);TrainConfig train;
     auto sweep=buildClearanceSweep(t,train);check(sweep.frames().size()>=2500,"Canonical cell coverage prepared");
     auto verified=buildClearanceSweepVerified(t,train);check(verified.frames().size()==sweep.frames().size()&&verified.frames().back().distance==sweep.frames().back().distance,"Verified sweep reuse preserves canonical coverage");

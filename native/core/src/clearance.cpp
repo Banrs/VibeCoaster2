@@ -162,6 +162,9 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
                 // distance avoids falsely filling the diagonal OBB's corners.
                 for(const auto& web:trackWebsLocal())
                     if(!memberSeparatedFromBox(member,trackWebWorld(web,p),.06)&&segmentWebDistanceSquared(al,bl,web)<=(margin+1e-9)*(margin+1e-9))return int(index);
+                // Saddles are swept as complete solids alongside the diagonal webs.
+                for(const auto& saddle:trackTieSaddlesLocal())
+                    if(!memberSeparatedFromBox(member,trackWebWorld(saddle,p),.06)&&segmentWebDistanceSquared(al,bl,saddle)<=(margin+1e-9)*(margin+1e-9))return int(index);
                 double separation=std::abs(f.distance-support.trackDistance);separation=std::min(separation,sweep.length-separation);
                 Vec3 spineEnd=b;
                 if(member.spineContact&&member.kind==SupportMemberKind::Steel&&norm(b-support.attachment)<1e-5&&separation<2.5)

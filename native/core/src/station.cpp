@@ -220,12 +220,14 @@ static ValidationReport validateStationImpl(const Track& track,const Terrain& te
             for(auto& b:trainBoxes)b=expanded(b,sweep->padding());
             // Rail, tie and spine corners all lie <.9 m from the canonical origin.
             // True cell midpoint motion <=.02*(1+2*.9)=.056 m; .06 encloses it.
-            std::array<StationBox,6> hardware{{
+            const auto saddles=trackTieSaddlesLocal();
+            std::array<StationBox,8> hardware{{
                 {q.position-q.up*spineDepth,q.tangent,q.right,q.up,{spineRadius,spineRadius,spineRadius},StationRole::Post},
                 {q.position-q.right*.65,q.tangent,q.right,q.up,{.085,.085,.085},StationRole::Post},
                 {q.position+q.right*.65,q.tangent,q.right,q.up,{.085,.085,.085},StationRole::Post},
                 {q.position-q.up*.19,q.tangent,q.right,q.up,{.07,.825,.08},StationRole::Post},
-                trackWebWorld(trackWebsLocal()[0],q),trackWebWorld(trackWebsLocal()[1],q)
+                trackWebWorld(trackWebsLocal()[0],q),trackWebWorld(trackWebsLocal()[1],q),
+                trackWebWorld(saddles[0],q),trackWebWorld(saddles[1],q)
             }};
             for(auto& b:hardware)b=expanded(b,.06);
 

@@ -163,7 +163,7 @@ bool FCoasterCoordinateTest::RunTest(const FString& Parameters)
     Banked.right = coaster::cross(Banked.tangent, Banked.up);
     TestTrue(TEXT("Banked rider right remains consistent"), VibeMesh::Rotation(Banked).GetAxisY().Equals(VibeMesh::Direction(Banked.right), 1e-9));
     const coaster::TrainConfig Train;
-    TestTrue(TEXT("Middle camera is on a physical middle car"), FMath::IsNearlyEqual(coaster::seatDistanceOffset(Train, 1), 1.7, 1e-9));
+    TestTrue(TEXT("Seven-row middle camera is on the physical middle car"), Train.cars == 7 && FMath::IsNearlyEqual(coaster::seatDistanceOffset(Train, 1), 0., 1e-9));
     return true;
 }
 

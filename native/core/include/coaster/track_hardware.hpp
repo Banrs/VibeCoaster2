@@ -15,6 +15,17 @@ inline std::array<StationBox,2> trackWebsLocal() {
     }
     return out;
 }
+// Rail saddles sit on the upper web sockets and meet the underside of each
+// running rail at its centreline. Keep them as separate solids in clearance
+// checks so the wider contact face cannot disappear into the diagonal web.
+inline std::array<StationBox,2> trackTieSaddlesLocal() {
+    std::array<StationBox,2> out{};
+    for(int i=0;i<2;++i){
+        const double side=i==0?-1.:1.;
+        out[i]={{0,side*.605,-.1415},{1,0,0},{0,1,0},{0,0,1},{.052,.060,.0565},StationRole::Post};
+    }
+    return out;
+}
 inline StationBox trackWebWorld(const StationBox& local,const TrackSample& q) {
     const auto v=[&](Vec3 x){return q.tangent*x.x+q.right*x.y+q.up*x.z;};
     return {q.position+v(local.center),v(local.forward),v(local.right),v(local.up),local.half,local.role};

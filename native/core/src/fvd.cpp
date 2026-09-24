@@ -673,7 +673,9 @@ FvdHillResult inheritedLoopWithPlaneYaw(const FvdLoopRequest& input,Cancel cance
         catch(const Failure& failure){if(failure.code=="CANCELLED")throw;diagnostic<<" ["<<failure.code<<"]";}
     }
     if(!found){out.section.report.fail("FVD_LOOP_SHOOT","Planar inherited loop cannot meet its apex and final pitch with the selected loads/energy:"+diagnostic.str());return out;}
-    controls(solved);const FvdRequest planarSource=r;const double duration=r.controls.back().time,apexTime=apexAt(solved);
+    controls(solved);const FvdRequest planarSource=r;const double duration=r.controls.back().time,apexTime=apexAt(solved),yawDuration=apexTime;
+    // Complete the plane yaw at the apex so the descending branch retains
+    // its lateral separation from the rising branch.
     // t=cos(theta)e(psi)+sin(theta)Z, u=-sin(theta)e(psi)+cos(theta)Z.
     // Prescribing a monotone plane angle psi requires BOTH Gy=-v*psi'*cos(theta)/g
     // and transported twist=psi'*sin(theta). Constant Gy gives the opposite
@@ -684,10 +686,10 @@ FvdHillResult inheritedLoopWithPlaneYaw(const FvdLoopRequest& input,Cancel cance
         const double vd=c.drive-gravity*sn-loss(planarSource,v);
         const double vdd=c.first[3]-gravity*cs*thetaD-2*planarSource.dragAccelerationCoefficient*v*vd;
         const double thetaDD=gravity*(c.first[0]+sn*thetaD)/v-thetaD*vd/v;
-        const double u=std::clamp(time/duration,0.,1.),w=1-u,d=1-2*u;
-        const double yawD=input.yawAngle*140*u*u*u*w*w*w/duration;
-        const double yawDD=input.yawAngle*420*u*u*w*w*d/(duration*duration);
-        const double yawDDD=input.yawAngle*840*u*w*(d*d-u*w)/(duration*duration*duration);
+        const double u=std::clamp(time/yawDuration,0.,1.),w=1-u,d=1-2*u;
+        const double yawD=input.yawAngle*140*u*u*u*w*w*w/yawDuration;
+        const double yawDD=input.yawAngle*420*u*u*w*w*d/(yawDuration*yawDuration);
+        const double yawDDD=input.yawAngle*840*u*w*(d*d-u*w)/(yawDuration*yawDuration*yawDuration);
         const double a=vd*yawD+v*yawDD,b=vdd*yawD+2*vd*yawDD+v*yawDDD;
         c.lateralG=-v*yawD*cs/gravity;
         c.first[1]=-(a*cs-v*yawD*sn*thetaD)/gravity;
@@ -721,7 +723,7 @@ FvdHillResult inheritedLoopWithPlaneYaw(const FvdLoopRequest& input,Cancel cance
             const double planeYaw=std::atan2(binormal.x,-binormal.y);
             const double change=std::remainder(planeYaw-previousYaw,2*pi);previousYaw+=change;
             require(std::abs(binormal.z)<1e-5&&change*input.yawAngle>=-1e-8,"FVD_LOOP_YAW","Loop plane acquired unintended tilt or reversed yaw direction");
-            const double u=std::clamp(q.time/duration,0.,1.);
+            const double u=std::clamp(q.time/yawDuration,0.,1.);
             const double expected=startYaw+input.yawAngle*u*u*u*u*(35+u*(-84+u*(70-20*u)));
             require(std::abs(previousYaw-expected)<1e-5,"FVD_LOOP_YAW","Independent replay differs from the authored loop-plane yaw");
             const Vec3 plane{std::cos(planeYaw),std::sin(planeYaw),0};
@@ -998,10 +1000,11 @@ FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest& input,Cancel ca
                 {apex+input.rollReleaseFraction*p[2],input.crestG,0,0});
             if(input.ascentReleaseSeconds>0)r.controls.insert(r.controls.begin()+3,
                 {input.rampSeconds+p[0]+input.ascentReleaseSeconds,input.crestG,0,0});
-            // Author the physical roll rate with quintic ramps and a steady
-            // middle. A single septic angle pulse concentrates its rotation
-            // at the roll centre and unnecessarily unloads the elevated seat.
-            const double rollBegin=apex-input.rollOverlapFraction*p[1],ramp=.2*(rollEnd-rollBegin);
+            // Give acceleration and release most of the half-roll. The former
+            // 20% ramps concentrated lateral seat acceleration at both ends;
+            // a broad C2 rate profile preserves the authored twist without
+            // using a short angular impulse to manufacture the sensation.
+            const double rollBegin=apex-input.rollOverlapFraction*p[1],ramp=.4*(rollEnd-rollBegin);
             const double rate=input.hand*p[3]/(rollEnd-rollBegin-ramp);
             const std::vector<FvdControl> roll{{rollBegin,1,0,0},{rollBegin+ramp,1,0,rate},
                 {rollEnd-ramp,1,0,rate},{rollEnd,1,0,0}};

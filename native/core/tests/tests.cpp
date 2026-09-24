@@ -24,7 +24,10 @@ static void analytical(){
     std::vector<AuthoredPoint> fast;for(int i=0;i<=1500;++i){double x=i*.1;fast.push_back({{x,0,20},2*pi*std::clamp(x-50.,-1.,1.)/.4,Element::Return,{0,0,1}});}auto rapid=compile(fast,false);
     auto fastForce=measureSeatForces(rapid,50,30,0,1.2);near(fastForce.vertical,1-1.2*900*std::pow(2*pi/.4,2)/gravity,5,"Analytic frame derivative resolves rapid-roll alias");
     rapid.closed=true;check(code(validateGeometry(rapid,Terrain{},Limits{},TrainConfig{},{}),"FRAME_RATE"),"Rapid bank rotation rejected by canonical domain gate");
-    TrainConfig train;near(seatDistanceOffset(train,0),8.5,1e-12,"Front physical car");near(seatDistanceOffset(train,1),1.7,1e-12,"Middle physical car");near(seatDistanceOffset(train,2),-8.5,1e-12,"Rear physical car");
+    TrainConfig train;check(train.cars==7,"New train default has seven rows");check(riderCapacity(train)==14,"Seven two-seat rows hold fourteen riders");
+    near(seatDistanceOffset(train,0),10.2,1e-12,"Seven-row front physical car");near(seatDistanceOffset(train,1),0,1e-12,"Seven-row middle physical car");near(seatDistanceOffset(train,2),-10.2,1e-12,"Seven-row rear physical car");
+    auto sixRows=train;sixRows.cars=6;check(riderCapacity(sixRows)==12,"Explicit six-row train retains twelve-rider capacity");near(seatDistanceOffset(sixRows,1),1.7,1e-12,"Six-row middle seat offset remains explicit");
+    check(reportJson(Design{}).find("\"riderCapacity\":14")!=std::string::npos,"Default train rider capacity appears in the report");
     std::vector<double> constant(2400,3);near(forceExposure(constant,1./240),30,1e-9,"Ten-second force integral");check(forceExposure(std::vector<double>(20,3),.1)==0,"Incomplete trace cannot establish ten-second exposure");
     TrainConfig one;one.cars=1;one.carMass=1000;one.dragCdA=0;one.rollingResistance=0;one.seatHeight=0;
     std::vector<Operation> ops{{0,straight.length,DriveKind::Launch,100,2000,200000,.001}};
@@ -188,6 +191,7 @@ static void migration(const Design& current){
     const auto newPath=folder/"current.coaster",badPath=folder/"bad-profile.coaster";
     std::string error;Design replay;
     check(saveDesign(current,newPath.string(),error),"Save current explicit profile: "+error);const auto currentBytes=readBytes(newPath);check(currentBytes.rfind("COASTER 6 ",0)==0,"New canonical semantics use COASTER6");
+
     for(int schema:{1,2,3,4,5}){
         const auto original="COASTER "+std::to_string(schema)+currentBytes.substr(9);
         {std::ofstream file(badPath,std::ios::binary);file<<original;check(bool(file),"Write obsolete schema fixture");}

@@ -32,17 +32,19 @@ static bool improveReturnLayout(const Design& d,RecipeFeedback& feedback,const s
     }
     if(cliffId.empty()||signatureId.empty()||approachId.empty())return false;
     auto findSource=[&](const std::string& id){return std::find_if(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const auto& p){return p.name==id;});};
-    const auto cliff=findSource(cliffId),signature=findSource(signatureId),approach=findSource(approachId);
-    if(cliff==d.forcePrograms.end()||signature==d.forcePrograms.end())return false;
+    const auto approach=findSource(approachId);
+    const auto signature=std::find_if(d.splinePrograms.begin(),d.splinePrograms.end(),[&](const auto& p){return p.name==signatureId+"-approach";});
+    const auto setup=std::find_if(d.splinePrograms.begin(),d.splinePrograms.end(),[&](const auto& p){return p.name==cliffId+"-recovery";});
+    if(setup==d.splinePrograms.end()||signature==d.splinePrograms.end())return false;
     double distance=0,speed=0;
     if(pending&&pending->id==approachId){distance=pending->distance;speed=pending->speed;}
     else if(approach!=d.forcePrograms.end()){distance=d.track.spans.at(approach->firstKnot).start;speed=approach->program.speed;}
     else return false;
     const auto q=sampleKinematics(d.track,distance);
     if(std::abs(q.sample.tangent.z)>1e-6||norm(q.sample.up-Vec3{0,0,1})>1e-6||norm(q.sample.curvature)>1e-6)return false;
-    const double hand=cliff->hand;
+    const double hand=signature->hand;
     auto unmirror=[&](Vec3 p){p.y*=hand;return p;};
-    const Vec3 point=unmirror(q.sample.position),cp=unmirror(d.track.knots[cliff->firstKnot].position),sp=unmirror(d.track.knots[signature->firstKnot].position);
+    const Vec3 point=unmirror(q.sample.position),cp=unmirror(d.track.knots[setup->firstKnot].position),sp=unmirror(d.track.knots[signature->firstKnot].position);
     const auto tangent=unmirror(q.sample.tangent);const double heading=std::atan2(tangent.y,tangent.x);
     if(std::abs(heading)<.35||std::abs(heading)>2.5||speed<15||speed>80)return false;
     const auto& train=d.request.train;
@@ -76,10 +78,10 @@ static bool improveReturnLayout(const Design& d,RecipeFeedback& feedback,const s
     const double determinant=jc.x*js.y-js.x*jc.y;
     if(std::abs(determinant)<1)return false;
     const double dc=std::clamp((-error.x*js.y+error.y*js.x)/determinant,-.1,.1),ds=std::clamp((-error.y*jc.x+error.x*jc.y)/determinant,-.1,.1);
-    const double prior=feedback.compactReturn?feedback.cliffHeadingCorrection:d.candidate==1?-4*pi/180:d.candidate==2?4*pi/180:.25*std::sin(d.candidate*2.399963229728653);
-    const double nextCliff=std::clamp(prior+dc,-.45,.45),nextSignature=std::clamp(feedback.signatureHeadingCorrection+ds,-.45,.45);
-    if(feedback.compactReturn&&std::abs(nextCliff-feedback.cliffHeadingCorrection)+std::abs(nextSignature-feedback.signatureHeadingCorrection)<1e-7)return false;
-    feedback.cliffHeadingCorrection=nextCliff;feedback.signatureHeadingCorrection=nextSignature;feedback.compactReturn=true;
+    const double prior=feedback.compactReturn?feedback.cliffHeadingCorrection:d.candidate==1?-4*pi/180:d.candidate==2?4*pi/180:0;
+    const double nextCliff=std::clamp(prior+dc,-.45,.45),nextSignature=std::clamp(feedback.approachHeadingCorrection+ds,-.45,.45);
+    if(feedback.compactReturn&&std::abs(nextCliff-feedback.cliffHeadingCorrection)+std::abs(nextSignature-feedback.approachHeadingCorrection)<1e-7)return false;
+    feedback.cliffHeadingCorrection=nextCliff;feedback.approachHeadingCorrection=nextSignature;feedback.compactReturn=true;
     return true;
 }
 
@@ -364,7 +366,12 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
             // Preserve the usual best-intensity selection when stopping a
             // search whose next attempt would compile the same geometry.
             if(feedback.compactReturn&&!layoutChanged&&!forceChanged)break;
-        }catch(RecipeCompileFailure& e){last=std::move(e.partial);if(last.simulation.cancelled||(cancel&&cancel())){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}last.report.fail("AUTHORING",e.what());improveReturnLayout(last,calibratedEnergy,e.pendingPort,cancel);if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled during return planning");return last;}remember(&last,i);}
+        }catch(RecipeCompileFailure& e){last=std::move(e.partial);if(last.simulation.cancelled||(cancel&&cancel())){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}last.report.fail("AUTHORING",e.what());const bool layoutChanged=improveReturnLayout(last,calibratedEnergy,e.pendingPort,cancel);if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled during return planning");return last;}remember(&last,i);
+            // Later candidates change placement, not the failed source's force
+            // family. Repeating a converged energy bootstrap cannot repair it.
+            const bool exhaustedEnergy=std::any_of(last.report.errors.begin(),last.report.errors.end(),[](const Finding& f){return f.code=="ENERGY_BOOTSTRAP_NO_PROGRESS";});
+            if(exhaustedEnergy&&!layoutChanged)return withHistory(std::move(last),"unconstructible-authored-force-intent");
+        }
         catch(const std::exception& e){if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}remember(nullptr,i);last.report.fail("CANDIDATE_FAILURE",e.what());if(progress)progress(i,std::string("Candidate rejected: ")+e.what());}
     }if(haveBestIntensity)return withHistory(std::move(bestIntensity),"best-physically-valid-intensity-shortfall");return withHistory(std::move(last),"last-constructed-rejection");
 }

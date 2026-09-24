@@ -336,20 +336,20 @@ uint64_t elementSeed(uint64_t rideSeed, const std::string& elementId) {
 }
 
 RideRecipe defaultRideRecipe() {
-    RideRecipe recipe; recipe.name = "Escarpment Rift";
+    RideRecipe recipe; recipe.name = "Riftwake";
     recipe.elements = {
         element("station", RideRole::Station, TerrainAnchor::Station, OperationParameters{20, 0, 0, 0}),
         element("departure", RideRole::Departure, TerrainAnchor::Approach, OperationParameters{180, 230.4, 0, 0}),
         element("opening", RideRole::Opening, TerrainAnchor::Approach, HillParameters{160, .15, 50, 3.5, 1.2, 1.5, 1}),
-        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 30, 400, -148.016577}),
-        element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{100, 32, 0, 7}),
+        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 30, 1000, -158.016577}),
+        element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{60, 48, 0, 13}),
         element("cliff-drop", RideRole::CliffDrop, TerrainAnchor::CliffFoot, CliffParameters{285, 32, 88, 30, 220}),
-        element("downhill-lsm", RideRole::DownhillLaunch, TerrainAnchor::CliffFoot, OperationParameters{0, 0, -10, 16}),
+        element("downhill-lsm", RideRole::DownhillLaunch, TerrainAnchor::CliffFoot, OperationParameters{0, 0, -8, 16}),
         element("camelback", RideRole::Camelback, TerrainAnchor::CliffFoot, CamelbackParameters{}),
-        element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 90, 73, 3.5, 500}),
-        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{145, 33, 2, 55, 0}),
-        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{85, 45, 3.8, 55, -5}),
-        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{205, -70, -86.720313, 0, -1.2, 45}),
+        element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 90, 73, 3.0, 500}),
+        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{140, 15, 1.2, 55, 0}),
+        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{95, 15, 1.0, 55, -5}),
+        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{540, -70, -86.720313, 0, -.75, 45}),
         element("return-crest", RideRole::Return, TerrainAnchor::Ravine, HillParameters{35, -1.25, 0, 3.2, 1.0, 1.5, 1}),
         element("return-sweep", RideRole::Return, TerrainAnchor::Approach, SweepParameters{300, 0, 0, 0, 0, 0}),
         element("brakes", RideRole::Brakes, TerrainAnchor::Station, OperationParameters{250, 0, 0, -7})

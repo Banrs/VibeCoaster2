@@ -251,9 +251,11 @@ bool recheck(Design& d,Cancel cancel,WorkRecorder* work=nullptr){
     auto fine=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,d.request.train,d.request.simulationStep*.5,stop);});
     auto spatial=std::async(std::launch::async,[&]{return replaySpatialRefinement(d,stop);});
     auto sweep=buildClearanceSweepVerified(d.track,d.request.train,cancel);sweep.prepareGround(d.request.terrain,cancel);
+    // Both checks read the rebuilt design and the prepared sweep.
+    auto structures=std::async(std::launch::async,[&]{return validateDesignStructures(d,sweep,cancel);});
     d.report=validateGeometry(d.track,d.request.terrain,d.request.limits,d.request.train,d.supports,sweep,cancel);
     if(work)work->enter(WorkPhase::Structures,d.candidate,"Checking saved supports and station");
-    auto structures=validateDesignStructures(d,sweep,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());
+    auto structureReport=structures.get();d.report.errors.insert(d.report.errors.end(),structureReport.errors.begin(),structureReport.errors.end());
     if(!d.report.valid()){
         stopFine.store(true);
         if(std::any_of(d.report.errors.begin(),d.report.errors.end(),[](const Finding& f){return f.code=="CANCELLED";}))d.simulation.cancelled=true;
@@ -311,7 +313,7 @@ std::string reportJson(const Design& d){
     bool convergenceComma=false;for(const auto& metric:c.metrics){if(convergenceComma)o<<',';convergenceComma=true;o<<"{\"name\":"<<quote(metric.name)<<",\"coarse\":";number(o,metric.coarse);o<<",\"fine\":";number(o,metric.fine);o<<",\"absoluteDifference\":";number(o,metric.absoluteDifference);o<<",\"tolerance\":";number(o,metric.tolerance);o<<'}';}o<<"]}";
     o<<",\"intensityComparison\":\"Maximum over physical front/middle/rear seats of the strongest ten-second integral of max(vertical_g,0); configured reference identity is external\"";
     auto object=[&](const char* name,const std::vector<std::pair<const char*,double>>& fields){o<<','<<quote(name)<<":{";bool first=true;for(auto [key,value]:fields){if(!first)o<<',';first=false;o<<quote(key)<<':';number(o,value);}o<<'}';};
-    const auto& terrain=d.request.terrain;object("terrainProfile",{{"centerXMeters",terrain.centerX},{"centerYMeters",terrain.centerY},{"ridgeHeightMeters",terrain.kind==TerrainKind::Flat?0:terrain.heightMeters},{"radiusXMeters",terrain.radiusX},{"radiusYMeters",terrain.radiusY},{"bend",terrain.bend},{"plateau",terrain.plateau},{"cliffX",terrain.cliffX},{"cliffY",terrain.cliffY},{"cliffHeading",terrain.cliffHeading},{"cliffWidth",terrain.cliffWidth},{"meshStepMeters",Terrain::gridStep},{"globalSlopeBound",terrain.slopeBound()}});
+    const auto& terrain=d.request.terrain;object("terrainProfile",{{"centerXMeters",terrain.centerX},{"centerYMeters",terrain.centerY},{"ridgeHeightMeters",terrain.kind==TerrainKind::Flat?0:terrain.heightMeters},{"radiusXMeters",terrain.radiusX},{"radiusYMeters",terrain.radiusY},{"bend",terrain.bend},{"plateau",terrain.plateau},{"cliffX",terrain.cliffX},{"cliffY",terrain.cliffY},{"cliffHeading",terrain.cliffHeading},{"cliffWidth",terrain.cliffWidth},{"cliffCurvature",terrain.cliffCurvature},{"meshStepMeters",Terrain::gridStep},{"globalSlopeBound",terrain.slopeBound()}});
     if(terrain.backSlope){const auto& q=*terrain.backSlope;object("terrainBackSlope",{{"x",q.x},{"y",q.y},{"height",q.height},{"gradeX",q.gradeX},{"gradeY",q.gradeY},{"width",q.width}});}
     o<<",\"terrainFoothills\":[";for(size_t i=0;i<terrain.foothills.size();++i){if(i)o<<',';const auto& k=terrain.foothills[i];o<<'['<<k.x<<','<<k.y<<','<<k.height<<','<<k.radius<<']';}o<<']';
     o<<",\"terrainRavines\":[";for(size_t i=0;i<terrain.ravines.size();++i){if(i)o<<',';const auto& q=terrain.ravines[i];o<<'['<<q.x0<<','<<q.y0<<','<<q.x1<<','<<q.y1<<','<<q.depth0<<','<<q.depth1<<','<<q.width0<<','<<q.width1<<']';}o<<']';
@@ -321,7 +323,7 @@ std::string reportJson(const Design& d){
     for(size_t i=0;i<terrain.ridge.points.size();++i){if(i)o<<',';const auto& p=terrain.ridge.points[i];o<<'['<<p.x<<','<<p.y<<','<<p.height<<','<<p.gx<<','<<p.gy<<']';}o<<"]}";
     o<<",\"terrainKnolls\":[";for(size_t i=0;i<terrain.knolls.size();++i){if(i)o<<',';const auto& k=terrain.knolls[i];o<<'['<<k.x<<','<<k.y<<','<<k.height<<','<<k.radius<<']';}o<<']';
     const auto& l=d.request.limits;object("limits",{{"minVerticalG",l.minVerticalG},{"maxVerticalG",l.maxVerticalG},{"maxLateralG",l.maxLateralG},{"maxLongitudinalG",l.maxLongitudinalG},{"maxJerkGps",l.maxJerkGps},{"minClearance",l.minClearance},{"maxLateralRateGps",l.maxLateralRateGps},{"maxLongitudinalRateGps",l.maxLongitudinalRateGps}});
-    const auto& t=d.request.train;object("train",{{"cars",double(t.cars)},{"carMass",t.carMass},{"spacing",t.spacing},{"seatHeight",t.seatHeight},{"dragCdA",t.dragCdA},{"rollingResistance",t.rollingResistance},{"airDensity",t.airDensity}});
+    const auto& t=d.request.train;object("train",{{"cars",double(t.cars)},{"riderCapacity",double(riderCapacity(t))},{"carMass",t.carMass},{"spacing",t.spacing},{"seatHeight",t.seatHeight},{"dragCdA",t.dragCdA},{"rollingResistance",t.rollingResistance},{"airDensity",t.airDensity}});
     object("style",{{"airtime",d.request.style.airtime},{"signatureRollDegrees",d.request.style.signatureRollDegrees},{"returnStyle",double(d.request.style.returnStyle)},{"automaticTrims",double(d.request.style.automaticTrims)}});
     o<<",\"targets\":{\"heightMeters\":";number(o,d.request.targets.height);o<<",\"speedMps\":";number(o,d.request.targets.speed);o<<",\"inversionHeightMeters\":";number(o,d.request.targets.inversionHeight);o<<",\"launchSeconds\":";number(o,d.request.targets.launchSeconds);o<<",\"referenceExposure\":";number(o,d.request.targets.referenceExposure);o<<",\"referenceId\":"<<quote(d.request.targets.referenceId)<<"}";
     o<<','<<quote("trimBrakes")<<":[";bool trimComma=false;

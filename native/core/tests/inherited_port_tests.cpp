@@ -135,9 +135,8 @@ int main(int argc,char** argv){try{
     const auto looped=designFvdLoop(loop);good(looped.section);samePort(looped.section.track.knots.front(),placed);
     near(std::remainder(std::atan2(looped.section.samples.back().forward.y,looped.section.samples.back().forward.x)-.37-loop.yawAngle,2*pi),0,1e-6,"Inherited loop yaw is relative to its actual entry heading");
     loopPlaneYaw(looped,.37,loop.yawAngle);
-    const auto originalClearance=validateSelfClearance(looped.section.track,TrainConfig{});
-    check(std::any_of(originalClearance.errors.begin(),originalClearance.errors.end(),[](const auto& e){return e.code=="TRACK_CLEARANCE";}),
-        "Source replay and signed plane-yaw success do not conceal the original loop's branch collision");
+    check(validateSelfClearance(looped.section.track,TrainConfig{}).valid(),
+        "Completing the authored plane yaw on ascent separates the gentle loop's rising and descending branches");
 
     auto mirrored=loop;mirrored.yawAngle=-loop.yawAngle;
     const auto reverseLoop=designFvdLoop(mirrored);loopPlaneYaw(reverseLoop,.37,mirrored.yawAngle);samePort(reverseLoop.section.track.knots.front(),placed);

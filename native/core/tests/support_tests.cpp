@@ -31,10 +31,10 @@ int main(){try{
     size_t members=0;
     for(auto& support:d.supports){check(!support.members.empty(),"Every new support explicit");check(validateSupportMembers(support,d.request.terrain).valid(),"Member shape/terrain/connectivity valid");
         for(auto& member:support.members){++members;auto mesh=supportMemberMesh(member);
-            check(mesh.positions.size()==34&&mesh.indices.size()==96&&mesh.normals.size()==34,"Closed frustum buffer size");Vec3 axis=unit(member.top-member.base);double length=norm(member.top-member.base);
+            check(mesh.positions.size()==66&&mesh.indices.size()==192&&mesh.normals.size()==66,"Closed frustum buffer size");Vec3 axis=unit(member.top-member.base);double length=norm(member.top-member.base);
             for(size_t i=0;i<mesh.positions.size();++i){Vec3 delta=mesh.positions[i]-member.base;double z=dot(delta,axis),radial=norm(delta-axis*z),radius=member.radiusBase+(member.radiusTop-member.radiusBase)*std::clamp(z/length,0.,1.);
                 check(z>=-1e-8&&z<=length+1e-8&&radial<=radius+1e-8,"Every mesh vertex inside canonical tapered solid");check(std::abs(norm(mesh.normals[i])-1)<1e-9,"Unit mesh normal");auto p=VibeCoordinates::Position(mesh.positions[i]);check(norm(VibeCoordinates::CorePosition(p)-mesh.positions[i])<1e-9,"Coordinate roundtrip within floating-point precision");}
-            for(size_t i=0;i<mesh.indices.size();i+=3){uint32_t a=mesh.indices[i],b=mesh.indices[i+1],c=mesh.indices[i+2];check(a<34&&b<34&&c<34,"Valid triangle indices");Vec3 n=cross(mesh.positions[b]-mesh.positions[a],mesh.positions[c]-mesh.positions[a]);check(dot(n,mesh.normals[a]+mesh.normals[b]+mesh.normals[c])>0,"Every triangle faces outward");
+            for(size_t i=0;i<mesh.indices.size();i+=3){uint32_t a=mesh.indices[i],b=mesh.indices[i+1],c=mesh.indices[i+2];check(a<66&&b<66&&c<66,"Valid triangle indices");Vec3 n=cross(mesh.positions[b]-mesh.positions[a],mesh.positions[c]-mesh.positions[a]);check(dot(n,mesh.normals[a]+mesh.normals[b]+mesh.normals[c])>0,"Every triangle faces outward");
                 auto u=VibeCoordinates::Position(mesh.positions[a]),v=VibeCoordinates::Position(mesh.positions[c]),w=VibeCoordinates::Position(mesh.positions[b]);auto expected=VibeCoordinates::Direction(mesh.normals[a]+mesh.normals[b]+mesh.normals[c]);check(dot(cross(Vec3{v.X-u.X,v.Y-u.Y,v.Z-u.Z},Vec3{w.X-u.X,w.Y-u.Y,w.Z-u.Z}),Vec3{expected.X,expected.Y,expected.Z})>0,"Reflected UE winding remains outward");}
         }
     }

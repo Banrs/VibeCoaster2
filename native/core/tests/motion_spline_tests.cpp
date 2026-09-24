@@ -61,13 +61,13 @@ int main(){try{
         whole.knots.push_back({q.position,q.tangent,q.curvature,{0,0,1},0,Element::Turn,q.third,q.fourth});}
     whole.knots.back()=whole.knots.front();whole.rebuild();
     auto prefixTrack=whole;prefixTrack.closed=false;prefixTrack.knots.resize(prefixSamples+1);prefixTrack.rebuild();
-    TrainConfig prefixTrain;
+    TrainConfig prefixTrain;const double frontTrainOffset=seatDistanceOffset(prefixTrain,0);
     const std::vector<Operation> prefixDrives{{3,250,DriveKind::Launch,30,30000,3000000,.5}};
     int prefixPolls=0;
     const auto prefixMotion=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,[&]{++prefixPolls;return false;},MotionReplayMode::StationEnergyPrefix);
     check(prefixMotion.prefixReachedEnd&&!prefixMotion.completed&&!prefixMotion.cancelled&&prefixMotion.report.valid(),
         "A successful calibration prefix reports only prefix completion, never completed ride acceptance");
-    check(!prefixMotion.frames.empty()&&prefixMotion.frames.front().distance==38.5,
+    check(!prefixMotion.frames.empty()&&prefixMotion.frames.front().distance==frontTrainOffset+30,
         "Open energy calibration uses the full circuit's station departure distance");
     int wholePolls=0;
     const auto upstream=simulateMotion(whole,prefixDrives,prefixTrain,1./960,[&]{return ++wholePolls>prefixPolls+2;});
@@ -79,7 +79,7 @@ int main(){try{
             "Station energy prefix and closed-circuit replay have bit-exact upstream motion and actuator derivatives");}
     const auto isolatedMotion=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,{});
     const auto isolatedForces=simulate(prefixTrack,prefixDrives,prefixTrain,1./960,{});
-    check(isolatedMotion.completed&&!isolatedMotion.prefixReachedEnd&&isolatedMotion.frames.front().distance==9.5,
+    check(isolatedMotion.completed&&!isolatedMotion.prefixReachedEnd&&isolatedMotion.frames.front().distance==frontTrainOffset+1,
         "Ordinary isolated open sections retain their original starting position and completed status");
     check(isolatedForces.completed==isolatedMotion.completed&&isolatedForces.cancelled==isolatedMotion.cancelled&&isolatedForces.frames.size()==isolatedMotion.frames.size(),
         "Named prefix support does not change ordinary full-force versus motion-only completion");

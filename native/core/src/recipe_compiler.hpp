@@ -11,7 +11,7 @@ struct RecipeFeedback {
     double peakSpeedCorrection{};
     double camelbackTailCutSeconds{},signatureAirtimeScale{1};
     bool compactReturn{};
-    double cliffHeadingCorrection{},signatureHeadingCorrection{};
+    double cliffHeadingCorrection{},approachHeadingCorrection{};
     std::unordered_map<std::string,double> energyCorrection;
 };
 struct RecipeCompileFailure : std::runtime_error {

@@ -18,7 +18,7 @@ inline std::vector<OperationHardware> buildOperationHardware(const Track& track,
             auto box=[&](Vec3 centre,Vec3 half,bool moving=false){out.push_back({index,s,powered,{q.position+q.tangent*centre.x+q.right*centre.y+q.up*centre.z,q.tangent,q.right,q.up,half,StationRole::Post},moving});};
             if(powered) {
                 for(double side:{-1.,1.})box({0,side*.34,-.11},{length*.5,.10,.09});
-                box({0,0,-.27},{length*.35,.40,.055});
+                box({0,0,-.295},{length*.35,.40,.105}); // Mounting bridge meets the spine and lower stator edges
             } else if(op.kind==DriveKind::Trim) {
                 box({0,0,-.08},{length*.5,.01,.14},true); // conductive fin
                 box({0,0,-.28},{length*.30,.10,.13}); // spine mounting bracket

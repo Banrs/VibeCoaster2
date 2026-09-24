@@ -31,7 +31,7 @@ int main(){try{
         check(supportCollision(joint,sweep)<0,"Actual spine attachment passes web geometry without exemption");
         joint.members[0].spineContact=false;check(supportCollision(joint,sweep)>=0,"Unapproved spine contact remains rejected");
     }
-    const auto webs=trackWebsLocal();double radius=0;
+    const auto webs=trackWebsLocal();const auto saddles=trackTieSaddlesLocal();double radius=0;
     {
         // This first left-web case exposed a 1.692 mm clearance overestimate
         // under MSVC /O2 /fp:precise. Its nearest point is this exact box corner.
@@ -45,6 +45,13 @@ int main(){try{
         check(std::abs(segmentWebDistanceSquared(b,a,box)-analytic)<1e-12,"Segment reversal preserves the analytic minimum");
         const double margin=std::sqrt(analytic)+.001;
         check(actual<=margin*margin,"Millimetre-near web contact is not missed by distance overestimation");
+    }
+    for(const auto& saddle:saddles){
+        check(std::abs(saddle.center.z-saddle.half.z+.198)<1e-12&&std::abs(saddle.center.z+saddle.half.z+.085)<1e-12,"Tie saddle reaches the web socket and running-rail underside");
+        const double side=saddle.center.y<0?-1.:1.;
+        const StationBox railContact{world({0,side*.65,-.085}),p.tangent,p.right,p.up,{.001,.001,.001},StationRole::Post};
+        check(stationBoxesOverlap(trackWebWorld(saddle,p),railContact),"Shared station saddle proxy meets the running-rail underside");
+        for(Vec3 v:trackWebCorners(saddle)){radius=std::max(radius,norm(v));check(norm(v)<.9,"Tie saddle stays inside canonical hardware radius");}
     }
     for(const auto& box:webs){
         for(Vec3 v:trackWebCorners(box)){radius=std::max(radius,norm(v));check(norm(v)<.9,"Preserved hardware radius");}

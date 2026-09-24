@@ -74,14 +74,21 @@ int main(){try{
     const std::vector<Operation> hardwareOperations{op(0,120),trim,terminal};
     const auto hardware=buildOperationHardware(track,hardwareOperations);
     check(!hardware.empty(),"Physical operation hardware is generated from simulation zones");
+    bool poweredMountBridgesTrack=false;
     for(const auto& piece:hardware) {
         const auto& operation=hardwareOperations[piece.operation];
         check(piece.distance>=operation.start&&piece.distance<=operation.end,"Hardware lies on its actual operation interval");
         const auto pose=track.sample(piece.distance);const auto delta=piece.box.center-pose.position;
+        if(piece.powered&&std::abs(piece.box.half.y-.40)<1e-12&&std::abs(piece.box.half.z-.105)<1e-12){
+            const double centreUp=dot(delta,pose.up);
+            check(std::abs(centreUp+.295)<1e-12&&centreUp-piece.box.half.z<=-.39&&centreUp+piece.box.half.z>=-.20,"LSM mounting box bridges the spine top and lower stator edge");
+            poweredMountBridgesTrack=true;
+        }
         check(std::abs(dot(delta,pose.right))+piece.box.half.y<=1.5&&dot(delta,pose.up)-piece.box.half.z>=-.8&&dot(delta,pose.up)+piece.box.half.z<=2.4,"Fixed assemblies stay inside the reserved nonlocal-clearance envelope");
         check(dot(delta,pose.up)+piece.box.half.z<.075,"Deployed drive/brake solids retain clearance below the actual train body bottom at +10 cm");
         check(dot(piece.box.forward,pose.tangent)>1-1e-12&&dot(piece.box.up,pose.up)>1-1e-12,"Hardware uses the canonical physical track frame");
     }
+    check(poweredMountBridgesTrack,"Powered hardware includes a continuous LSM-to-spine mounting box");
     Design graded;graded.request.train=train;
     std::vector<AuthoredPoint> incline;for(int i=0;i<=800;++i)incline.push_back({{double(i),0,20+i*.05},0,Element::Hill,{0,0,1}});
     graded.track=compile(incline,false);graded.operations={op(0,180)};graded.sections={{"graded-coast",250,700,0,true}};
