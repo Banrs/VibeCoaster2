@@ -1,0 +1,437 @@
+diff --git a/native/core/include/coaster/coaster.hpp b/native/core/include/coaster/coaster.hpp
+index feded85..76c35ca 100644
+--- a/native/core/include/coaster/coaster.hpp
++++ b/native/core/include/coaster/coaster.hpp
+@@ -20,7 +20,7 @@
+ namespace coaster {
+ constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
+ constexpr const char* generatorVersion=COASTER_GENERATOR_VERSION;
+-inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
++inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.2"||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
+ 
+ enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
+ struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
+diff --git a/native/core/include/coaster/version.hpp b/native/core/include/coaster/version.hpp
+index f2952c6..98665ee 100644
+--- a/native/core/include/coaster/version.hpp
++++ b/native/core/include/coaster/version.hpp
+@@ -1,6 +1,6 @@
+ #pragma once
+ // The only authored release identity. CMake, Unreal and packaging consume it.
+-#define COASTER_GENERATOR_VERSION "2.0.0-default.2"
++#define COASTER_GENERATOR_VERSION "2.0.0-default.3"
+ #ifndef COASTER_BUILD_COMMIT
+ #define COASTER_BUILD_COMMIT "unversioned"
+ #endif
+diff --git a/native/core/src/fvd.cpp b/native/core/src/fvd.cpp
+index 031ded5..83fd970 100644
+--- a/native/core/src/fvd.cpp
++++ b/native/core/src/fvd.cpp
+@@ -998,10 +998,11 @@ FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest& input,Cancel ca
+                 {apex+input.rollReleaseFraction*p[2],input.crestG,0,0});
+             if(input.ascentReleaseSeconds>0)r.controls.insert(r.controls.begin()+3,
+                 {input.rampSeconds+p[0]+input.ascentReleaseSeconds,input.crestG,0,0});
+-            // Author the physical roll rate with quintic ramps and a steady
+-            // middle. A single septic angle pulse concentrates its rotation
+-            // at the roll centre and unnecessarily unloads the elevated seat.
+-            const double rollBegin=apex-input.rollOverlapFraction*p[1],ramp=.2*(rollEnd-rollBegin);
++            // Give acceleration and release most of the half-roll. The former
++            // 20% ramps concentrated lateral seat acceleration at both ends;
++            // a broad C2 rate profile preserves the authored twist without
++            // using a short angular impulse to manufacture the sensation.
++            const double rollBegin=apex-input.rollOverlapFraction*p[1],ramp=.4*(rollEnd-rollBegin);
+             const double rate=input.hand*p[3]/(rollEnd-rollBegin-ramp);
+             const std::vector<FvdControl> roll{{rollBegin,1,0,0},{rollBegin+ramp,1,0,rate},
+                 {rollEnd-ramp,1,0,rate},{rollEnd,1,0,0}};
+diff --git a/native/core/src/generation.cpp b/native/core/src/generation.cpp
+index 8b13e80..57cf39e 100644
+--- a/native/core/src/generation.cpp
++++ b/native/core/src/generation.cpp
+@@ -32,17 +32,19 @@ static bool improveReturnLayout(const Design& d,RecipeFeedback& feedback,const s
+     }
+     if(cliffId.empty()||signatureId.empty()||approachId.empty())return false;
+     auto findSource=[&](const std::string& id){return std::find_if(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const auto& p){return p.name==id;});};
+-    const auto cliff=findSource(cliffId),signature=findSource(signatureId),approach=findSource(approachId);
+-    if(cliff==d.forcePrograms.end()||signature==d.forcePrograms.end())return false;
++    const auto approach=findSource(approachId);
++    const auto signature=std::find_if(d.splinePrograms.begin(),d.splinePrograms.end(),[&](const auto& p){return p.name==signatureId+"-approach";});
++    const auto setup=std::find_if(d.splinePrograms.begin(),d.splinePrograms.end(),[&](const auto& p){return p.name==cliffId+"-recovery";});
++    if(setup==d.splinePrograms.end()||signature==d.splinePrograms.end())return false;
+     double distance=0,speed=0;
+     if(pending&&pending->id==approachId){distance=pending->distance;speed=pending->speed;}
+     else if(approach!=d.forcePrograms.end()){distance=d.track.spans.at(approach->firstKnot).start;speed=approach->program.speed;}
+     else return false;
+     const auto q=sampleKinematics(d.track,distance);
+     if(std::abs(q.sample.tangent.z)>1e-6||norm(q.sample.up-Vec3{0,0,1})>1e-6||norm(q.sample.curvature)>1e-6)return false;
+-    const double hand=cliff->hand;
++    const double hand=signature->hand;
+     auto unmirror=[&](Vec3 p){p.y*=hand;return p;};
+-    const Vec3 point=unmirror(q.sample.position),cp=unmirror(d.track.knots[cliff->firstKnot].position),sp=unmirror(d.track.knots[signature->firstKnot].position);
++    const Vec3 point=unmirror(q.sample.position),cp=unmirror(d.track.knots[setup->firstKnot].position),sp=unmirror(d.track.knots[signature->firstKnot].position);
+     const auto tangent=unmirror(q.sample.tangent);const double heading=std::atan2(tangent.y,tangent.x);
+     if(std::abs(heading)<.35||std::abs(heading)>2.5||speed<15||speed>80)return false;
+     const auto& train=d.request.train;
+@@ -76,10 +78,10 @@ static bool improveReturnLayout(const Design& d,RecipeFeedback& feedback,const s
+     const double determinant=jc.x*js.y-js.x*jc.y;
+     if(std::abs(determinant)<1)return false;
+     const double dc=std::clamp((-error.x*js.y+error.y*js.x)/determinant,-.1,.1),ds=std::clamp((-error.y*jc.x+error.x*jc.y)/determinant,-.1,.1);
+-    const double prior=feedback.compactReturn?feedback.cliffHeadingCorrection:d.candidate==1?-4*pi/180:d.candidate==2?4*pi/180:.25*std::sin(d.candidate*2.399963229728653);
+-    const double nextCliff=std::clamp(prior+dc,-.45,.45),nextSignature=std::clamp(feedback.signatureHeadingCorrection+ds,-.45,.45);
+-    if(feedback.compactReturn&&std::abs(nextCliff-feedback.cliffHeadingCorrection)+std::abs(nextSignature-feedback.signatureHeadingCorrection)<1e-7)return false;
+-    feedback.cliffHeadingCorrection=nextCliff;feedback.signatureHeadingCorrection=nextSignature;feedback.compactReturn=true;
++    const double prior=feedback.compactReturn?feedback.cliffHeadingCorrection:d.candidate==1?-4*pi/180:d.candidate==2?4*pi/180:0;
++    const double nextCliff=std::clamp(prior+dc,-.45,.45),nextSignature=std::clamp(feedback.approachHeadingCorrection+ds,-.45,.45);
++    if(feedback.compactReturn&&std::abs(nextCliff-feedback.cliffHeadingCorrection)+std::abs(nextSignature-feedback.approachHeadingCorrection)<1e-7)return false;
++    feedback.cliffHeadingCorrection=nextCliff;feedback.approachHeadingCorrection=nextSignature;feedback.compactReturn=true;
+     return true;
+ }
+ 
+@@ -364,7 +366,12 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
+             // Preserve the usual best-intensity selection when stopping a
+             // search whose next attempt would compile the same geometry.
+             if(feedback.compactReturn&&!layoutChanged&&!forceChanged)break;
+-        }catch(RecipeCompileFailure& e){last=std::move(e.partial);if(last.simulation.cancelled||(cancel&&cancel())){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}last.report.fail("AUTHORING",e.what());improveReturnLayout(last,calibratedEnergy,e.pendingPort,cancel);if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled during return planning");return last;}remember(&last,i);}
++        }catch(RecipeCompileFailure& e){last=std::move(e.partial);if(last.simulation.cancelled||(cancel&&cancel())){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}last.report.fail("AUTHORING",e.what());const bool layoutChanged=improveReturnLayout(last,calibratedEnergy,e.pendingPort,cancel);if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled during return planning");return last;}remember(&last,i);
++            // Later candidates change placement, not the failed source's force
++            // family. Repeating a converged energy bootstrap cannot repair it.
++            const bool exhaustedEnergy=std::any_of(last.report.errors.begin(),last.report.errors.end(),[](const Finding& f){return f.code=="ENERGY_BOOTSTRAP_NO_PROGRESS";});
++            if(exhaustedEnergy&&!layoutChanged)return withHistory(std::move(last),"unconstructible-authored-force-intent");
++        }
+         catch(const std::exception& e){if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}remember(nullptr,i);last.report.fail("CANDIDATE_FAILURE",e.what());if(progress)progress(i,std::string("Candidate rejected: ")+e.what());}
+     }if(haveBestIntensity)return withHistory(std::move(bestIntensity),"best-physically-valid-intensity-shortfall");return withHistory(std::move(last),"last-constructed-rejection");
+ }
+diff --git a/native/core/src/motion_audit.cpp b/native/core/src/motion_audit.cpp
+index 2d66bb7..528e689 100644
+--- a/native/core/src/motion_audit.cpp
++++ b/native/core/src/motion_audit.cpp
+@@ -96,16 +96,16 @@ void assessMotion(Design& d,Cancel cancel){
+             if(landmark.kind==LandmarkKind::PlateauArrival)plateauTime=time;if(landmark.kind==LandmarkKind::CliffDeparture)dropTime=time;
+         }
+         if(!std::all_of(seen.begin(),seen.end(),[](bool value){return value;}))d.report.fail("LANDMARK_INTENT","Default recipe is missing a required verification landmark");
+-        // Paused front POV/media-time inspection brackets the banked crest
+-        // around 6:38 and the first lip departure around 6:58. The resulting
+-        // approximately20s interval has about1s visual landmark uncertainty;
+-        // 20.5s is a conservative cap below1.1 times its plausible lower end.
+-        constexpr double clifftopLimit=20.5;
+-        if(!std::isfinite(plateauTime)||!std::isfinite(dropTime)||dropTime<plateauTime||dropTime-plateauTime>clifftopLimit)
+-            d.report.fail("CLIFFTOP_PACING","Front-seat crest-to-cliff commitment exceeds the conservative FF pacing cap (braking/holding included)",0,dropTime-plateauTime,clifftopLimit);
++        // Legacy saves retain their former total-interval check. New rides
++        // distinguish active clifftop track from the short brake/lip approach.
++        if(d.generationVersion!=generatorVersion){
++            constexpr double clifftopLimit=20.5;
++            if(!std::isfinite(plateauTime)||!std::isfinite(dropTime)||dropTime<plateauTime||dropTime-plateauTime>clifftopLimit)
++                d.report.fail("CLIFFTOP_PACING","Legacy front-seat crest-to-cliff commitment exceeds its pacing cap",0,dropTime-plateauTime,clifftopLimit);
++        }
+     }
+-    // Semantic pacing is reported separately from the unchanged acceptance
+-    // gates. Elements may compile into several motion sections.
++    // Elements may compile into several motion sections.
++
+     auto frontTime=[&](double distance){return frameAt(d.simulation.frames,distance-seatDistanceOffset(d.request.train,0)).time;};
+     auto landmarkDistance=[&](LandmarkKind kind){
+         double distance=NAN;bool found=false;
+@@ -125,6 +125,16 @@ void assessMotion(Design& d,Cancel cancel){
+         audit.clifftopActiveSeconds=frontTime(lipStart)-frontTime(plateau);
+         audit.clifftopBrakingSeconds=frontTime(departure)-frontTime(lipStart);
+     }
++    if(d.generationVersion==generatorVersion&&d.request.recipe.name=="Riftwake"){
++        // FF's retained overlay shows several summit turns at video84-106s,
++        // then a separate brake approach. These are design pacing bounds,
++        // not precision measurements or limits from an acceleration standard.
++        constexpr double activeMinimum=20,activeMaximum=35,brakingMaximum=6;
++        if(!std::isfinite(audit.clifftopActiveSeconds)||audit.clifftopActiveSeconds<activeMinimum||audit.clifftopActiveSeconds>activeMaximum)
++            d.report.fail("CLIFFTOP_ACTIVE_PACING","Clifftop needs 20-35 seconds of active track",plateau,audit.clifftopActiveSeconds,audit.clifftopActiveSeconds<activeMinimum?activeMinimum:activeMaximum);
++        if(!std::isfinite(audit.clifftopBrakingSeconds)||audit.clifftopBrakingSeconds<0||audit.clifftopBrakingSeconds>brakingMaximum||audit.clifftopBrakingSeconds>=audit.clifftopActiveSeconds)
++            d.report.fail("CLIFFTOP_BRAKING_PACING","Cliff brake/lip approach must be at most six seconds and shorter than the active summit track",lipStart,audit.clifftopBrakingSeconds,brakingMaximum);
++    }
+     if(std::isfinite(signatureEnd)&&std::isfinite(d.simulation.metrics.duration)){
+         const double duration=d.simulation.metrics.duration-frontTime(signatureEnd);
+         if(duration>=0)audit.returnSeconds=duration;
+diff --git a/native/core/src/recipe.cpp b/native/core/src/recipe.cpp
+index 19e5f7c..a163574 100644
+--- a/native/core/src/recipe.cpp
++++ b/native/core/src/recipe.cpp
+@@ -336,20 +336,20 @@ uint64_t elementSeed(uint64_t rideSeed, const std::string& elementId) {
+ }
+ 
+ RideRecipe defaultRideRecipe() {
+-    RideRecipe recipe; recipe.name = "Escarpment Rift";
++    RideRecipe recipe; recipe.name = "Riftwake";
+     recipe.elements = {
+         element("station", RideRole::Station, TerrainAnchor::Station, OperationParameters{20, 0, 0, 0}),
+         element("departure", RideRole::Departure, TerrainAnchor::Approach, OperationParameters{180, 230.4, 0, 0}),
+         element("opening", RideRole::Opening, TerrainAnchor::Approach, HillParameters{160, .15, 50, 3.5, 1.2, 1.5, 1}),
+-        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 30, 400, -148.016577}),
+-        element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{100, 32, 0, 7}),
++        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 30, 1000, -148.016577}),
++        element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{60, 48, 0, 9.5}),
+         element("cliff-drop", RideRole::CliffDrop, TerrainAnchor::CliffFoot, CliffParameters{285, 32, 88, 30, 220}),
+-        element("downhill-lsm", RideRole::DownhillLaunch, TerrainAnchor::CliffFoot, OperationParameters{0, 0, -10, 16}),
++        element("downhill-lsm", RideRole::DownhillLaunch, TerrainAnchor::CliffFoot, OperationParameters{0, 0, -8, 16}),
+         element("camelback", RideRole::Camelback, TerrainAnchor::CliffFoot, CamelbackParameters{}),
+-        element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 90, 73, 3.5, 500}),
+-        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{145, 33, 2, 55, 0}),
+-        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{85, 45, 3.8, 55, -5}),
+-        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{205, -70, -86.720313, 0, -1.2, 45}),
++        element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 90, 73, 1.5, 500}),
++        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{140, 15, 1.2, 55, 0}),
++        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{95, 15, .6, 55, -5}),
++        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{540, -70, -86.720313, 0, -.75, 45}),
+         element("return-crest", RideRole::Return, TerrainAnchor::Ravine, HillParameters{35, -1.25, 0, 3.2, 1.0, 1.5, 1}),
+         element("return-sweep", RideRole::Return, TerrainAnchor::Approach, SweepParameters{300, 0, 0, 0, 0, 0}),
+         element("brakes", RideRole::Brakes, TerrainAnchor::Station, OperationParameters{250, 0, 0, -7})
+diff --git a/native/core/src/recipe_compiler.cpp b/native/core/src/recipe_compiler.cpp
+index e43a45e..77e772a 100644
+--- a/native/core/src/recipe_compiler.cpp
++++ b/native/core/src/recipe_compiler.cpp
+@@ -78,17 +78,46 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+             ports.push_back({sourcePorts[i].first,at(sourcePorts[i].second),sourceSpeeds[i]});
+     };
+     auto lossFor=[&](auto& intent){intent.rollingAcceleration=gravity*req.train.rollingResistance;intent.dragAccelerationCoefficient=motion.drag;};
+-    auto terrainAct=[&](const RecipeElement& element,TerrainAct kind,double height,double yaw,double bank,double negative,double scale,double exitPitch=0){
+-        const auto pitch=detail::directionAngles(cursor)[0];FvdTerrainActRequest intent;
+-        intent.kind=kind;intent.entrySpeed=speedFor(element.id);intent.entryPitch=pitch.value;intent.pitchRateS=pitch.first;intent.pitchSecondS=pitch.second;intent.pitchThirdS=pitch.third;
+-        intent.heightChange=height;intent.headingChange=yaw;intent.outwardBank=bank;intent.airtimeG=negative;intent.durationScale=scale;intent.exitPitch=exitPitch;lossFor(intent);return designFvdTerrainAct(intent,cancel);
+-    };
+     auto freeDirection=[&](AngleJet endPitch,AngleJet endYaw,double length,Element kind,const std::string& name,double bank=0.){
+         const auto incoming=detail::directionAngles(cursor);
+         endYaw.value=incoming[1].value+std::remainder(endYaw.value-incoming[1].value,2*pi);
+         const auto hint=polynomialMotion(cursor,detail::anglePolynomial(incoming[0],endPitch,length),detail::anglePolynomial(incoming[1],endYaw,length),length);
+         return motion.programme(hint,kind,name.c_str(),bank);
+     };
++    // One fixed-length curve with an exact authored height. A single ordered
++    // pitch crest or trough supplies the height constraint; endpoint position,
++    // direction and all three spatial derivatives remain inherited. Unlike a
++    // free-length placement fit, this cannot double an act's ride time.
++    auto terrainCurve=[&](MotionJet end,double length,Element kind,const std::string& name,double bank=0.){
++        const auto first=detail::directionAngles(cursor),last=detail::directionAngles(end);
++        const double yaw=first[1].value+std::remainder(last[1].value-first[1].value,2*pi);
++        const auto baseline=polynomialMotion(cursor,detail::anglePolynomial(first[0],last[0],length),
++            detail::anglePolynomial(first[1],{yaw,last[1].first,last[1].second,last[1].third},length),length);
++        const int middle=MotionProgram::controlCount/2,lastFree=MotionProgram::controlCount-4;
++        const double firstPitch=baseline.pitch[3],lastPitch=baseline.pitch[lastFree];
++        auto shifted=[&](double peak){auto program=baseline;
++            for(int i=4;i<lastFree;++i){
++                if(i<=middle)program.pitch[i]=std::lerp(firstPitch,peak,smooth(double(i-3)/(middle-3)));
++                else program.pitch[i]=std::lerp(peak,lastPitch,smooth(double(i-middle)/(lastFree-middle)));
++            }
++            program.end=program.direction(length);program.end.position=cursor.position+program.displacement(length);return program;
++        };
++        const double target=end.position.z;
++        double low=target>=cursor.position.z?std::max({0.,firstPitch,lastPitch}):-.9;
++        double high=target>=cursor.position.z?.9:std::min({0.,firstPitch,lastPitch});
++        if(shifted(low).end.position.z>target||shifted(high).end.position.z<target)
++            throw std::runtime_error(name+": authored height is outside its fixed-length curve");
++        for(int i=0;i<45;++i){const double mid=(low+high)*.5;if(shifted(mid).end.position.z<target)low=mid;else high=mid;}
++        auto program=shifted((low+high)*.5);
++        if(std::abs(program.end.position.z-target)>1e-8)throw std::runtime_error(name+": fixed-length height did not converge");
++        const double sign=target>=cursor.position.z?1.:-1.;
++        for(int i=0;i<MotionProgram::controlCount-1;++i){
++            const double trend=i<middle?sign:-sign;
++            if(trend*(program.pitch[i+1]-program.pitch[i])< -1e-10)
++                throw std::runtime_error(name+": inherited pitch cannot form one ordered crest or trough");
++        }
++        return motion.programme(program,kind,name.c_str(),bank);
++    };
+     struct SourceOptions {
+         double begin{},blend{};
+         bool worldCoordinates{},allowConnector{false},calibrate{true};
+@@ -119,12 +148,6 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+         if(element.role==RideRole::Wave)landmarks.push_back({LandmarkKind::WaveCrest,apex});
+         if(element.role==RideRole::Loop)landmarks.push_back({LandmarkKind::LoopCrest,apex});
+         if(element.role==RideRole::Immelmann)landmarks.push_back({LandmarkKind::ImmelmannCrest,apex});
+-        if(element.role==RideRole::Signature){
+-            const auto control=std::min_element(result.authoring.controls.begin(),result.authoring.controls.end(),[](const auto& a,const auto& b){return a.normalG<b.normalG;});
+-            const auto sample=std::lower_bound(samples.begin(),samples.end(),control->time,[](const FvdSample& a,double time){return a.time<time;});
+-            const auto& distances=d.forcePrograms.back().sourceDistances;
+-            landmarks.push_back({LandmarkKind::SignatureRelease,range.first+size_t(std::lower_bound(distances.begin(),distances.end(),sample->distance)-distances.begin())});
+-        }
+         // Split only at actual extrema so section intent describes the source,
+         // while every boundary keeps its complete live geometric derivatives.
+         size_t start=range.first,turning=range.first;int previous=0,index=0;
+@@ -134,13 +157,13 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+         if(start<range.second)motion.modules.push_back({start,range.second,element.id+"-"+std::to_string(index),0,std::holds_alternative<CamelbackParameters>(element.parameters)});
+     };
+     auto groundLandscape=[&](Vec3 crest,double yaw,double summit){
+-        plateauCenter=crest+rotated(Vec3{120,-130,0},yaw);
++        plateauCenter=crest+rotated(Vec3{-80,150,0},yaw);
+         if(req.terrain.kind!=TerrainKind::Highlands)return;
+         auto& t=d.request.terrain;t.ridge={};t.ramps.clear();t.knolls.clear();t.foothills.clear();t.ravines.clear();
+         const auto center=plateauCenter;
+         t.centerX=center.x;t.centerY=center.y;t.heightMeters=std::max(0.,summit-14.5);
+-        t.backSlope=TerrainSlope{crest.x,crest.y,t.heightMeters,.45*std::cos(yaw),.45*std::sin(yaw),190};
+-        t.radiusX=520;t.radiusY=440;t.plateau=.65;t.bend=.10;
++        t.backSlope=TerrainSlope{crest.x,crest.y,t.heightMeters,.65*std::cos(yaw),.65*std::sin(yaw),190};
++        t.radiusX=700;t.radiusY=620;t.plateau=.72;t.bend=.06;
+         t.cliffX=crest.x+500*std::cos(yaw);t.cliffY=crest.y+500*std::sin(yaw);t.cliffHeading=yaw;t.cliffWidth=24;t.cliffCurvature=.00022;
+         // The connected shelf and broad foothills are semantic landforms, not
+         // a dense copy of rail samples. Later ports determine their final front.
+@@ -171,11 +194,26 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+             intent.entrySpeed=speedFor(element.id);intent.height=p.riseMeters*p.profileScale*variation;
+             intent.airtimeG=p.negativeG*req.style.airtime;intent.positiveG=p.pulloutG;
+             intent.twistAngle=p.twistDegrees*seeded(random,.9,1.1)*pi/180;intent.rampSeconds=p.releaseSeconds;intent.exitRampSeconds=p.recoverySeconds;
+-            intent.exitHeight=6;intent.exitPitch=.08;lossFor(intent);source(designFvdHill(intent,cancel),Element::Hill,element);break;
++            intent.exitHeight=6;intent.exitPitch=.08;
++            lossFor(intent);source(designFvdHill(intent,cancel),Element::Hill,element);
++            // Broad low hills follow the first twisted drop. They carry the
++            // complete live geometry into deliberate rising and falling curves.
++            for(int n=0;n<2;++n){
++                const double base=datum+(n==0?6:3),rise=n==0?35:20,yaw=heading();
++                const double crest=motion.crestCurvature(rise,180,.05);
++                auto top=detail::planarJet({cursor.position.x,cursor.position.y,base+rise},yaw+(n==0?-25:30)*pi/180,0,crest);
++                terrainCurve(top,190,Element::Airtime,element.id+(n==0?"-river-hop-crest":"-rising-bank-crest"),(n==0?-15:20)*pi/180);
++                auto low=detail::planarJet({cursor.position.x,cursor.position.y,base},heading()+(n==0?-20:15)*pi/180,0);
++                terrainCurve(low,190,Element::Airtime,element.id+(n==0?"-river-hop-valley":"-rising-bank-valley"));
++            }
++            break;
+         }
+         case RideRole::CliffApproach:{
+             const auto& p=std::get<CliffParameters>(element.parameters);const double summit=datum+p.summitHeightMeters;
+-            freeDirection({20*pi/180,0,0,0},{heading(),0,0,0},std::max(80.,motion.nominalSpeed*2.0),Element::Turn,element.id+"-recovery");
++            // Layout correction belongs to the climb setup. Every subsequent shelf
++            // turn and signature keeps the shape and yaw requested by its author.
++            const double layoutHeading=feedback.compactReturn?feedback.cliffHeadingCorrection:attempt==1?-4*pi/180:attempt==2?4*pi/180:0;
++            freeDirection({20*pi/180,0,0,0},{heading()+layoutHeading,0,0,0},std::max(120.,motion.nominalSpeed*3.0),Element::Turn,element.id+"-recovery");
+             const auto ascentStart=cursor;
+             motion.driveGraded(summit-55,32*pi/180,58,16,(element.id+"-ascent").c_str());
+             const auto ascentEnd=cursor;
+@@ -183,22 +221,26 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+             plateauArrival=cursor.position;const double arrivalYaw=heading();groundLandscape(plateauArrival,arrivalYaw,summit);
+             landmarks.push_back({LandmarkKind::PlateauArrival,d.track.knots.size()-1});
+             if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;t.ramps.push_back({ascentStart.position.x,ascentStart.position.y,ascentEnd.position.x,ascentEnd.position.y,std::max(0.,ascentStart.position.z-datum),std::max(0.,ascentEnd.position.z-datum),std::tan(20*pi/180),std::tan(32*pi/180),190});}
+-            // Try nearby upstream compositions before wider bearings; the final FVD
+-            // turn must reach the station without extending inactive straights.
+-            const double layoutHeading=feedback.compactReturn?feedback.cliffHeadingCorrection:attempt==1?-4*pi/180:attempt==2?4*pi/180:.25*std::sin(attempt*2.399963229728653);
+-            const auto act=terrainAct(element,TerrainAct::Clifftop,-10,p.approachHeadingDegrees*pi/180+turnVariation+layoutHeading,p.outwardBankDegrees*pi/180,std::max(-1.015,-.99*req.style.airtime),p.approachLengthMeters/300);
+-            source(act,Element::Turn,element);
+-            const auto low=std::min_element(act.authoring.controls.begin(),act.authoring.controls.end(),[](const auto& a,const auto& b){return a.normalG<b.normalG;});
+-            const auto sample=std::lower_bound(act.section.samples.begin(),act.section.samples.end(),low->time,[](const auto& a,double time){return a.time<time;});
+-            const auto& authored=d.forcePrograms.back();
+-            const auto outward=rotated(unit(cross(sample->forward,Vec3{0,0,1})),authored.heading);
+-            outbankBay=authored.origin+rotated(sample->position,authored.heading)+outward*70;
++            // An active shelf journey: outward reveal, inland counterturn,
++            // second edge crest and two low turns into the dive approach.
++            // Each direction programme owns its pitch/yaw jets. No overlap
++            // operation may resculpt these curves after they are authored.
++            const double shelfHeading=heading(),lengthScale=p.approachLengthMeters/1000.;
++            const std::array<double,6> yaw{35,90,155,205,155,p.approachHeadingDegrees};
++            const std::array<double,6> level{-8,-3,-8,-3,-8,-10};
++            const std::array<double,6> lengths{115,185,185,175,175,165};
++            for(size_t n=0;n<yaw.size();++n){
++                auto end=detail::planarJet({cursor.position.x,cursor.position.y,summit+level[n]},shelfHeading+yaw[n]*pi/180,0);
++                const double outward=(n==1||n==3)?p.outwardBankDegrees*pi/180:0;
++                terrainCurve(end,lengths[n]*lengthScale,Element::Turn,element.id+"-shelf-"+std::to_string(n+1),outward);
++            }
++            outbankBay=plateauArrival+rotated(Vec3{180,70,0},arrivalYaw);
+             break;
+         }
+         case RideRole::CliffLip:{
+             const auto& p=std::get<OperationParameters>(element.parameters);const double target=p.targetSpeedKmh/3.6;
+             const double acceleration=p.accelerationMps2>0?p.accelerationMps2:7;
+-            const double length=std::max(p.lengthMeters,(motion.nominalSpeed*motion.nominalSpeed-target*target)/(2*acceleration)+motion.nominalSpeed*.8+4*halfTrain+6);
++            const double length=std::max(p.lengthMeters,(motion.nominalSpeed*motion.nominalSpeed-target*target)/(2*acceleration)+motion.nominalSpeed*.5+4*halfTrain+6);
+             motion.drive(length,DriveKind::Brake,target,acceleration,element.id.c_str());break;
+         }
+         case RideRole::CliffDrop:{
+@@ -207,8 +249,8 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+             landmarks.push_back({LandmarkKind::CliffDeparture,d.track.knots.size()-1});
+             const auto boost=std::find_if(req.recipe.elements.begin(),req.recipe.elements.end(),[](const RecipeElement& item){return item.role==RideRole::DownhillLaunch;});
+             const auto& boostParameters=std::get<OperationParameters>(boost->parameters);
+-            intent.drop=cliffTop.z-(datum+85);intent.maximumPitch=p.dropDegrees*pi/180;intent.exitPitch=boostParameters.gradeDegrees*pi/180;
+-            intent.crestRampSeconds=2.6;intent.crestG=-.55;intent.pulloutG=3.8;intent.pulloutRampSeconds=1.5;intent.exitRampSeconds=1.2;lossFor(intent);
++            intent.drop=cliffTop.z-(datum+65);intent.maximumPitch=p.dropDegrees*pi/180;intent.exitPitch=boostParameters.gradeDegrees*pi/180;
++            intent.crestRampSeconds=2.6;intent.crestG=-.55;intent.pulloutG=4.3;intent.pulloutRampSeconds=1.5;intent.exitRampSeconds=1.2;lossFor(intent);
+             source(designFvdDive(intent,cancel),Element::Hill,element);cliffFoot=cursor.position;
+             if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;t.cliffX=cliffTop.x+std::cos(cliffYaw)*7;t.cliffY=cliffTop.y+std::sin(cliffYaw)*7;t.cliffHeading=cliffYaw;
+             }
+@@ -255,29 +297,45 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+         }
+         case RideRole::Loop:{
+             const auto& p=std::get<InversionParameters>(element.parameters);FvdLoopRequest intent;
+-            loopBase=cursor.position;intent.entrySpeed=speedFor(element.id);intent.height=p.referenceRiseMeters*std::pow(intent.entrySpeed/65,2);intent.yawAngle=p.yawDegrees*pi/180;intent.crestG=p.crestG;intent.exitPitch=p.exitPitchDegrees*pi/180;intent.exitNormalG=1.5;intent.normalG=4.85;intent.exitPositiveG=3.9;intent.ascentReleaseSeconds=1.2;
++            loopBase=cursor.position;intent.entrySpeed=speedFor(element.id);intent.height=p.referenceRiseMeters*std::pow(intent.entrySpeed/65,2);intent.yawAngle=p.yawDegrees*pi/180;intent.crestG=p.crestG;intent.exitPitch=p.exitPitchDegrees*pi/180;intent.exitNormalG=1.5;intent.normalG=3.8;intent.exitPositiveG=3.8;intent.ascentReleaseSeconds=1.2;
+             intent.entry=motion.fvdEntry(intent.entrySpeed);
+             lossFor(intent);source(designFvdLoop(intent,cancel),Element::Inversion,element,{.worldCoordinates=true,.allowConnector=false});break;
+         }
+         case RideRole::Immelmann:{
+             const auto& p=std::get<InversionParameters>(element.parameters);FvdImmelmannRequest intent;
+             intent.entrySpeed=speedFor(element.id);intent.height=p.referenceRiseMeters*std::pow(intent.entrySpeed/53,2);intent.exitHeight=10;intent.exitPitch=p.exitPitchDegrees*pi/180;
+-            intent.normalG=4.85;intent.exitPositiveG=3;intent.crestG=p.crestG;intent.rollExitG=2;intent.rollReleaseFraction=.45;intent.ascentReleaseSeconds=1.2;intent.rampSeconds=1.0;intent.exitRampSeconds=1.2;intent.rollOverlapFraction=0;intent.yawAngle=p.yawDegrees*pi/180;intent.exitNormalG=std::cos(intent.exitPitch);intent.hand=-1;lossFor(intent);
++            intent.normalG=3.8;intent.exitPositiveG=3;intent.crestG=p.crestG;intent.rollExitG=.6;intent.rollReleaseFraction=0;intent.ascentReleaseSeconds=1.2;intent.rampSeconds=1.0;intent.exitRampSeconds=1.2;intent.rollOverlapFraction=0;intent.yawAngle=p.yawDegrees*pi/180;intent.exitNormalG=std::cos(intent.exitPitch);intent.hand=-1;lossFor(intent);
+             intent.entry=motion.fvdEntry(intent.entrySpeed);
+             const auto inversion=designFvdImmelmann(intent,cancel);
+             source({inversion.authoring,inversion.section},Element::Inversion,element,{.worldCoordinates=true,.allowConnector=false});immelExit=cursor.position;break;
+         }
+         case RideRole::Signature:{
+-            const auto& p=std::get<SweepParameters>(element.parameters);const double bank=p.rollDegrees*(req.style.signatureRollDegrees/45)*pi/180;
+-            // A descending outward roll over the ravine shoulder. It spends
+-            // existing elevation and ends in a positively loaded low carve.
+-            const auto act=terrainAct(element,TerrainAct::RavineRoll,std::max(p.riseMeters,datum+2-cursor.position.z),p.headingDegrees*pi/180+feedback.signatureHeadingCorrection,bank,std::max(-1.32,p.negativeG*req.style.airtime)*feedback.signatureAirtimeScale,p.lengthMeters/260,p.exitPitchDegrees*pi/180);
+-            source(act,Element::Turn,element);
++            const auto& p=std::get<SweepParameters>(element.parameters);
++            // The flexible approach steers the complete signature as one piece;
++            // it never changes either wing's authored forces or bank sequence.
++            freeDirection({0,0,0,0},{heading()+feedback.approachHeadingCorrection,0,0,0},
++                std::max(110.,motion.nominalSpeed*2.5),Element::Turn,element.id+"-approach");
++            const double signatureYaw=heading(),floor=std::max(datum+2,cursor.position.z+p.riseMeters),drop=cursor.position.z-floor,scale=p.lengthMeters/540;
++            // Riftwake: an outward floating wing, a falling transfer across
++            // the ravine, an opposing wing and a low carving dive. The two
++            // crests share one descending silhouette and authored bearing.
++            for(int wing=0;wing<2;++wing){
++                const double rise=(wing==0?25:20)*scale,base=cursor.position.z;
++                const double crestYaw=signatureYaw+p.headingDegrees*pi/180*(wing==0?.18:.68);
++                auto top=detail::planarJet({cursor.position.x,cursor.position.y,base+rise},crestYaw,0,
++                    motion.crestCurvature(rise,160*scale,std::max(-1.1,p.negativeG*req.style.airtime)*feedback.signatureAirtimeScale));
++                const double bank=(wing==0?1:-1)*p.rollDegrees*(req.style.signatureRollDegrees/45)*pi/180;
++                terrainCurve(top,160*scale,Element::Airtime,element.id+(wing==0?"-outward-wing":"-counter-wing"),bank);
++                if(wing==0)landmarks.push_back({LandmarkKind::SignatureRelease,d.track.knots.size()-1});
++                const double lowHeight=wing==0?floor+drop*.48:floor;
++                const double lowYaw=signatureYaw+p.headingDegrees*pi/180*(wing==0?.5:1);
++                auto low=detail::planarJet({cursor.position.x,cursor.position.y,lowHeight},lowYaw,wing==0?0:p.exitPitchDegrees*pi/180);
++                terrainCurve(low,(wing==0?200:220)*scale,Element::Turn,element.id+(wing==0?"-ravine-transfer":"-low-carve"));
++            }
+             returnRavine=cursor.position;
+             if(req.terrain.kind==TerrainKind::Highlands){auto& t=d.request.terrain;const auto mid=(immelExit+cursor.position)*.5;
+                 t.foothills.push_back({mid.x+110,mid.y+90,10,380});
+                 t.foothills.push_back({mid.x-280,mid.y-180,35,520});
+-                t.foothills.push_back({plateauCenter.x-1050,plateauCenter.y-500,45,1000});
+                 t.ravines.push_back({immelExit.x,immelExit.y,cursor.position.x,cursor.position.y,60,50,110,140});
+             }
+             break;
+@@ -392,7 +450,7 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
+     for(auto& program:d.forcePrograms)program.hand=hand;for(auto& program:d.splinePrograms)program.hand=hand;
+     if(!terrain.valid())throw std::runtime_error("Resolved semantic terrain is outside its bounded domain");
+     finalizeKnownPrefix(!energyPrefix);
+-    d.topology="recipe/"+d.request.recipe.name;std::ostringstream diagnostics;diagnostics<<std::setprecision(12)<<"{\"schemaVersion\":4,\"generationOnly\":true,\"recipeVersion\":"<<req.recipe.version<<",\"seed\":"<<req.seed<<",\"candidate\":"<<attempt<<",\"hand\":"<<hand<<",\"layoutCorrectionRadians\":["<<feedback.cliffHeadingCorrection<<','<<feedback.signatureHeadingCorrection<<"],\"ports\":[";
++    d.topology="recipe/"+d.request.recipe.name;std::ostringstream diagnostics;diagnostics<<std::setprecision(12)<<"{\"schemaVersion\":4,\"generationOnly\":true,\"recipeVersion\":"<<req.recipe.version<<",\"seed\":"<<req.seed<<",\"candidate\":"<<attempt<<",\"hand\":"<<hand<<",\"layoutCorrectionRadians\":["<<feedback.cliffHeadingCorrection<<','<<feedback.approachHeadingCorrection<<"],\"ports\":[";
+     for(size_t i=0;i<ports.size();++i){if(i)diagnostics<<',';diagnostics<<"{\"id\":"<<std::quoted(ports[i].id)<<",\"distance\":"<<ports[i].distance<<",\"plannedSpeed\":"<<ports[i].speed<<'}';}
+     diagnostics<<"],\"forceCorrections\":{\"camelbackTailCutSeconds\":"<<feedback.camelbackTailCutSeconds<<",\"signatureAirtimeScale\":"<<feedback.signatureAirtimeScale<<"},\"terrainAnchors\":[";bool comma=false;
+     for(const auto& [name,position]:std::array<std::pair<const char*,Vec3>,5>{{{"plateau",plateauArrival},{"cliff-foot",cliffFoot},{"wave-bench",waveBase},{"loop-basin",loopBase},{"immelmann-shoulder",immelExit}}}){
+diff --git a/native/core/src/recipe_compiler.hpp b/native/core/src/recipe_compiler.hpp
+index e79802e..3de35dd 100644
+--- a/native/core/src/recipe_compiler.hpp
++++ b/native/core/src/recipe_compiler.hpp
+@@ -11,7 +11,7 @@ struct RecipeFeedback {
+     double peakSpeedCorrection{};
+     double camelbackTailCutSeconds{},signatureAirtimeScale{1};
+     bool compactReturn{};
+-    double cliffHeadingCorrection{},signatureHeadingCorrection{};
++    double cliffHeadingCorrection{},approachHeadingCorrection{};
+     std::unordered_map<std::string,double> energyCorrection;
+ };
+ struct RecipeCompileFailure : std::runtime_error {
+diff --git a/native/core/tests/fvd_tests.cpp b/native/core/tests/fvd_tests.cpp
+index 40c5a9c..d772f24 100644
+--- a/native/core/tests/fvd_tests.cpp
++++ b/native/core/tests/fvd_tests.cpp
+@@ -163,8 +163,8 @@ int main(){try{
+     const auto halfRoll=std::min_element(heldRoll.section.samples.begin(),heldRoll.section.samples.end(),[&](const FvdSample& a,const FvdSample& b){
+         const auto score=[&](const FvdSample& q){return q.time<heldRoll.apex.time||q.time>heldRoll.rollExit.time?2.:std::abs(q.up.z);};return score(a)<score(b);});
+     const double halfAcceleration=-gravity*halfRoll->forward.z-loaded.rollingAcceleration-loaded.dragAccelerationCoefficient*halfRoll->speed*halfRoll->speed;
+-    check(measureSeatForces(heldRoll.section.track,halfRoll->distance,halfRoll->speed,halfAcceleration,1.2).vertical>3.1,
+-        "The loaded Immelmann retains strong physical seat load through its half-roll, not just at the ascent peak");
++    check(measureSeatForces(heldRoll.section.track,halfRoll->distance,halfRoll->speed,halfAcceleration,1.2).vertical>3,
++        "The intentionally loaded Immelmann retains over 3g through its half-roll with broad acceleration ramps");
+     auto phasedCrown=loaded;phasedCrown.normalG=4.85;phasedCrown.crestG=3.8;
+     phasedCrown.height=85*std::pow(loadedEntry.speed/53,2);phasedCrown.ascentReleaseSeconds=1.2;phasedCrown.rollReleaseFraction=.45;
+     const auto phased=designFvdImmelmann(phasedCrown);good(phased.section);

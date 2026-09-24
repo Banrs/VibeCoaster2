@@ -1,3 +1,21 @@
+# Current priority: grand station and environment models
+
+The user paused train and ride-layout updates after rejecting the train styling. Current work is a grand premium station plus track, support, terrain, LSM and brake models. The existing accepted track is the baseline. Do not resume Riftwake generation or train refinement until requested.
+
+Unfinished layout/physics/pacing/version edits are preserved verbatim in out/paused-riftwake-layout/, with SHA-256 manifest and paused-layout.patch. Resume after asset work by applying that patch carefully; the last prescription is Wave exit1.5 to3.0g followed by one build/validation. No revised ride was accepted. Last complete diagnostic: out/riftwake-fourth-* at195.37s, rejected; latest sixth rejected atWave. All evidence remains in out/.
+
+Station design: grand_station (Astra max); native integration: station_integration (Sol xhigh); Blender MCP/import lead: blender_models (Astra max); support families: open_supports; structure-only refresh API/helper: structure_refresh. All source edits for supports, station, visuals and loading remain live. All agents read efficient-subagent-waiting; no unnecessary tests/CI. Plan checkpoint96c102f pushed with CI skipped.
+
+The user explicitly retains0-180km/h in1.4s. Train model direction is based on Falcon's Flight and Formula Rossa with an original modern theme, but further train modelling is paused. The previous working profile/shortcuts remain untouched.
+
+Baseline distance-weighted rail-ground mean54.80261m and trace time mean55.43715m; scratch comparison helper out/clearance-metrics-scratch.py. Saved-design native validation around2.5s in a few warm runs; process editor startup about12s. No p99 guarantee.
+
+Normal Windows sandbox helpers fail; approved elevated exec works. Git needs process-local safe.directory=D:/Coding/Codex/Vibecoaster2. Use explicit UTF-8 on Python text writes.
+
+Historical checkpoint below is context only; its stopped/solo directions are superseded.
+
+---
+
 # VibeCoaster2 - stopped checkpoint for the next sessions
 
 **User stopped work on 24 September 2026 and requested local cleanup with no more tests. Do not resume builds, tests or delivery automatically.** All agent-owned build/runtime processes are stopped. The remaining remote Windows checkpoint run was cancelled at the user's request. No standalone Default2 package was completed or promoted.
