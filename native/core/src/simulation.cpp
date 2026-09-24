@@ -56,13 +56,17 @@ SeatForces measureSeatForces(const Track& track,double distance,double speed,dou
 SeatDynamics measureSeatDynamics(const Track& track,double distance,double speed,double acceleration,double accelerationRate,double height){
     size_t hint=track.spans.size();return measure(track,distance,speed,acceleration,accelerationRate,height,hint);
 }
-static SimulationResult simulateImpl(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel,bool forces){
+static SimulationResult simulateImpl(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel,bool forces,MotionReplayMode mode=MotionReplayMode::TrackDomain){
     SimulationResult out;
+    if(mode!=MotionReplayMode::TrackDomain&&mode!=MotionReplayMode::StationEnergyPrefix){out.report.fail("SIM_MODE","Unsupported motion replay mode");return out;}
+    if(mode==MotionReplayMode::StationEnergyPrefix&&(forces||track.closed||std::any_of(ops.begin(),ops.end(),[](const Operation& op){return op.kind==DriveKind::Station;}))){
+        out.report.fail("SIM_PREFIX","Station energy calibration requires an open prefix without a terminal station operation");return out;
+    }
     if(track.spans.empty()||dt<1./4000||dt>1./30||!std::isfinite(dt)||train.cars<1||train.cars>16||!std::isfinite(train.carMass)||train.carMass<=0||!std::isfinite(train.spacing)||train.spacing<=0||train.spacing>20||!std::isfinite(train.seatHeight)||train.seatHeight<0||!std::isfinite(train.dragCdA)||train.dragCdA<0||!std::isfinite(train.rollingResistance)||train.rollingResistance<0||!std::isfinite(train.airDensity)||train.airDensity<0){out.report.fail("SIM_CONFIG","Invalid simulation configuration");return out;}
     for(const auto& op:ops)if(!validDriveParameters(op)||op.start>track.length||op.end>track.length){out.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return out;}
     if(!std::isfinite(track.length)||track.length<=0){out.report.fail("SIM_CONFIG","Invalid track length");return out;}
     double half=(train.cars-1)*train.spacing*.5,start=half+30,finish=track.length+start,s=start,v=0,t=0;
-    if(!track.closed){start=half+1;s=start;finish=track.length-half-1;}
+    if(!track.closed){start=half+(mode==MotionReplayMode::StationEnergyPrefix?30:1);s=start;finish=track.length-half-1;}
     if(finish<=start||2*half+2>=track.length){out.report.fail("TRAIN_LENGTH","Track is shorter than the train");return out;}
     std::vector<double> entered(train.cars*ops.size(),-1);
     struct TrimCommand {bool sensed{},engaged{};double time{},speed{},deployment{};};
@@ -294,8 +298,11 @@ static SimulationResult simulateImpl(const Track& track,const std::vector<Operat
 SimulationResult simulate(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel){
     return simulateImpl(track,ops,train,dt,cancel,true);
 }
-MotionResult simulateMotion(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel){
-    auto result=simulateImpl(track,ops,train,dt,cancel,false);
-    return {std::move(result.frames),result.completed,result.cancelled};
+MotionResult simulateMotion(const Track& track,const std::vector<Operation>& ops,const TrainConfig& train,double dt,Cancel cancel,MotionReplayMode mode){
+    auto result=simulateImpl(track,ops,train,dt,cancel,false,mode);
+    MotionResult motion;motion.frames=std::move(result.frames);motion.cancelled=result.cancelled;motion.report=std::move(result.report);
+    if(mode==MotionReplayMode::StationEnergyPrefix)motion.prefixReachedEnd=result.completed&&!result.cancelled&&motion.report.valid();
+    else motion.completed=result.completed;
+    return motion;
 }
 }

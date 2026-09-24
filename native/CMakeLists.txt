@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(coaster_core core/src/track.cpp core/src/frame.cpp core/src/drive_profile.cpp core/src/simulation.cpp core/src/convergence.cpp core/src/generation.cpp core/src/authoring.cpp core/src/authorship.cpp core/src/motion_program.cpp core/src/banking.cpp core/src/fvd.cpp core/src/persistence.cpp core/src/reference.cpp core/src/supports.cpp core/src/clearance.cpp core/src/dimensions.cpp core/src/station.cpp core/src/structures.cpp core/src/motion_audit.cpp)
 target_include_directories(coaster_core PUBLIC core/include)
-target_sources(coaster_core PRIVATE core/src/recipe.cpp core/src/recipe_compiler.cpp core/src/acceleration.cpp)
+target_sources(coaster_core PRIVATE core/src/recipe.cpp core/src/recipe_compiler.cpp core/src/launch_camelback.cpp core/src/acceleration.cpp)
 execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   OUTPUT_VARIABLE coaster_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 if(coaster_commit MATCHES "^[0-9a-f]+$")
@@ -38,7 +38,7 @@ target_link_libraries(coaster_tests PRIVATE coaster_core)
 add_test(NAME core COMMAND coaster_tests)
 add_test(NAME core_persistence COMMAND coaster_tests --persistence)
 
-foreach(suite persistence_cancel motion_spline recipe acceleration reference support support_family organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile fvd)
+foreach(suite launch_camelback inherited_port persistence_cancel motion_spline recipe acceleration reference support support_family organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile fvd)
   add_executable(${suite}_tests core/tests/${suite}_tests.cpp)
   target_include_directories(${suite}_tests PRIVATE unreal/Source/VibeCoaster/Public)
   target_link_libraries(${suite}_tests PRIVATE coaster_core)
@@ -62,3 +62,7 @@ set_tests_properties(organic_generation PROPERTIES LABELS "integration;represent
 
 add_executable(coaster_convergence core/src/convergence_main.cpp)
 target_link_libraries(coaster_convergence PRIVATE coaster_core)
+
+# Manual numerical diagnostic; never a replacement for acceptance tests.
+add_executable(angular_recompile_probe EXCLUDE_FROM_ALL core/tests/angular_recompile_probe.cpp)
+target_link_libraries(angular_recompile_probe PRIVATE coaster_core)

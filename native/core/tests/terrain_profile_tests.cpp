@@ -109,6 +109,43 @@ int main(){try{
     auto slope=curved;slope.cliffX=700;slope.cliffCurvature=0;slope.backSlope=TerrainSlope{0,0,80,.5,.25};
     check(slope.valid()&&slope.vertexHeight(0,0)==80&&slope.vertexHeight(-80,0)==40&&slope.vertexHeight(0,80)==100,"A broad planar rear slope clips the plateau at independently calculated heights");
     check(slope.gridBounds()==curved.gridBounds(),"A rear slope never expands positive terrain bounds");
+    auto withoutSlope=slope;withoutSlope.backSlope.reset();
+    for(int x=-350;x<400;x+=17)for(int y=-350;y<400;y+=19)
+        check(slope.landformHeight(x,y)==std::min(withoutSlope.landformHeight(x,y),std::max(0.,80+.5*x+.25*y)),
+            "Width-zero slopes preserve the exact pre-extension clipping formula");
+    const TerrainSlope approach{0,0,100,1,0,200};
+    check(approach.valid()&&approach.limit(-100,0,210)==0,"The bounded rear slope retains its centre grade plane");
+    check(approach.limit(-100,200,210)==210&&approach.limit(-100,-240,210)==210,
+        "The bounded approach leaves both distant sides of the plateau unchanged");
+    check(std::abs(approach.limit(-50,135,210)-130)<1e-12&&approach.limit(-50,-135,210)==approach.limit(-50,135,210),
+        "The lateral shoulder has the independent half-blend value on both sides");
+    check(approach.limit(200,0,210)==210,"A subtractive rear slope never raises the existing surface");
+    TerrainSlope horizontal{0,0,80,0,0};
+    check(horizontal.valid()&&horizontal.limit(0,200,210)==80,"Historical zero-gradient unbounded planes remain valid");
+    horizontal.width=160;
+    check(!horizontal.valid()&&std::isnan(horizontal.limit(0,200,210)),
+        "A bounded cut without a direction rejects instead of silently clipping the entire plateau");
+    horizontal.gradeX=1e-13;check(!horizontal.valid(),"Numerically undefined bounded directions reject");
+    for(double width:{-1.,49.999,1000.001,double(NAN),double(INFINITY)}){
+        auto invalid=approach;invalid.width=width;check(!invalid.valid(),"Bounded slope widths have explicit finite limits");
+    }
+    for(double width:{50.,160.,1000.})for(double angle:{0.,pi/7,pi/2}){
+        auto bounded=slope;bounded.backSlope=TerrainSlope{0,0,80,.7*std::cos(angle),.7*std::sin(angle),width};
+        check(bounded.valid()&&bounded.gridBounds()==slope.gridBounds(),"Rotated bounded slopes retain the existing terrain footprint");
+        for(int x=-350;x<400;x+=43)for(int y=-350;y<400;y+=47){
+            const double local=bounded.localSlopeBound(x,y,11),global=bounded.slopeBound();
+            const auto range=bounded.heightRange(x,y,11);
+            check(local<=global+1e-9,"Bounded shoulder triangle gradients fit the conservative global certificate");
+            for(int k=0;k<8;++k){
+                const double a=k*pi/4,px=x+11*std::cos(a),py=y+11*std::sin(a),h=bounded.height(px,py);
+                check(h>=range[0]-1e-9&&h<=range[1]+1e-9&&std::abs(h-bounded.height(x,y))<=local*11+1e-9,
+                    "Exact triangle height and local slope bounds enclose rotated bounded shoulders");
+                check(bounded.landformHeight(px,py)>=0&&bounded.landformHeight(px,py)<=withoutSlope.landformHeight(px,py),
+                    "A bounded slope only removes height from the pre-existing plateau");
+            }
+        }
+    }
+
     for(int x=-200;x<=200;x+=17)for(int y=-100;y<=100;y+=19){const auto range=slope.heightRange(x,y,7);const auto bound=slope.localSlopeBound(x,y,7);check(bound<=slope.slopeBound()+1e-9,"Rear-slope grid faces fit the global gradient enclosure");
         for(int k=0;k<12;++k){const double angle=k*pi/6,h=slope.height(x+7*std::cos(angle),y+7*std::sin(angle));check(h>=range[0]-1e-9&&h<=range[1]+1e-9,"Rear-slope footing bounds enclose both rendered triangles");}}
     for(double bad:{double(NAN),double(INFINITY),4.01}){auto invalid=slope;invalid.backSlope->gradeX=bad;check(!invalid.valid(),"Rear slopes reject invalid or unsupported gradients");}

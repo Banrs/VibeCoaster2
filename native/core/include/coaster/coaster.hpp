@@ -20,7 +20,7 @@
 namespace coaster {
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
 constexpr const char* generatorVersion=COASTER_GENERATOR_VERSION;
-inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
+inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
 
 enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
@@ -86,6 +86,8 @@ struct Operation {
 // Merge exact adjacent, identical nonwrapping drive runs in authored order.
 void coalesceDriveProfiles(std::vector<Operation>&);
 struct Limits {
+    // User allowance applies to the game envelope, never to F2291 assessment.
+    static constexpr double allowanceFactor=1.05;
     // Provisional game envelope, NOT a calibrated or certified rider standard.
     double minVerticalG{-1.5},maxVerticalG{5.0},maxLateralG{1.5},maxLongitudinalG{4.5};
     double maxJerkGps{20},minClearance{0}; // Optional free gap outside the swept envelope.
@@ -298,6 +300,11 @@ struct MotionAssessment {
     bool performed{},passed{};
     std::array<double,4> positionJoinError{},orientationJoinError{};
     double flatCoastSeconds{},longestFlatCoastSeconds{};
+    // Composition diagnostics only; missing semantic boundaries remain unknown.
+    double clifftopActiveSeconds{NAN},clifftopBrakingSeconds{NAN},returnSeconds{NAN};
+    double levelCoastSeconds{},longestLevelCoastSeconds{};
+    double longestLevelCoastStartDistance{NAN},longestLevelCoastEndDistance{NAN};
+    double returnLevelCoastSeconds{},longestReturnLevelCoastSeconds{};
     std::vector<SectionAssessment> sections;
     std::vector<Crossing> crossings;
 };

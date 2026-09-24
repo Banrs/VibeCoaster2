@@ -31,6 +31,7 @@ struct HillParameters {
 };
 struct CliffParameters {
     double summitHeightMeters{285},lipSpeedKmh{32},dropDegrees{88},outwardBankDegrees{30},approachLengthMeters{480};
+    double approachHeadingDegrees{-65}; // Historical default for version-1 recipes that omit it.
     bool operator==(const CliffParameters&) const=default;
 };
 struct TurnParameters {

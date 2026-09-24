@@ -20,3 +20,8 @@ native/build-before-move/
 # Local coordination state; never package or commit it.
 /.swarm/
 /.codex/
+/.preserved/
+/out/
+/scratch/
+/profiles/
+/unreal/

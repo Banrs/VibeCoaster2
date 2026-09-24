@@ -60,9 +60,28 @@ void Track::rebuild(){
     for(size_t i=0;i<count;++i){knots[i].third=jerk[i];knots[i].fourth=snap[i];}
     spans.clear();spans.reserve(count-1);length=0;
     for(size_t i=0;i+1<count;++i){
-        const double h=metric[i],h2=h*h,h3=h2*h;
+        double h=metric[i];Vec3 displacement=knots[i+1].position-knots[i].position;
+        if(authoredGeometry){
+            // Integrating the endpoint tangent jets gives a local displacement
+            // without subtracting large world positions. Only use it when the
+            // discrepancy is unresolved at the precision of those positions.
+            // Otherwise retain the authored displacement exactly.
+            const Vec3 t=(tangent[i]+tangent[i+1])*.5,k=(curvature[i]-curvature[i+1])*(3./28),
+                j=(jerk[i]+jerk[i+1])/84,s=(snap[i]-snap[i+1])/1680;
+            const Vec3 along=unit(displacement);const double chord=norm(displacement);
+            double local=h;
+            for(int iteration=0;iteration<3;++iteration){
+                const Vec3 value=(t+(k+(j+s*local)*local)*local)*local;
+                const Vec3 slope=t+(k*2+(j*3+s*(4*local))*local)*local;
+                local-=(dot(value,along)-chord)/dot(slope,along);
+            }
+            const Vec3 resolved=(t+(k+(j+s*local)*local)*local)*local;
+            const double roundoff=8*std::numeric_limits<double>::epsilon()*std::max({1.,norm(knots[i].position),norm(knots[i+1].position)});
+            if(std::abs(local-h)<roundoff+1e-5*h&&norm(resolved-displacement)<=roundoff){h=local;displacement=resolved;}
+        }
+        const double h2=h*h,h3=h2*h;
         Span sp;sp.start=length;sp.c[0]=knots[i].position;sp.c[1]=tangent[i]*h;sp.c[2]=curvature[i]*(h2*.5);sp.c[3]=jerk[i]*(h3/6);
-        const Vec3 p=knots[i+1].position-sp.c[0]-sp.c[1]-sp.c[2]-sp.c[3];
+        const Vec3 p=displacement-sp.c[1]-sp.c[2]-sp.c[3];
         const Vec3 v=tangent[i+1]*h-sp.c[1]-sp.c[2]*2-sp.c[3]*3;
         const Vec3 a=curvature[i+1]*h2-sp.c[2]*2-sp.c[3]*6;
         const Vec3 j=jerk[i+1]*h3-sp.c[3]*6;
@@ -249,6 +268,38 @@ ValidationReport validate(const Track& track,const ClearanceSweep& sweep,int cou
     return out;
 }
 }
+static ValidationReport selfClearanceImpl(const Track& t,const ClearanceSweep& sweep,double minClearance,Cancel cancel){
+    ValidationReport r;
+    auto sampleSequential=[&](double distance,size_t& hint){const auto where=t.locate(distance,hint);return t.sampleSpan(where.span,where.parameter);};
+    // Central-chord model for nonadjacent branches;12 m wrap adjacency denotes
+    // the same local rail. It is not an exemption for supports or station parts.
+    constexpr double step=2,cell=16;std::vector<Vec3> p;std::vector<double> ds;
+    int count=int(std::ceil(t.length/step));
+    auto chordReport=chord_validation::validate(t,sweep,count,cancel);if(!chordReport.valid())return chordReport;
+    // A full rider-body bounding radius plus neighbouring hardware, both
+    // chord deviations and the requested free clearance. The sweep enforces
+    // the 4.2 m body-radius domain; support contacts use their separate model.
+    const double branchClearance=sweep.bodyRadius()+.9+2*(.2*2.1*2.1/8)+minClearance;
+    p.reserve(count+1);ds.reserve(count+1);size_t chordHint=t.spans.size();
+    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=sampleSequential(s,chordHint);p.push_back(q.position);ds.push_back(s);
+    }
+    struct Key {int x,y,z;bool operator==(const Key&) const=default;};struct Hash{size_t operator()(Key k)const{return uint64_t(k.x)*73856093ull^uint64_t(k.y)*19349663ull^uint64_t(k.z)*83492791ull;}};
+    std::unordered_map<Key,std::vector<int>,Hash> grid;
+    for(int i=0;i<count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}Vec3 m=(p[i]+p[i+1])*.5;Key k{int(std::floor(m.x/cell)),int(std::floor(m.y/cell)),int(std::floor(m.z/cell))};
+        for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)for(int z=-1;z<=1;++z){auto it=grid.find({k.x+x,k.y+y,k.z+z});if(it==grid.end())continue;for(int j:it->second){double sep=std::abs(ds[i]-ds[j]);if(t.closed)sep=std::min(sep,t.length-sep);if(sep<12)continue;double d=segmentDistance(p[i],p[i+1],p[j],p[j+1]);if(d<branchClearance&&r.errors.size()<10)r.fail("TRACK_CLEARANCE","Nonadjacent central clearance chords are closer than the required distance; other track distance="+std::to_string(ds[j])+" m",ds[i],d,branchClearance);}}
+        grid[k].push_back(i);
+    }
+    return r;
+}
+ValidationReport validateSelfClearance(const Track& t,const TrainConfig& train,double minClearance,Cancel cancel){
+    ValidationReport r;
+    if(train.cars<1||train.cars>16||!std::isfinite(train.spacing)||train.spacing<=0||train.spacing>20){r.fail("TRAIN_CONFIG","Invalid train geometry settings");return r;}
+    if(t.spans.empty()){r.fail("EMPTY_TRACK","Track is empty");return r;}
+    if(t.knots.size()!=t.spans.size()+1||t.knots.size()<4||!std::isfinite(t.length)||t.length<=0){r.fail("GEOMETRY_DOMAIN","Invalid canonical track cardinality or length");return r;}
+    if(!std::isfinite(minClearance)||minClearance<0){r.fail("CLEARANCE_CONFIG","Invalid requested track clearance");return r;}
+    try{const auto sweep=buildClearanceSweep(t,train,cancel);return selfClearanceImpl(t,sweep,minClearance,cancel);}
+    catch(const std::exception& e){r.fail((std::string(e.what())=="CANCELLED"||(cancel&&cancel()))?"CANCELLED":"SWEEP_DOMAIN",e.what());return r;}
+}
 static ValidationReport validateGeometryImpl(const Track& t,const Terrain& terrain,const Limits& limits,const TrainConfig& train,const std::vector<Support>& supports,const ClearanceSweep* prepared,Cancel cancel){
     ValidationReport r;if(train.cars<1||train.cars>16||!std::isfinite(train.spacing)||train.spacing<=0||train.spacing>20){r.fail("TRAIN_CONFIG","Invalid train geometry settings");return r;}if(t.spans.empty()){r.fail("EMPTY_TRACK","Track is empty");return r;}
     if(t.knots.size()!=t.spans.size()+1||t.knots.size()<4||!std::isfinite(t.length)||t.length<=0){r.fail("GEOMETRY_DOMAIN","Invalid canonical track cardinality or length");return r;}
@@ -280,24 +331,9 @@ static ValidationReport validateGeometryImpl(const Track& t,const Terrain& terra
         if(!finite(current.curvature)||norm(current.curvature)>.2||rate>.25){r.fail("FRAME_DOMAIN","Canonical frame or curvature exceeds the supported spatial domain",s,std::max(rate,norm(current.curvature)),.25);return r;}
         previous=current;
     }
-    // Central-chord model for nonadjacent branches;12 m wrap adjacency denotes
-    // the same local rail. It is not an exemption for supports or station parts.
-    constexpr double step=2,cell=16;std::vector<Vec3> p;std::vector<double> ds;
-    int count=int(std::ceil(t.length/step));
-    auto chordReport=chord_validation::validate(t,*sweep,count,cancel);if(!chordReport.valid())return chordReport;
-    // A full rider-body bounding radius plus neighbouring hardware, both
-    // chord deviations and the requested free clearance. The sweep enforces
-    // the 4.2 m body-radius domain; support contacts use their separate model.
-    const double branchClearance=sweep->bodyRadius()+.9+2*(.2*2.1*2.1/8)+limits.minClearance;
-    p.reserve(count+1);ds.reserve(count+1);size_t chordHint=t.spans.size();
-    for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=sampleSequential(s,chordHint);p.push_back(q.position);ds.push_back(s);
-    }
-    struct Key {int x,y,z;bool operator==(const Key&) const=default;};struct Hash{size_t operator()(Key k)const{return uint64_t(k.x)*73856093ull^uint64_t(k.y)*19349663ull^uint64_t(k.z)*83492791ull;}};
-    std::unordered_map<Key,std::vector<int>,Hash> grid;
-    for(int i=0;i<count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}Vec3 m=(p[i]+p[i+1])*.5;Key k{int(std::floor(m.x/cell)),int(std::floor(m.y/cell)),int(std::floor(m.z/cell))};
-        for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)for(int z=-1;z<=1;++z){auto it=grid.find({k.x+x,k.y+y,k.z+z});if(it==grid.end())continue;for(int j:it->second){double sep=std::abs(ds[i]-ds[j]);sep=std::min(sep,t.length-sep);if(sep<12)continue;double d=segmentDistance(p[i],p[i+1],p[j],p[j+1]);if(d<branchClearance&&r.errors.size()<10)r.fail("TRACK_CLEARANCE","Nonadjacent central clearance chords are closer than the required distance; other track distance="+std::to_string(ds[j])+" m",ds[i],d,branchClearance);}}
-        grid[k].push_back(i);
-    }
+    auto branches=selfClearanceImpl(t,*sweep,limits.minClearance,cancel);
+    if(std::any_of(branches.errors.begin(),branches.errors.end(),[](const auto& error){return error.code!="TRACK_CLEARANCE";}))return branches;
+    r.errors.insert(r.errors.end(),branches.errors.begin(),branches.errors.end());
     // One ground-contact certificate covers every point of the complete
     // moving envelope. minClearance is an optional user separation outside
     // that envelope; no additional centreline-height gate is imposed.

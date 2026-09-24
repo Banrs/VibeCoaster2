@@ -40,9 +40,25 @@ struct TerrainKnoll {
 // of rail samples. It cannot expand the landform's positive footprint.
 struct TerrainSlope {
     double x{},y{},height{},gradeX{},gradeY{};
+    double width{}; // Lateral half-width; zero retains the historical unbounded clip.
     bool operator==(const TerrainSlope&) const=default;
-    bool valid() const {return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(height)&&std::isfinite(gradeX)&&std::isfinite(gradeY)&&std::abs(x)<=100000&&std::abs(y)<=100000&&height>=0&&height<=350&&std::hypot(gradeX,gradeY)<=4;}
+    bool valid() const {
+        const double grade=std::hypot(gradeX,gradeY);
+        return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(height)&&std::isfinite(gradeX)&&std::isfinite(gradeY)&&std::isfinite(width)&&
+            std::abs(x)<=100000&&std::abs(y)<=100000&&height>=0&&height<=350&&grade<=4&&
+            (width==0||(width>=50&&width<=1000&&grade>1e-12));
+    }
     double at(double px,double py) const{return std::max(0.,height+gradeX*(px-x)+gradeY*(py-y));}
+    double limit(double px,double py,double surface) const {
+        const double clipped=std::min(surface,at(px,py));
+        if(width==0)return clipped;
+        // A bounded cut needs an explicit direction. Invalid direct callers
+        // receive no usable surface, rather than an unbounded fallback cut.
+        if(!valid())return std::numeric_limits<double>::quiet_NaN();
+        const double side=std::abs(-(px-x)*gradeY+(py-y)*gradeX)/std::hypot(gradeX,gradeY);
+        const double u=std::clamp((side-width*.35)/(width*.65),0.,1.);
+        return std::lerp(clipped,surface,u*u*u*(10+u*(-15+6*u)));
+    }
 };
 // A broad valley cut with rounded end caps. Widths are half-widths; depth and
 // width change smoothly along the segment. Branches combine by maximum depth,
@@ -154,7 +170,7 @@ struct Terrain {
             const double shoulder=1-smooth((std::sqrt(t)-plateau)/(1-plateau));
             const double cliff=cliffCoordinate(x,y);
             const double h=heightMeters*shoulder*(1-smooth(cliff/cliffWidth));
-            return backSlope?std::min(h,backSlope->at(x,y)):h;
+            return backSlope?backSlope->limit(x,y,h):h;
         }
         const double shoulder=1-t*t;
         return heightMeters*shoulder*shoulder*shoulder;
@@ -197,7 +213,12 @@ struct Terrain {
         double cliffGradient=1/cliffWidth;
         if(cliffCurvature>0){const auto b=gridBounds();double side=0;for(double x:{b[0],b[2]})for(double y:{b[1],b[3]})side=std::max(side,std::abs(-(x-cliffX)*std::sin(cliffHeading)+(y-cliffY)*std::cos(cliffHeading)));cliffGradient=std::hypot(1.,2*cliffCurvature*side)/cliffWidth;}
         double bound=plateau>0?std::sqrt(2.)*1.875*heightMeters*(std::hypot((1+2*std::abs(bend))/radiusX,1/radiusY)/(1-plateau)+cliffGradient):std::sqrt(2.)*12*heightMeters*(.64/std::sqrt(5.))*std::hypot((1+2*std::abs(bend))/radiusX,1/radiusY);
-        if(backSlope)bound=std::max(bound,std::sqrt(2.)*std::hypot(backSlope->gradeX,backSlope->gradeY));
+        if(backSlope){
+            bound=std::max(bound,std::sqrt(2.)*std::hypot(backSlope->gradeX,backSlope->gradeY));
+            // Blend slope <= the larger source slope plus the maximum cut
+            // depth times the quintic shoulder's maximum derivative.
+            if(backSlope->width>0)bound+=std::sqrt(2.)*1.875*heightMeters/(backSlope->width*.65);
+        }
         for(const auto& r:ramps)bound=std::max(bound,std::sqrt(2.)*(std::max(std::abs(r.grade0),std::abs(r.grade1))+1.875*(std::max(r.h0,r.h1)+80*std::max(std::abs(r.grade0),std::abs(r.grade1)))*(1./40+1/(r.width*.65))));for(const auto& k:knolls)bound=std::max(bound,24*k.height/(std::sqrt(5.)*k.radius)+(plateau>0?std::sqrt(2.)*1.875*k.height*cliffGradient:0));bound=std::max(bound,std::sqrt(2.)*(ridgeBound[1]+(plateau>0?1.875*ridgeBound[0]*cliffGradient:0)));
         for(const auto& k:foothills)bound=std::max(bound,24*k.height/(std::sqrt(5.)*k.radius));
         double cutBound=0;for(const auto& ravine:ravines)cutBound=std::max(cutBound,ravine.slopeBound());return bound+std::sqrt(2.)*cutBound;

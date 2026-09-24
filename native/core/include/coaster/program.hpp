@@ -17,6 +17,7 @@ struct FvdRequest {
     std::vector<FvdControl> controls{{0,1,0,0},{1,1,0,0}};
     std::vector<FvdTwistPhase> twists;
     bool gravityReferencedRoll{}; // Bank relative to projected gravity; undefined at vertical tangents.
+    bool additiveTwists{}; // Add analytic twist phases to roll controls; false preserves historical replacement semantics.
     std::vector<std::pair<double,std::string>> chapters;
     double rollingAcceleration{},dragAccelerationCoefficient{};
     size_t maxSamples{20000};

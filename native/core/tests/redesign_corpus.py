@@ -3,9 +3,8 @@
 Run with Python 3: redesign_corpus.py COASTER_CLI OUTPUT_DIRECTORY
 The output directory must be fresh. This is a prototype physics check, not a
 certification of vehicle, restraint, launch, aerodynamic or structural design.
-The native organic-generation test supplies the matched 20-percent lower-drag
-simulation because the CLI intentionally exposes ride style and recipe inputs,
-not an unreviewed vehicle-dynamics override.
+The corpus and native operating checks use the configured vehicle and drag.
+The user removed lower-drag stress passes from this generator acceptance scope.
 """
 import hashlib
 import argparse

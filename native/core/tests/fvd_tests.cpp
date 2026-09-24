@@ -1,11 +1,13 @@
 #include "coaster/fvd.hpp"
+#include "coaster/angular_phase_intent.hpp"
+#include "signature_reference.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
 namespace {
 int checks=0;
 void check(bool condition,const char* message){++checks;if(!condition)throw std::runtime_error(message);}
-void near(double value,double expected,double tolerance,const char* message){check(std::isfinite(value)&&std::abs(value-expected)<=tolerance,message);}
+void near(double value,double expected,double tolerance,const char* message){if(!std::isfinite(value)||std::abs(value-expected)>tolerance)std::cerr<<message<<": value="<<value<<" expected="<<expected<<" tolerance="<<tolerance<<'\n';check(std::isfinite(value)&&std::abs(value-expected)<=tolerance,message);}
 void good(const FvdResult& r){
     if(!r.report.valid()){
         for(const auto& e:r.report.errors)std::cerr<<e.code<<": "<<e.message<<'\n';
@@ -14,8 +16,68 @@ void good(const FvdResult& r){
     check(r.integrated&&r.canonicalBuilt&&!r.cancelled&&r.report.valid()&&r.assessment.performed&&r.assessment.passed,"Section integrates, fits and passes its sampled point replay");
 }
 FvdRequest constant(double normal,double lateral,double duration=1){FvdRequest r;r.controls={{0,normal,lateral,0},{duration,normal,lateral,0}};return r;}
+void planarAngularFidelity(){
+    // Independently differentiate v*thetaDot=g*(G-cos(theta)). Exercise the
+    // interiors of source spans, including near their ends, at two world origins.
+    for(double offset:{0.,4000.})for(double step:{.01,.005,.0025}){
+        FvdRequest request;request.position={offset,0,offset+50};request.speed=80;request.step=step;
+        request.rollingAcceleration=.04;request.dragAccelerationCoefficient=.0002;
+        request.controls={{0,1,0,0},{.3,4,0,0},{.7,-1,0,0},{1.1,2,0,0}};
+        const auto source=designFvdSection(request);good(source);
+        for(size_t i=0;i<source.track.spans.size();++i)for(double u:{.0625,.25,.5,.875,.9375}){
+            const auto& a=source.samples[i];const auto& b=source.samples[i+1];
+            const auto c=sampleFvdControl(request.controls,std::lerp(a.time,b.time,u));
+            const auto q=sampleSpanKinematics(source.track,i,u);
+            const double v=std::lerp(a.speed,b.speed,u),sine=q.sample.tangent.z,cosine=q.sample.tangent.x;
+            const double acceleration=-gravity*sine-request.rollingAcceleration-request.dragAccelerationCoefficient*v*v;
+            const double omega=gravity*(c.normalG-cosine)/v;
+            const double alpha=(gravity*(c.first[0]+sine*omega)-omega*acceleration)/v;
+            const double jerk=-gravity*cosine*omega-2*request.dragAccelerationCoefficient*v*acceleration;
+            const double expected=(gravity*(c.second[0]+cosine*omega*omega+sine*alpha)-2*alpha*acceleration-omega*jerk)/v;
+            near(signedAngularMotion(q,v,acceleration,jerk).jerk[1],expected,.001,
+                "Interior canonical pitch jerk agrees with the independent planar ODE under refinement and translation");
+        }
+    }
+}
+struct PhotoError {double rms{},maximum{};bool matches(double maximumLimit=7)const{return rms<3.5&&maximum<maximumLimit;}};
+PhotoError photoError(const FvdResult& section,bool canonical,double widthScale=1,bool reverse=false){
+    // The photo's translation is the recorded crown. Only the model crown is
+    // located; neither scale, camera yaw nor separate flank scales are fitted.
+    const auto apex=std::max_element(section.samples.begin(),section.samples.end(),[](const auto& a,const auto& b){return a.position.z<b.position.z;});
+    auto project=[&](Vec3 p){return Vec3{
+        signature_reference::apexDisplay[0]+(apex->position.x-p.x)*signature_reference::pixelsPerMeter*widthScale*(reverse?-1:1),
+        signature_reference::apexDisplay[1]+(apex->position.z-p.z)*signature_reference::pixelsPerMeter,0};};
+    std::vector<Vec3> contour;
+    if(canonical){
+        for(double distance=0;distance<section.track.length;distance+=.5)contour.push_back(project(section.track.sample(distance).position));
+        contour.push_back(project(section.track.sample(section.track.length).position));
+    }else for(const auto& sample:section.samples)contour.push_back(project(sample.position));
+    PhotoError result;
+    for(const auto& pixel:signature_reference::railPixels){
+        const Vec3 target{pixel[0]*signature_reference::sourceToDisplay,pixel[1]*signature_reference::sourceToDisplay,0};
+        double distance=std::numeric_limits<double>::infinity();
+        for(size_t i=1;i<contour.size();++i){const auto a=contour[i-1],delta=contour[i]-a;
+            const double square=dot(delta,delta),u=square>0?std::clamp(dot(target-a,delta)/square,0.,1.):0;
+            distance=std::min(distance,norm(a+delta*u-target));}
+        result.rms+=distance*distance;result.maximum=std::max(result.maximum,distance);
+    }
+    result.rms=std::sqrt(result.rms/signature_reference::railPixels.size());return result;
+}
+void photoMatches(const FvdResult& section,bool canonical,const char* message,double maximumLimit=7){
+    if(canonical)for(double distance=0;distance<section.track.length;distance+=2.3){
+        const auto q=section.track.sample(distance);
+        near(q.position.y,0,1e-10,"Photo comparison cannot hide an out-of-plane compiled position");
+        near(q.tangent.y,0,1e-10,"The protected compiled silhouette has zero physical yaw");
+        near(q.up.y,0,1e-10,"The protected compiled silhouette has no hidden physical roll");
+    }
+    const auto error=photoError(section,canonical);
+    if(!error.matches(maximumLimit))std::cerr<<"Photo trace RMS="<<error.rms<<" max="<<error.maximum<<" canonical="<<canonical<<'\n';
+    check(error.matches(maximumLimit),message);
+}
+Vec3 reflected(Vec3 p){p.y=-p.y;return p;}
 }
 int main(){try{
+    planarAngularFidelity();
     FvdLoopRequest loop;loop.rollingAcceleration=gravity*.004;loop.dragAccelerationCoefficient=.0002041666666667;
     const auto looped=designFvdLoop(loop);good(looped.section);
     const auto& loopEnd=looped.section.samples.back();
@@ -34,6 +96,24 @@ int main(){try{
     const auto mirror=designFvdLoop(mirroredLoop);good(mirror.section);
     near(mirror.section.samples.back().position.x,loopEnd.position.x,1e-5,"Loop handedness preserves forward footprint");
     near(mirror.section.samples.back().position.y,-loopEnd.position.y,1e-5,"Loop yaw mirrors the integrated lateral geometry");
+    // Endpoint yaw alone also permits a sideways translation or wrong
+    // interior hand. Reflection must hold throughout the physical inversion;
+    // no historical loop envelope is a design requirement for future recipes.
+    near(mirror.section.track.length,looped.section.track.length,1e-6,"Mirrored loops retain the same real arc length");
+    check(mirror.section.samples.size()==looped.section.samples.size(),"Mirrored loops retain the same integration timeline");
+    for(size_t i=0;i<looped.section.samples.size();i+=37){const auto& a=looped.section.samples[i];const auto& b=mirror.section.samples[i];
+        near(a.time,b.time,1e-8,"Loop reflection preserves physical time through the inversion");
+        near(norm(reflected(a.position)-b.position),0,1e-5,"Loop handedness reflects every sampled interior position");
+        near(norm(reflected(a.forward)-b.forward),0,1e-7,"Loop handedness reflects interior pitch and yaw together");
+        near(norm(reflected(a.up)-b.up),0,1e-7,"Loop handedness reflects the physical rider frame through inversion");
+        near(norm(reflected(a.curvature)-b.curvature),0,1e-8,"Loop handedness reflects interior curvature rather than merely moving the exit");
+    }
+    for(double distance=0;distance<looped.section.track.length;distance+=2.3){
+        const auto a=looped.section.track.sample(distance),b=mirror.section.track.sample(distance);
+        near(norm(reflected(a.position)-b.position),0,1e-5,"Compiled loop preserves the mirrored interior trajectory");
+        near(norm(reflected(a.tangent)-b.tangent),0,1e-7,"Compiled loop preserves the mirrored interior heading");
+        near(norm(reflected(a.up)-b.up),0,1e-7,"Compiled loop preserves the mirrored interior physical roll");
+    }
     check(designFvdLoop(loop,[]{return true;}).section.cancelled,"Loop solve propagates cancellation");
     FvdImmelmannRequest inversion;
     inversion.rollingAcceleration=gravity*.002;
@@ -49,6 +129,71 @@ int main(){try{
         near(.5*q.speed*q.speed+gravity*q.position.z+q.dissipatedWorkPerMass,
             .5*inversion.entrySpeed*inversion.entrySpeed,1e-5,"Immelmann conserves energy including real losses");
     }
+    auto separated=inversion;separated.rollOverlapFraction=0;
+    const auto separatePhases=designFvdImmelmann(separated);good(separatePhases.section);
+    near(separatePhases.apex.position.z,separated.height,1e-5,"Separated Immelmann solve retains its prescribed apex");
+    near(separatePhases.exit.position.z,separated.exitHeight,1e-5,"Separated Immelmann solve reaches its actual valley port");
+    auto yawing=separated;yawing.yawAngle=-20*pi/180;
+    const auto yawed=designFvdImmelmann(yawing);good(yawed.section);
+    const double yawBegin=separatePhases.authoring.controls[1].time,yawDuration=separatePhases.apex.time-yawBegin;
+    for(size_t i=0;i<yawed.section.samples.size();i+=37){
+        const auto& q=yawed.section.samples[i];
+        const auto base=separatePhases.section.track.sample(angular_detail::sourceDistance(separatePhases.section,q.time));
+        const double u=std::clamp((q.time-yawBegin)/yawDuration,0.,1.);
+        const double angle=yawing.yawAngle*u*u*u*u*(35+u*(-84+u*(70-20*u)));
+        const auto rotate=[&](Vec3 v){return Vec3{v.x*std::cos(angle)-v.y*std::sin(angle),v.x*std::sin(angle)+v.y*std::cos(angle),v.z};};
+        near(norm(q.forward-rotate(base.tangent)),0,1e-6,"Coordinated Immelmann replay follows its independently prescribed yawing tangent");
+        near(norm(q.up-rotate(base.up)),0,1e-6,"Coordinated Immelmann keeps its physical rider frame under yaw");
+        near(q.position.z,base.position.z,1e-6,"World-vertical frame yaw retains the solved height trajectory");
+    }
+    near(yawed.exit.speed,separatePhases.exit.speed,1e-7,"Coordinated yaw preserves coasting energy and exit speed");
+    auto noReversal=yawing;noReversal.yawAngle=-1.4;
+    const auto wrongHeading=designFvdImmelmann(noReversal);
+    check(!wrongHeading.section.report.valid()&&std::any_of(wrongHeading.section.report.errors.begin(),wrongHeading.section.report.errors.end(),[](const Finding& f){return f.code=="FVD_IMMELMANN_HEADING";}),
+        "A loaded roll cannot be accepted as an Immelmann without the existing physical heading reversal");
+    auto loadedEntry=constant(1.5,0,.02);loadedEntry.speed=58.5645947352;loadedEntry.position={};
+    loadedEntry.rollingAcceleration=gravity*.004;loadedEntry.dragAccelerationCoefficient=.0002041666666667;
+    const auto loadedPort=designFvdSection(loadedEntry);good(loadedPort);
+    FvdImmelmannRequest loaded;loaded.rollingAcceleration=loadedEntry.rollingAcceleration;loaded.dragAccelerationCoefficient=loadedEntry.dragAccelerationCoefficient;
+    loaded.entry=makeFvdEntry(loadedPort.track.knots.front(),loadedEntry.speed,loaded.rollingAcceleration,loaded.dragAccelerationCoefficient);
+    loaded.height=87.3*std::pow(loadedEntry.speed/53,2);loaded.normalG=4.4;loaded.crestG=3.5;loaded.rollExitG=2;loaded.exitPositiveG=3;
+    loaded.rampSeconds=1.0;loaded.exitRampSeconds=1.2;loaded.rollOverlapFraction=0;loaded.rollReleaseFraction=.45;loaded.yawAngle=45*pi/180;loaded.hand=-1;
+    loaded.exitPitch=-5*pi/180;loaded.exitNormalG=std::cos(loaded.exitPitch);
+    const auto heldRoll=designFvdImmelmann(loaded);good(heldRoll.section);
+    const auto halfRoll=std::min_element(heldRoll.section.samples.begin(),heldRoll.section.samples.end(),[&](const FvdSample& a,const FvdSample& b){
+        const auto score=[&](const FvdSample& q){return q.time<heldRoll.apex.time||q.time>heldRoll.rollExit.time?2.:std::abs(q.up.z);};return score(a)<score(b);});
+    const double halfAcceleration=-gravity*halfRoll->forward.z-loaded.rollingAcceleration-loaded.dragAccelerationCoefficient*halfRoll->speed*halfRoll->speed;
+    check(measureSeatForces(heldRoll.section.track,halfRoll->distance,halfRoll->speed,halfAcceleration,1.2).vertical>3.1,
+        "The loaded Immelmann retains strong physical seat load through its half-roll, not just at the ascent peak");
+    auto phasedCrown=loaded;phasedCrown.normalG=4.85;phasedCrown.crestG=3.8;
+    phasedCrown.height=85*std::pow(loadedEntry.speed/53,2);phasedCrown.ascentReleaseSeconds=1.2;phasedCrown.rollReleaseFraction=.45;
+    const auto phased=designFvdImmelmann(phasedCrown);good(phased.section);
+    const auto beforeCrown=sampleFvdControl(phased.authoring.controls,phased.apex.time-.25);
+    near(beforeCrown.normalG,phasedCrown.crestG,1e-7,"Prescribed ascent release reaches a genuine crown hold before the apex");
+    near(beforeCrown.first[0],0,1e-7,"Crown hold retains zero normal-force rate");
+    near(beforeCrown.second[0],0,1e-7,"Crown hold retains zero normal-force acceleration");
+    // Both speeds previously exhausted the legacy unload-duration seeds,
+    // despite lying between constructible members of this held-crown family.
+    for(double speed:{55.963245,57.5895085102}){
+        auto incoming=loadedEntry;incoming.speed=speed;
+        const auto port=designFvdSection(incoming);good(port);
+        auto nearby=phasedCrown;
+        nearby.entry=makeFvdEntry(port.track.knots.front(),speed,nearby.rollingAcceleration,nearby.dragAccelerationCoefficient);
+        nearby.height=85*std::pow(speed/53,2);
+        const auto solved=designFvdImmelmann(nearby);good(solved.section);
+        near(solved.apex.position.z,nearby.height,1e-5,"Nearby reached speeds retain the requested held-crown apex height");
+        near(solved.apex.forward.z,0,1e-6,"Nearby reached speeds retain the horizontal inversion apex");
+    }
+    auto coincidentRelease=loaded;coincidentRelease.rollReleaseFraction=.2;
+    good(designFvdImmelmann(coincidentRelease).section);
+    auto unresolvedRelease=loaded;unresolvedRelease.rollReleaseFraction=1e-8;
+    const auto tooShortRelease=designFvdImmelmann(unresolvedRelease);
+    check(!tooShortRelease.section.report.valid()&&std::any_of(tooShortRelease.section.report.errors.begin(),tooShortRelease.section.report.errors.end(),[](const Finding& f){return f.code=="FVD_IMMELMANN_KNOT_SPACING";}),
+        "Sub-millisecond crown holds retain their explicit spacing rejection");
+    auto unresolvedOverlap=inversion;unresolvedOverlap.rollOverlapFraction=1e-8;
+    const auto tooClose=designFvdImmelmann(unresolvedOverlap);
+    check(!tooClose.section.report.valid()&&std::any_of(tooClose.section.report.errors.begin(),tooClose.section.report.errors.end(),[](const Finding& f){return f.code=="FVD_IMMELMANN_KNOT_SPACING";}),
+        "Near-coincident roll/force boundaries reject explicitly before source integration");
     auto straightRequest=constant(1,0,2);auto straight=designFvdSection(straightRequest);good(straight);
     for(const auto& q:straight.samples){
         near(norm(q.position-Vec3{20*q.time,0,50}),0,2e-11,"Analytic level 1g straight position");
@@ -130,8 +275,8 @@ int main(){try{
     ballisticRequest.step=.005;auto fine=designFvdSection(ballisticRequest);good(fine);
     const Vec3 exactPosition{60,0,50-.5*gravity*4};const double exactSpeed=std::hypot(30,gravity*2);
     double coarseError=norm(coarse.samples.back().position-exactPosition),fineError=norm(fine.samples.back().position-exactPosition);
-    check(fineError<coarseError*.3&&fineError<.001,"Ballistic trajectory has second-order step convergence");
-    near(fine.samples.back().speed,exactSpeed,.0002,"Independent analytic ballistic speed");
+    check(coarseError<1e-10&&fineError<1e-10,"Both integration steps recover the independent ballistic position to roundoff");
+    near(fine.samples.back().speed,exactSpeed,1e-10,"Independent analytic ballistic speed");
     check(fine.assessment.maxNormalResidualG<.005&&fine.assessment.maxLateralResidualG<1e-9,"Canonical zero-g replay measures ballistic forces independently");
     // Vary every channel through smooth controls; compare actual step halves.
     FvdRequest changing;changing.speed=40;changing.step=.01;
@@ -164,7 +309,8 @@ int main(){try{
     near(motor.samples.back().speed,graded.speed+2*(8-gravity*std::sin(grade)),1e-9,"Graded actuator includes gravity with correct sign and units");
     const double firstDifference=norm(variedCoarse.samples.back().position-variedFine.samples.back().position);
     const double secondDifference=norm(variedFine.samples.back().position-variedFinest.samples.back().position);
-    check(secondDifference<firstDifference*.35,"Smooth force and roll controls converge under genuine step halving");
+    const double rounding=64*std::numeric_limits<double>::epsilon()*norm(variedFinest.samples.back().position);
+    check(secondDifference<firstDifference*.35+rounding,"Smooth force and roll controls converge under genuine step halving until the coordinate roundoff floor");
     check(variedFine.assessment.evaluations>variedFine.samples.size(),"Canonical replay samples between authoring knots");
     for(bool twisted:{false,true}) {
         FvdHillRequest hill;hill.entrySpeed=64;hill.height=105;hill.twistAngle=twisted?55*pi/180:0;
@@ -190,16 +336,10 @@ int main(){try{
     double ascentPitch=0,descentPitch=0;
     for(const auto& q:shaped.section.samples){ascentPitch=std::max(ascentPitch,std::asin(q.forward.z));descentPitch=std::max(descentPitch,-std::asin(q.forward.z));near(q.position.y,0,1e-12,"Reference-shaped camelback remains planar");}
     check(descentPitch>ascentPitch,"The traced silhouette has a steeper descent without a prescribed pitch target");
-    // Independent points from the unchanged reference image cover the crown,
-    // both flanks and lower transitions. Use one scale, with zero camera yaw.
-    const auto apex=std::max_element(shaped.section.samples.begin(),shaped.section.samples.end(),[](const auto& a,const auto& b){return a.position.z<b.position.z;});
-    const std::array<Vec3,14> trace{{{140,915,0},{350,782,0},{500,567,0},{650,246,0},{800,79,0},{900,29,0},{1000,13,0},{1150,51,0},{1300,171,0},{1450,395,0},{1575,578,0},{1700,692,0},{1900,817,0},{2040,880,0}}};
-    double squaredError=0,maximumError=0;
-    for(const auto& point:trace){double error=1e9;
-        for(const auto& q:shaped.section.samples){const Vec3 projected{996+(apex->position.x-q.position.x)*4.204043308,13+(apex->position.z-q.position.z)*4.204043308,0};error=std::min(error,norm(projected-point));}
-        squaredError+=error*error;maximumError=std::max(maximumError,error);
-    }
-    check(std::sqrt(squaredError/trace.size())<3.5&&maximumError<7,"The whole FVD silhouette follows the independent photo trace without squeezing or rotating it");
+    photoMatches(shaped.section,false,"The complete source camelback follows all frozen photo picks with one isotropic scale and no yaw");
+    photoMatches(shaped.section,true,"The compiled camelback follows the independent frozen photo silhouette");
+    check(!photoError(shaped.section,true,1.1).matches(),"The photo oracle rejects horizontal squeezing or stretching");
+    check(!photoError(shaped.section,true,1,true).matches(),"The photo oracle rejects swapping the asymmetric ascent and descent");
     check(shaped.authoring.controls[1].normalG==giant.positiveG&&shaped.authoring.controls.back().normalG==giant.exitPositiveG,"Ascent and recovery own separate force timelines");
     const auto crest=sampleFvdControl(shaped.authoring.controls,(shaped.authoring.controls[3].time+shaped.authoring.controls[4].time)*.5);
     check(crest.normalG<giant.airtimeG&&crest.normalG>giant.airtimeG+giant.crestLoadChangeG&&crest.first[0]<0,"The asymmetric crown carries a continuously changing load through its interior");
@@ -208,11 +348,53 @@ int main(){try{
     FvdCamelbackRequest protectedHill;protectedHill.hill=giant;protectedHill.hill.exitHeight=0;
     const auto protectedReference=designFvdHill(protectedHill.hill);good(protectedReference.section);
     const auto recovered=designFvdCamelback(protectedHill);good(recovered.section);
+    // Default1 changed the fitted hill's exitHeight from -3 m to 0 m before
+    // protecting it. The independently archived completed-shape.csv therefore
+    // measures 3.183 px RMS / 11.250 px maximum against this same full trace.
+    // Keep that historical discrepancy explicit; only the original fit uses
+    // the stricter 7 px maximum. The recovery is not an exact photo replica.
+    photoMatches(recovered.section,false,"The final protected source stays within its documented full-photo silhouette discrepancy",12);
+    photoMatches(recovered.section,true,"The final compiled protected camelback meets the independent photo bound rather than only matching its regenerated source",12);
     near(recovered.originalEndTime-recovered.protectedEndTime,protectedHill.tailCutSeconds,1e-12,"Protected camelback only shortens its final constant-load hold");
     for(size_t i=0;i+1<protectedReference.authoring.controls.size();++i){const auto& a=protectedReference.authoring.controls[i];const auto& retained=recovered.authoring.controls[i];
-        check(a.time==retained.time&&a.normalG==retained.normalG&&a.lateralG==retained.lateralG&&a.rollRate==retained.rollRate&&a.first==retained.first&&a.second==retained.second,"All protected ascent, crest and descent controls remain exact");}
-    for(double s=0;s<=recovered.protectedEndDistance;s+=7.3)
-        near(norm(recovered.section.track.sample(s).position-protectedReference.section.track.sample(s).position),0,1e-7,"The protected native geometry prefix remains unchanged");
+        check(a.time==retained.time&&a.normalG==retained.normalG&&a.lateralG==retained.lateralG&&a.rollRate==retained.rollRate&&a.drive==retained.drive&&a.first==retained.first&&a.second==retained.second,"All protected ascent, crest and descent controls remain exact");}
+    for(double distance=0;distance<=recovered.protectedEndDistance;distance+=7.3){
+        const auto a=sampleKinematics(recovered.section.track,distance),b=sampleKinematics(protectedReference.section.track,distance);
+        near(norm(a.sample.position-b.sample.position),0,1e-7,"The protected native geometry prefix remains unchanged");
+        near(norm(a.sample.tangent-b.sample.tangent),0,1e-8,"The protected prefix preserves tangent and pitch");
+        near(norm(a.sample.curvature-b.sample.curvature),0,1e-8,"The protected prefix preserves curvature");
+        near(norm(a.curvatureS-b.curvatureS),0,1e-8,"The protected prefix preserves its third position derivative");
+        near(norm(a.sample.up-b.sample.up),0,1e-8,"The protected prefix preserves the physical rider orientation");
+        near(norm(a.upS-b.upS),0,1e-8,"The protected prefix preserves its first orientation derivative");
+        near(norm(a.upSS-b.upSS),0,1e-8,"The protected prefix preserves its second orientation derivative");
+    }
+    // The shortened constant-load hold uses a different integration partition.
+    // Third derivatives of two separately normalized tiny canonical polynomials
+    // amplify their roundoff (observed 1.00173e-8), so compare the source-owned
+    // analytic jets at shared knots, not a second resampling of those jets.
+    // This covers every ascent/crest/descent/pullout phase. Across the remaining
+    // constant-load prefix, compare the actual time-dependent controls and jets.
+    const double finalHoldBegin=protectedReference.authoring.controls[protectedReference.authoring.controls.size()-2].time;
+    size_t sharedKnots=0;
+    for(size_t i=0;i<protectedReference.section.samples.size()&&protectedReference.section.samples[i].time<=finalHoldBegin+1e-10;++i){
+        check(i<recovered.section.samples.size(),"Protected analytic knot exists");
+        near(protectedReference.section.samples[i].time,recovered.section.samples[i].time,0,"Protected phases retain the same source timeline");
+        const auto& a=protectedReference.section.track.knots[i];const auto& b=recovered.section.track.knots[i];
+        near(norm(a.up-b.up),0,1e-12,"Protected analytic source orientation remains exact");
+        near(norm(a.upFirst-b.upFirst),0,1e-12,"Protected analytic first orientation derivative remains exact");
+        near(norm(a.upSecond-b.upSecond),0,1e-12,"Protected analytic second orientation derivative remains exact");
+        near(norm(a.upThird-b.upThird),0,1e-12,"Protected analytic third orientation derivative remains exact");
+        ++sharedKnots;
+    }
+    check(sharedKnots>100,"Protected analytic frame comparison covers the full authored hill body");
+    for(double time=0;time<=recovered.protectedEndTime;time+=.137){
+        const auto a=sampleFvdControl(protectedReference.authoring.controls,time),b=sampleFvdControl(recovered.authoring.controls,time);
+        near(a.normalG,b.normalG,1e-12,"Complete protected normal-force timeline remains unchanged");
+        near(a.lateralG,b.lateralG,1e-12,"Complete protected lateral-force timeline remains unchanged");
+        near(a.rollRate,b.rollRate,1e-12,"Complete protected twist timeline remains unchanged");
+        near(a.drive,b.drive,1e-12,"Complete protected drive timeline remains unchanged");
+        for(size_t channel=0;channel<4;++channel){near(a.first[channel],b.first[channel],1e-12,"Protected first control derivative remains unchanged");near(a.second[channel],b.second[channel],1e-12,"Protected second control derivative remains unchanged");}
+    }
     const auto& recoveredEnd=recovered.section.samples.back();
     near(std::asin(recoveredEnd.forward.z),protectedHill.minimumExitPitch,1e-6,"Low-load camelback recovery ends at its first requested rising port");
     near(recovered.authoring.controls.back().normalG,protectedHill.exitNormalG,0,"Protected recovery carries its explicit low exit load");

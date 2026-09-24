@@ -9,6 +9,9 @@ namespace coaster {
 // the canonical track may use this exact sweep builder without rebuilding it.
 ClearanceSweep buildClearanceSweepVerified(const Track&, const TrainConfig&, Cancel cancel = {});
 
+// Standalone source sections may be open; this is not complete ride acceptance.
+ValidationReport validateSelfClearance(const Track&,const TrainConfig&,double minClearance=0,Cancel cancel={});
+
 double minimumSweptGroundClearance(const ClearanceSweep&, const Terrain&, Cancel cancel = {});
 
 ValidationReport validateStation(const Track&, const Terrain&, const TrainConfig&, const StationGeometry&,

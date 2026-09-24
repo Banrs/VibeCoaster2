@@ -12,6 +12,15 @@ MotionBuilder::MotionBuilder(Design& design,Cancel stop)
     d.track.authoredGeometry=true;
     d.track.knots.push_back({cursor.position,cursor.tangent,cursor.curvature,{0,0,1},0,Element::Station});
 }
+FvdEntry MotionBuilder::fvdEntry(double speed,FvdDriveJet drive) const {
+    if(d.track.knots.empty())throw std::runtime_error("FVD entry requires a physical port");
+    const auto& knot=d.track.knots.back();const size_t index=d.track.knots.size()-1;
+    const bool owned=std::any_of(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const auto& source){
+        return index>=source.firstKnot&&index-source.firstKnot<source.sourceDistances.size();});
+    if(!owned&&!d.track.authoredFrame&&norm(knot.curvature)+norm(knot.third)+norm(knot.fourth)>1e-10)
+        throw std::runtime_error("FVD entry needs the spline's finalized analytic physical frame, not its placeholder");
+    return makeFvdEntry(knot,speed,gravity*req.train.rollingResistance,drag,drive);
+}
 double MotionBuilder::coastEnergy(double v2,Vec3 from,Vec3 to) const {
     return v2-2*gravity*(to.z-from.z)-2*(gravity*req.train.rollingResistance+drag*v2)*norm(to-from);
 }
@@ -36,15 +45,42 @@ MotionBuilder::Range MotionBuilder::force(const FvdResult& result,const FvdReque
     if(norm(first.position-cursor.position)>1e-7||norm(first.tangent-cursor.tangent)>1e-7||norm(first.curvature-cursor.curvature)>1e-7||norm(first.third-cursor.third)>1e-7||norm(first.fourth-cursor.fourth)>1e-7)
         throw std::runtime_error(std::string(name)+": force source must inherit the complete live geometry jet");
     const size_t firstKnot=d.track.knots.size()-1;
+    const bool frameOwned=d.track.authoredFrame||std::any_of(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const auto& source){
+        return firstKnot>=source.firstKnot&&firstKnot-source.firstKnot<source.sourceDistances.size();});
+    if(frameOwned){
+        const auto incoming=sampleKinematics(result.track,begin);const auto& previous=d.track.knots.back();
+        if(norm(rotate(incoming.sample.up)-previous.up)>1e-7||norm(rotate(incoming.upS)-previous.upFirst)>1e-7||
+            norm(rotate(incoming.upSS)-previous.upSecond)>1e-7||norm(rotate(incoming.upSSS)-previous.upThird)>1e-7)
+            throw std::runtime_error(std::string(name)+": force source must inherit the complete live physical frame jet");
+    }
+    // An unfinalized neighboring spline may adopt this boundary frame during
+    // its later analytic banking pass. An existing FVD owner may never do so.
     auto retainFrame=[&](Knot& knot,double distance){
         const auto q=sampleKinematics(result.track,distance);knot.up=rotate(q.sample.up);knot.bank=0;
         knot.upFirst=rotate(q.upS);knot.upSecond=rotate(q.upSS);knot.upThird=rotate(q.upSSS);
     };
     retainFrame(d.track.knots.back(),begin);
     ForceAuthoring source;source.name=name;source.program=program;source.origin=origin;source.heading=heading;source.firstKnot=firstKnot;source.sourceDistances.push_back(begin);
-    const int count=int(std::ceil((end-begin)/.3));
-    for(int i=1;i<=count;++i){const double distance=begin+(end-begin)*i/count;
-        append(pose(distance),element);retainFrame(d.track.knots.back(),distance);source.sourceDistances.push_back(distance);}
+    // Keep force-control boundaries as canonical knots. A span across a
+    // change in the next derivative cannot preserve the source's interior jerk.
+    std::vector<double> boundaries{begin},times;
+    for(const auto& control:program.controls)times.push_back(control.time);
+    for(const auto& phase:program.twists){times.push_back(phase.begin);times.push_back(phase.end);}
+    std::sort(times.begin(),times.end());times.erase(std::unique(times.begin(),times.end()),times.end());
+    for(double time:times){
+        const auto at=std::lower_bound(result.samples.begin(),result.samples.end(),time,[](const auto& sample,double value){return sample.time<value;});
+        if(at==result.samples.end()||std::abs(at->time-time)>1e-9)throw std::runtime_error("Force source lost an authored phase boundary");
+        const size_t index=size_t(at-result.samples.begin());
+        const double distance=index<result.track.spans.size()?result.track.spans[index].start:result.track.length;
+        if(distance>begin+1e-6&&distance<end-1e-6)boundaries.push_back(distance);
+    }
+    boundaries.push_back(end);
+    for(size_t interval=1;interval<boundaries.size();++interval){
+        const double a=boundaries[interval-1],b=boundaries[interval];
+        const int count=int(std::ceil((b-a)/.3));
+        for(int i=1;i<=count;++i){const double distance=i==count?b:a+(b-a)*i/count;
+            append(pose(distance),element);retainFrame(d.track.knots.back(),distance);source.sourceDistances.push_back(distance);}
+    }
     d.forcePrograms.push_back(std::move(source));return {firstKnot,d.track.knots.size()-1};
 }
 
@@ -116,6 +152,13 @@ MotionBuilder::Range MotionBuilder::heightCurve(double height,detail::AngleJet e
 
 MotionBuilder::Range MotionBuilder::line(double length,Element element,const char* name){
         if(norm(cursor.curvature)+norm(cursor.third)+norm(cursor.fourth)>1e-7)throw std::runtime_error("Hardware corridor must inherit aligned derivatives");
+        if(element==Element::Station||element==Element::Launch||element==Element::Brake){
+            const size_t index=d.track.knots.size()-1;const auto& port=d.track.knots.back();
+            const bool physical=d.track.authoredFrame||std::any_of(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const auto& source){return index>=source.firstKnot&&index-source.firstKnot<source.sourceDistances.size();});
+            const Vec3 upright=unit(Vec3{0,0,1}-port.tangent*port.tangent.z);
+            if(physical&&norm(port.up-upright)+norm(port.upFirst)+norm(port.upSecond)+norm(port.upThird)>1e-7)
+                throw std::runtime_error("Hardware corridor must inherit an upright stationary physical frame; release the bank in its authored source");
+        }
         const size_t begin=d.track.knots.size()-1;const auto start=cursor;const int count=int(std::ceil(length/.6));
         for(int i=1;i<=count;++i){auto q=start;q.position=start.position+start.tangent*(length*i/count);q.curvature=q.third=q.fourth={};append(q,element);}
         modules.push_back({begin,d.track.knots.size()-1,name});return std::pair{begin,d.track.knots.size()-1};

@@ -1,4 +1,7 @@
+#include "angular_phase_metadata_checks.hpp"
 #include "coaster/coaster.hpp"
+#include "coaster/angular_motion.hpp"
+#include "../src/motion_spline.hpp"
 #include "../src/simulation_internal.hpp"
 #include "../src/arc_length.hpp"
 #include <iostream>
@@ -13,7 +16,121 @@ static Track straight(double linear,double quadratic){
         t.knots.push_back({{x,0,50},{1,0,0},{},{0,0,1},.13+linear*x+quadratic*x*x,Element::Return});
     t.rebuild();return t;
 }
+static std::vector<Frame> constantAngularReplay(const Track& track,double speed=10){
+    Frame a,b;a.speed=b.speed=speed;b.distance=track.length;b.time=track.length/speed;return {a,b};
+}
+static std::array<double,4> angularBump(double s,double length){
+    // A quarter-radian bump with value and first three derivatives zero at
+    // both ports. Differentiation here is independent polynomial arithmetic.
+    constexpr std::array<double,9> coefficients{0,0,0,0,64,-256,384,-256,64};
+    std::array<double,4> out{};const double u=s/length;
+    for(int order=0;order<4;++order)for(int power=order;power<9;++power){
+        double factor=1;for(int j=0;j<order;++j)factor*=power-j;
+        out[order]+=coefficients[power]*factor*std::pow(u,power-order)/std::pow(length,order);
+    }
+    return out;
+}
+static Track angularFixture(bool yaw){
+    Track track;track.closed=false;track.authoredGeometry=track.authoredFrame=true;
+    constexpr double length=80;constexpr int count=160;Vec3 position{0,0,50};
+    auto tangent=[&](double s){const double b=angularBump(s,length)[0];return yaw?Vec3{std::cos(b),std::sin(b),0}:Vec3{1,0,0};};
+    for(int i=0;i<=count;++i){const double s=length*i/count;const auto b=angularBump(s,length);
+        if(i)position=position+detail::integrateDirection(tangent,length*(i-1)/count,s);
+        if(yaw){const Vec3 t=tangent(s),n{-t.y,t.x,0};
+            track.knots.push_back({position,t,n*b[1],{0,0,1},0,Element::Turn,
+                n*b[2]-t*(b[1]*b[1]),n*(b[3]-b[1]*b[1]*b[1])-t*(3*b[1]*b[2])});
+        }else{const Vec3 u{0,-std::sin(b[0]),std::cos(b[0])},r{0,-std::cos(b[0]),-std::sin(b[0])};
+            track.knots.push_back({position,{1,0,0},{},u,0,Element::Turn,{},{},r*b[1],
+                r*b[2]-u*(b[1]*b[1]),r*(b[3]-b[1]*b[1]*b[1])-u*(3*b[1]*b[2])});
+        }
+    }
+    track.rebuild();return track;
+}
+static void angularPhaseChecks(){
+    for(bool yaw:{false,true}){
+        const auto track=angularFixture(yaw);const auto replay=constantAngularReplay(track);
+        const auto axis=yaw?AngularAxis::Yaw:AngularAxis::Roll;
+        const auto first=sampleSpanKinematics(track,0,0),last=sampleSpanKinematics(track,track.spans.size()-1,1);
+        near(norm(first.sample.tangent-last.sample.tangent)+norm(first.sample.curvature-last.sample.curvature)+
+            norm(first.curvatureS-last.curvatureS)+norm(first.curvatureSS-last.curvatureSS),0,1e-9,"Wiggle geometry retains the exact incoming direction jet at both ports");
+        near(norm(first.sample.up-last.sample.up)+norm(first.upS-last.upS)+norm(first.upSS-last.upSS)+norm(first.upSSS-last.upSSS),0,1e-9,"Wiggle physical orientation is C3-compatible with unchanged endpoint frames");
+        for(size_t i=1;i<track.spans.size();++i){const auto a=sampleSpanKinematics(track,i-1,1),b=sampleSpanKinematics(track,i,0);
+            near(norm(a.upSSS-b.upSSS)+norm(a.curvatureSS-b.curvatureSS),0,1e-8,"C3-compatible oscillation passes the existing knot continuity premise");}
+        std::vector<AngularPhaseIntent> wrong{{"single purposeful turn",0,track.length,axis,AngularDerivative::Velocity,AngularDirection::Nonnegative}};
+        const auto rejected=assessAngularPhases(track,replay,wrong);
+        check(rejected.performed&&!rejected.report.valid()&&rejected.report.errors.front().code=="ANGULAR_PHASE_DIRECTION","A C3 yaw or roll wiggle is rejected against independently declared one-direction intent");
+        check(rejected.phases.front().minimum<-.01&&rejected.phases.front().maximum>.01,"The audit retains signed motion rather than hiding the reversal in a magnitude");
+        const double midpoint=track.distanceAtSpan(track.spans.size()/2,0);
+        std::vector<AngularPhaseIntent> correct{{"deliberate turn-in",0,midpoint,axis,AngularDerivative::Velocity,AngularDirection::Nonnegative},
+            {"deliberate turn-out",midpoint,track.length,axis,AngularDerivative::Velocity,AngularDirection::Nonpositive}};
+        check(assessAngularPhases(track,replay,correct).report.valid(),"The same legitimate authored reversal passes when its two intended phases are explicit");
+        const auto refined=assessAngularPhases(track,replay,wrong,{.125,1./480});
+        check(!refined.report.valid(),"Independent spatial and temporal refinement retains the wiggle rejection");
+        near(refined.phases.front().minimum,rejected.phases.front().minimum,2e-6,"Signed reversal extrema converge under actual sampling refinement");
+        const auto cancelled=assessAngularPhases(track,replay,correct,{},[]{return true;});
+        check(cancelled.cancelled&&!cancelled.report.valid()&&cancelled.report.errors.front().code=="CANCELLED","Angular audit cancellation never reports acceptance");
+        check(!assessAngularPhases(track,replay,correct,{.25,1./240,2}).report.valid(),"Insufficient sampling budget fails closed");
+        auto missing=correct;missing[0].beginDistance=-1;check(!assessAngularPhases(track,replay,missing).performed,"Out-of-domain phase intent rejects before assessment");
+        if(!yaw){
+            std::vector<AngularPhaseIntent> acceleration{{"constant angular acceleration",0,track.length,axis,AngularDerivative::Acceleration,AngularDirection::Nonnegative}};
+            std::vector<AngularPhaseIntent> jerk{{"zero angular jerk",0,track.length,axis,AngularDerivative::Jerk,AngularDirection::Stationary}};
+            check(!assessAngularPhases(track,replay,acceleration).report.valid()&&!assessAngularPhases(track,replay,jerk).report.valid(),"Explicit derivative phases inspect angular acceleration and jerk as well as angular velocity");
+        }
+    }
+    // A complete vertical loop has genuine nonzero pitch through both vertical
+    // tangents. Neither an Euler singularity nor a heading branch creates yaw.
+    Track loop;loop.closed=false;loop.authoredGeometry=loop.authoredFrame=true;constexpr double radius=40;
+    for(int i=0;i<=800;++i){const double a=2*pi*i/800;const Vec3 t{std::cos(a),0,std::sin(a)},u{-std::sin(a),0,std::cos(a)};
+        loop.knots.push_back({{radius*std::sin(a),0,50+radius*(1-std::cos(a))},t,u/radius,u,0,Element::Inversion,
+            t*(-1/(radius*radius)),u*(-1/(radius*radius*radius)),t*(-1/radius),u*(-1/(radius*radius)),t/(radius*radius*radius)});}
+    loop.rebuild();const auto loopReplay=constantAngularReplay(loop);
+    std::vector<AngularPhaseIntent> loopIntent{{"full loop pitch",0,loop.length,AngularAxis::Pitch,AngularDerivative::Velocity,AngularDirection::Nonnegative},
+        {"planar loop yaw",0,loop.length,AngularAxis::Yaw,AngularDerivative::Velocity,AngularDirection::Stationary},
+        {"untwisted loop",0,loop.length,AngularAxis::Roll,AngularDerivative::Velocity,AngularDirection::Stationary}};
+    const auto loopAudit=assessAngularPhases(loop,loopReplay,loopIntent);
+    check(loopAudit.report.valid(),"Physical angular-phase audit accepts a full vertical loop without Euler singularities");
+    near(loopAudit.phases[0].minimum,10/radius,2e-8,"Full loop signed pitch rate matches its closed-form rotation");
+    near(loopAudit.phases[0].maximum,10/radius,2e-8,"Full loop has no invented pitch-rate peak at either vertical tangent");
+    Track turn;turn.closed=false;turn.authoredGeometry=turn.authoredFrame=true;
+    for(int i=0;i<=120;++i){const double a=2.9+.6*i/120;const Vec3 t{std::cos(a),std::sin(a),0},n{-std::sin(a),std::cos(a),0};
+        turn.knots.push_back({{radius*std::sin(a),-radius*std::cos(a),50},t,n/radius,{0,0,1},0,Element::Turn,t*(-1/(radius*radius)),n*(-1/(radius*radius*radius))});}
+    turn.rebuild();
+    const auto branch=assessAngularPhases(turn,constantAngularReplay(turn),{{"left turn across pi",0,turn.length,AngularAxis::Yaw,AngularDerivative::Velocity,AngularDirection::Nonnegative}});
+    check(branch.report.valid(),"Heading branch crossing does not create a physical yaw reversal");
+    near(branch.phases[0].minimum,10/radius,2e-8,"Signed heading-branch rate matches the independent circle oracle");
+
+    // Independent Euler composition gives a closed-form signed body rate. Its
+    // time derivatives check the rotating-basis term with all axes moving.
+    auto rates=[](double s,double speed){const double pitch=.2+.002*s,bank=.3+.01*s;
+        return std::array<double,3>{speed*(.01+.006*std::sin(pitch)),
+            speed*(.002*std::cos(bank)-.006*std::cos(pitch)*std::sin(bank)),
+            speed*(.002*std::sin(bank)+.006*std::cos(pitch)*std::cos(bank))};};
+    for(double s:{10.,30.,60.}){
+        const detail::AngleJet pitch{.2+.002*s,.002,0,0},yaw{2.9+.006*s,.006,0,0},bank{.3+.01*s,.01,0,0};
+        const auto t=detail::directionJet(pitch,yaw);
+        const auto cp=detail::cosJet(pitch),sp=detail::sinJet(pitch),cy=detail::cosJet(yaw),sy=detail::sinJet(yaw),cb=detail::cosJet(bank),sb=detail::sinJet(bank);
+        auto add=[](detail::AngleJet a,detail::AngleJet b){return detail::AngleJet{a.value+b.value,a.first+b.first,a.second+b.second,a.third+b.third};};
+        auto negative=[](detail::AngleJet a){return detail::AngleJet{-a.value,-a.first,-a.second,-a.third};};
+        const auto ux=add(negative(detail::multiply(detail::multiply(cy,sp),cb)),detail::multiply(sy,sb));
+        const auto uy=add(negative(detail::multiply(detail::multiply(sy,sp),cb)),negative(detail::multiply(cy,sb)));
+        const auto uz=detail::multiply(cp,cb);
+        TrackKinematics k;k.sample.tangent=t.tangent;k.sample.curvature=t.curvature;k.curvatureS=t.third;k.curvatureSS=t.fourth;
+        k.sample.up={ux.value,uy.value,uz.value};k.upS={ux.first,uy.first,uz.first};k.upSS={ux.second,uy.second,uz.second};k.upSSS={ux.third,uy.third,uz.third};k.sample.right=cross(k.sample.tangent,k.sample.up);
+        constexpr double speed=17,acceleration=2,jerk=-.8,step=.001;
+        const auto measured=signedAngularMotion(k,speed,acceleration,jerk);
+        auto oracle=[&](double time){return rates(s+speed*time+.5*acceleration*time*time+jerk*time*time*time/6,speed+acceleration*time+.5*jerk*time*time);};
+        const auto expected=oracle(0),before=oracle(-step),after=oracle(step);
+        for(int axis=0;axis<3;++axis){
+            near(measured.velocity[axis],expected[axis],2e-13,"Signed physical angular rate agrees with independent combined yaw/pitch/roll composition");
+            near(measured.acceleration[axis],(after[axis]-before[axis])/(2*step),2e-8,"Signed angular acceleration includes the moving frame and changing speed");
+            near(measured.jerk[axis],(after[axis]-2*expected[axis]+before[axis])/(step*step),2e-8,"Signed angular jerk includes the noncommuting rotating-basis correction");
+        }
+    }
+}
+
 int main(){try{
+    angularPhaseChecks();
+    checks += angularPhaseMetadataChecks();
     // Independent closed-form rigid offset on a straight track. Quadratic bank
     // tests angular acceleration as well as the centripetal offset term.
     for(double quadratic:{0.,.0003}){

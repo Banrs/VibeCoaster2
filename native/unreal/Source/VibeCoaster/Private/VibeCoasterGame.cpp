@@ -25,7 +25,7 @@ static bool ReadSeed(const FString& Text, uint64& Value)
 void FCoasterRuntimeVerificationDeleter::operator()(FCoasterRuntimeVerification* Pointer) const { delete Pointer; }
 #endif
 
-AVibeCoasterController::AVibeCoasterController() { PrimaryActorTick.bCanEverTick = true; bAutoManageActiveCameraTarget = false; Settings.targets.requireIntensity = false; Settings.terrain.kind = coaster::TerrainKind::Highlands; }
+AVibeCoasterController::AVibeCoasterController() { PrimaryActorTick.bCanEverTick = true; bAutoManageActiveCameraTarget = false; Settings.terrain.kind = coaster::TerrainKind::Highlands; }
 AVibeCoasterController::~AVibeCoasterController() = default;
 void AVibeCoasterController::BeginPlay()
 {

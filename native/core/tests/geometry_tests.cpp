@@ -1,4 +1,5 @@
 #include "coaster/coaster.hpp"
+#include "coaster/angular_motion.hpp"
 #include "../src/arc_length.hpp"
 #include <iostream>
 #include <stdexcept>
@@ -72,7 +73,29 @@ static void reportPrecision(){
         check((std::abs(decoded-1.)<.02)==(std::abs(coarse-1.)<.02),"Serialization preserves strict threshold decision on both sides");
     }
 }
-int main(){try{reportPrecision();
+static void authoredTranslation(){
+    constexpr double radius=80,speed=80;
+    for(double offset:{0.,4000.})for(double spacing:{.25,.125}){
+        Track track;track.closed=false;track.authoredGeometry=track.authoredFrame=true;
+        for(int i=0;i<=160;++i){
+            const double angle=i*spacing/radius;const Vec3 t{std::cos(angle),std::sin(angle),0};
+            const Vec3 k{-std::sin(angle)/radius,std::cos(angle)/radius,0};
+            track.knots.push_back({{offset+radius*std::sin(angle),offset+radius*(1-std::cos(angle)),50},
+                t,k,{0,0,1},0,Element::Turn,t*(-1/(radius*radius)),k*(-1/(radius*radius))});
+        }
+        track.rebuild();
+        for(size_t i=0;i<track.spans.size();++i)for(double u:{.0625,.25,.5,.875,.9375}){
+            const auto q=sampleSpanKinematics(track,i,u);
+            check(std::abs(signedAngularMotion(q,speed,0,0).jerk[2])<.0001,
+                "Constant-radius authored turn has no translation-induced angular jerk ripple");
+        }
+        const auto stored=track.knots[80].position;
+        track.knots[80].position.z+=.00001;track.rebuild();
+        close(track.sampleSpan(79,1).position,stored+Vec3{0,0,.00001},2e-11,
+            "A resolvable authored displacement is retained rather than replaced by endpoint-jet quadrature");
+    }
+}
+int main(){try{reportPrecision();authoredTranslation();
     std::vector<AuthoredPoint> p;for(int i=0;i<=120;++i){double x=i+0.002*i*i;p.push_back({{x,4*std::sin(x/35),20+3*std::sin(x/43)},.2*std::sin(x/31),Element::Turn,{0,0,1}});}auto open=compile(p,false);verifyJoins(open);
     p.clear();constexpr int n=210;for(int i=0;i<=n;++i){double f=double(i)/n,angle=2*pi*(f+.06*std::sin(2*pi*f));p.push_back({{50*std::sin(angle),50*(1-std::cos(angle)),20+2*std::sin(2*angle)},.12*std::sin(angle),Element::Turn,{0,0,1}});}p.back()=p.front();auto closed=compile(p,true);verifyJoins(closed);
     p.clear();for(int i=0;i<5;++i)p.push_back({{double(i*i),0,20},0,Element::Launch,{0,0,1}});auto straight=compile(p,false);check(std::abs(straight.length-16)<1e-12,"Analytic straight arc length");

@@ -1,6 +1,7 @@
 #include "../src/banking.hpp"
 #include "../src/motion_program.hpp"
 #include "../src/authoring.hpp"
+#include "../src/simulation_internal.hpp"
 #include "coaster/fvd.hpp"
 #include <iostream>
 #include <stdexcept>
@@ -51,6 +52,53 @@ int main(){try{
     circle.begin=exact(0);circle.end=exact(circle.length);derivatives(circle);
     for(int i=0;i<=100;++i){double s=circle.length*i/100;auto q=circle.direction(s),e=exact(s);close(q.tangent,e.tangent,1e-12);close(q.curvature,e.curvature,1e-12);close(q.third,e.third,1e-12);close(q.fourth,e.fourth,1e-12);close(circle.displacement(s),e.position,1e-10);}
 
+    // Identical authored upstream geometry in an open energy-calibration
+    // prefix and a real closed circuit. The prefix must leave the station at
+    // the same distance and inherit every finite-train drive observation.
+    Track whole;whole.authoredGeometry=whole.authoredFrame=true;
+    constexpr int wholeSamples=1600,prefixSamples=340;
+    for(int i=0;i<=wholeSamples;++i){const auto q=exact(2*pi*radius*i/wholeSamples);
+        whole.knots.push_back({q.position,q.tangent,q.curvature,{0,0,1},0,Element::Turn,q.third,q.fourth});}
+    whole.knots.back()=whole.knots.front();whole.rebuild();
+    auto prefixTrack=whole;prefixTrack.closed=false;prefixTrack.knots.resize(prefixSamples+1);prefixTrack.rebuild();
+    TrainConfig prefixTrain;
+    const std::vector<Operation> prefixDrives{{3,250,DriveKind::Launch,30,30000,3000000,.5}};
+    int prefixPolls=0;
+    const auto prefixMotion=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,[&]{++prefixPolls;return false;},MotionReplayMode::StationEnergyPrefix);
+    check(prefixMotion.prefixReachedEnd&&!prefixMotion.completed&&!prefixMotion.cancelled&&prefixMotion.report.valid(),
+        "A successful calibration prefix reports only prefix completion, never completed ride acceptance");
+    check(!prefixMotion.frames.empty()&&prefixMotion.frames.front().distance==38.5,
+        "Open energy calibration uses the full circuit's station departure distance");
+    int wholePolls=0;
+    const auto upstream=simulateMotion(whole,prefixDrives,prefixTrain,1./960,[&]{return ++wholePolls>prefixPolls+2;});
+    check(upstream.cancelled&&!upstream.completed&&!upstream.prefixReachedEnd&&upstream.frames.size()+1>=prefixMotion.frames.size(),
+        "The comparison stops the full circuit after the common upstream range without inventing completion");
+    check(prefixMotion.frames.size()>100,"Prefix parity fixture includes a substantial powered and coasting history");
+    for(size_t i=0;i+1<prefixMotion.frames.size();++i){const auto& a=prefixMotion.frames[i];const auto& b=upstream.frames[i];
+        check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed&&a.acceleration==b.acceleration&&a.accelerationRate==b.accelerationRate,
+            "Station energy prefix and closed-circuit replay have bit-exact upstream motion and actuator derivatives");}
+    const auto isolatedMotion=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,{});
+    const auto isolatedForces=simulate(prefixTrack,prefixDrives,prefixTrain,1./960,{});
+    check(isolatedMotion.completed&&!isolatedMotion.prefixReachedEnd&&isolatedMotion.frames.front().distance==9.5,
+        "Ordinary isolated open sections retain their original starting position and completed status");
+    check(isolatedForces.completed==isolatedMotion.completed&&isolatedForces.cancelled==isolatedMotion.cancelled&&isolatedForces.frames.size()==isolatedMotion.frames.size(),
+        "Named prefix support does not change ordinary full-force versus motion-only completion");
+    for(size_t i=0;i<isolatedMotion.frames.size();++i){const auto& a=isolatedMotion.frames[i];const auto& b=isolatedForces.frames[i];
+        check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed,"Ordinary open replay remains bit-exact with the public physical simulation");}
+    const auto prefixCancelled=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,[]{return true;},MotionReplayMode::StationEnergyPrefix);
+    check(prefixCancelled.cancelled&&!prefixCancelled.completed&&!prefixCancelled.prefixReachedEnd,
+        "Cancelled energy calibration cannot report a reached prefix or completed circuit");
+    const auto wrongDomain=simulateMotion(whole,prefixDrives,prefixTrain,1./960,{},MotionReplayMode::StationEnergyPrefix);
+    check(!wrongDomain.completed&&!wrongDomain.prefixReachedEnd&&!wrongDomain.report.valid()&&wrongDomain.frames.empty(),
+        "Energy-prefix mode rejects a closed circuit instead of changing its completion meaning");
+    auto terminalDrives=prefixDrives;terminalDrives.push_back({260,300,DriveKind::Station,0,30000,3000000,.5});
+    const auto wrongTerminal=simulateMotion(prefixTrack,terminalDrives,prefixTrain,1./960,{},MotionReplayMode::StationEnergyPrefix);
+    check(!wrongTerminal.prefixReachedEnd&&!wrongTerminal.report.valid(),"Energy prefix rejects terminal station operations");
+    Design diagnosticPrefix;diagnosticPrefix.track=prefixTrack;diagnosticPrefix.operations=prefixDrives;diagnosticPrefix.simulation.frames=prefixMotion.frames;
+    diagnosticPrefix.simulation.completed=prefixMotion.completed;
+    std::string prefixSaveError;
+    check(!diagnosticPrefix.accepted()&&!saveDesign(diagnosticPrefix,"",prefixSaveError)&&prefixSaveError.find("REJECTED_DESIGN")==0,
+        "A reached calibration prefix cannot pass design acceptance or persistence even with a complete upstream trace");
     for(double degrees:{178.5,180.}){
         const double length=radius*degrees*pi/180;const auto start=exact(0),finish=exact(length);
         const auto reversal=solveMotion(start,finish,length,{30,0,0,0});
@@ -142,6 +190,41 @@ int main(){try{
     for(size_t i=1;i<hybrid.track.spans.size();++i){const auto a=sampleSpanKinematics(hybrid.track,i-1,1),b=sampleSpanKinematics(hybrid.track,i,0);
         close(a.sample.up,b.sample.up,1e-9);close(a.upS,b.upS,1e-9);close(a.upSS,b.upSS,1e-8);close(a.upSSS,b.upSSS,1e-7);}
     check(norm(hybrid.track.knots.back().position-sourceKnots.back().position)<1e-12,"Banking never closes an open authoring fixture");
+
+    // An unpowered brake alignment is still a straight upright corridor.
+    // A global banking fit must not add a roll pulse after a completed FVD turn.
+    Design brakeAlignment;brakeAlignment.track.closed=false;MotionBuilder brakeBuilder(brakeAlignment);
+    brakeBuilder.cursor=planarJet({0,0,4.5},pi/3,0);
+    brakeAlignment.track.knots.front().tangent=brakeBuilder.cursor.tangent;
+    FvdApproachRequest turn;turn.rollingAcceleration=turn.dragAccelerationCoefficient=0;
+    turn.entry=makeFvdEntry(brakeAlignment.track.knots.front(),50,0,0);
+    turn.endPosition={350,250,4.5};turn.endHeading=0;
+    const auto completeTurn=designFvdApproach(turn);check(completeTurn.section.assessment.passed,"Level banked-turn fixture constructs");
+    auto turnProgram=completeTurn.authoring;turnProgram.controls.pop_back(); // End at the authored unbank boundary.
+    const auto turnSource=designFvdSection(turnProgram);check(turnSource.assessment.passed,"Turn reaches its straight zero-jet exit");
+    const auto turnRange=brakeBuilder.force(turnSource,turnProgram,Element::Turn,"turn-before-alignment",{});
+    brakeBuilder.line(200,Element::Brake,"unpowered-brake-alignment");brakeAlignment.track.rebuild();
+    std::vector<Frame> brakeFrames;
+    for(size_t i=0;i<brakeAlignment.track.knots.size();++i){Frame f;f.distance=i<brakeAlignment.track.spans.size()?brakeAlignment.track.spans[i].start:brakeAlignment.track.length;f.time=f.distance/50;f.speed=50;brakeFrames.push_back(f);}
+    authorBanking(brakeAlignment,brakeFrames);
+    const double alignmentStart=brakeAlignment.track.spans[turnRange.second].start;
+    for(double at=alignmentStart;at<brakeAlignment.track.length;at+=.5){const auto q=sampleKinematics(brakeAlignment.track,at);
+        check(norm(q.sample.up-Vec3{0,0,1})<1e-8,"Unpowered straight brake alignment cannot acquire a banking wobble");
+        check(norm(q.upS)+norm(q.upSS)+norm(q.upSSS)<1e-8,"Upright brake alignment preserves its complete physical frame derivatives");}
+
+    Design bankedHardware;bankedHardware.track.closed=false;MotionBuilder bankedBuilder(bankedHardware);
+    FvdRequest bankedStraight;bankedStraight.position={};bankedStraight.up={0,-std::sin(.2),std::cos(.2)};
+    bankedStraight.controls={{0,std::cos(.2),-std::sin(.2),0},{1,std::cos(.2),-std::sin(.2),0}};
+    const auto bankedSource=designFvdSection(bankedStraight);check(bankedSource.assessment.passed,"Banked straight has compensating physical force controls");
+    bankedBuilder.force(bankedSource,bankedStraight,Element::Turn,"banked-straight",bankedBuilder.cursor.position);
+    const auto beforeHardware=bankedHardware.track.knots.size();bool refusedHardware=false;
+    try{bankedBuilder.line(100,Element::Brake,"invalid-bank-release");}catch(const std::exception& e){refusedHardware=std::string(e.what()).find("physical frame")!=std::string::npos;}
+    check(refusedHardware&&bankedHardware.track.knots.size()==beforeHardware,"A banked FVD port rejects before straight hardware can reset its frame");
+    Design rollingHardware;MotionBuilder rollingBuilder(rollingHardware);rollingHardware.track.authoredFrame=true;
+    auto& rollingPort=rollingHardware.track.knots.back();rollingPort.upFirst={0,-.01,0};rollingPort.upSecond={0,0,-.0001};rollingPort.upThird={0,.000001,0};
+    refusedHardware=false;
+    try{rollingBuilder.line(100,Element::Launch,"invalid-twist-release");}catch(const std::exception& e){refusedHardware=std::string(e.what()).find("physical frame")!=std::string::npos;}
+    check(refusedHardware&&rollingHardware.track.knots.size()==1,"A momentarily upright port retains live roll derivatives instead of resetting them for hardware");
 
     // Transported reference crosses the nearest-angle branch after an inversion.
     // A single deliberate release must not acquire an extra full revolution.

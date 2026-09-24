@@ -104,6 +104,31 @@ void assessMotion(Design& d,Cancel cancel){
         if(!std::isfinite(plateauTime)||!std::isfinite(dropTime)||dropTime<plateauTime||dropTime-plateauTime>clifftopLimit)
             d.report.fail("CLIFFTOP_PACING","Front-seat crest-to-cliff commitment exceeds the conservative FF pacing cap (braking/holding included)",0,dropTime-plateauTime,clifftopLimit);
     }
+    // Semantic pacing is reported separately from the unchanged acceptance
+    // gates. Elements may compile into several motion sections.
+    auto frontTime=[&](double distance){return frameAt(d.simulation.frames,distance-seatDistanceOffset(d.request.train,0)).time;};
+    auto landmarkDistance=[&](LandmarkKind kind){
+        double distance=NAN;bool found=false;
+        for(const auto& landmark:d.landmarks)if(landmark.kind==kind){
+            if(found||!std::isfinite(landmark.distance)||landmark.distance<0||landmark.distance>d.track.length)return double(NAN);
+            distance=landmark.distance;found=true;
+        }
+        return distance;
+    };
+    double lipStart=INFINITY,signatureEnd=-INFINITY;
+    for(const auto& section:d.sections){
+        if(section.role==RideRole::CliffLip)lipStart=std::min(lipStart,section.start);
+        if(section.role==RideRole::Signature)signatureEnd=std::max(signatureEnd,section.end);
+    }
+    const double plateau=landmarkDistance(LandmarkKind::PlateauArrival),departure=landmarkDistance(LandmarkKind::CliffDeparture);
+    if(std::isfinite(plateau)&&std::isfinite(departure)&&std::isfinite(lipStart)&&plateau<=lipStart&&lipStart<=departure){
+        audit.clifftopActiveSeconds=frontTime(lipStart)-frontTime(plateau);
+        audit.clifftopBrakingSeconds=frontTime(departure)-frontTime(lipStart);
+    }
+    if(std::isfinite(signatureEnd)&&std::isfinite(d.simulation.metrics.duration)){
+        const double duration=d.simulation.metrics.duration-frontTime(signatureEnd);
+        if(duration>=0)audit.returnSeconds=duration;
+    }
     for(size_t i=0;i<d.track.spans.size();++i){
         const auto a=sampleSpanKinematics(d.track,i,1),b=sampleSpanKinematics(d.track,(i+1)%d.track.spans.size(),0);
         const std::array<double,4> position{norm(a.sample.position-b.sample.position),norm(a.sample.tangent-b.sample.tangent),norm(a.sample.curvature-b.sample.curvature),norm(a.curvatureS-b.curvatureS)};
@@ -130,6 +155,7 @@ void assessMotion(Design& d,Cancel cancel){
         audit.crossings.push_back({first,second,std::abs(p.z-q.z),std::asin(std::min(1.,std::abs(denominator)/horizontalProduct)),(p+q)*.5});
     }
     const double half=(d.request.train.cars-1)*d.request.train.spacing*.5;double run=0;
+    double levelRun=0,levelBegin=0,returnRun=0;size_t coastSection=0;
     size_t coastHint=d.track.spans.size();
     for(size_t i=1;i<d.simulation.frames.size();++i){const auto& f=d.simulation.frames[i];
         const double s=f.distance;bool hardware=s<half+30||s>d.track.length;
@@ -137,8 +163,24 @@ void assessMotion(Design& d,Cancel cancel){
         const auto where=d.track.locate(s,coastHint);const auto k=sampleSpanKinematics(d.track,where.span,where.parameter);
         const bool flat=std::abs(k.sample.tangent.z)<std::sin(3*pi/180)&&norm(k.sample.curvature)*f.speed<.015&&norm(k.upS)*f.speed<.015;
         if(flat&&!hardware){const double dt=f.time-d.simulation.frames[i-1].time;run+=dt;audit.flatCoastSeconds+=dt;audit.longestFlatCoastSeconds=std::max(audit.longestFlatCoastSeconds,run);}else run=0;
+        // Turning and banking can hide level backhaul from the frame-hold
+        // rule. This separate diagnostic does not prescribe extra hills.
+        const bool level=std::abs(k.sample.tangent.z)<std::sin(3*pi/180)&&std::abs(k.sample.curvature.z)*f.speed<.015;
+        while(coastSection+1<d.sections.size()&&s>=d.sections[coastSection].end)++coastSection;
+        const bool returning=d.sections[coastSection].role==RideRole::Return&&s>=d.sections[coastSection].start&&s<=d.sections[coastSection].end;
+        if(level&&!hardware){
+            const double dt=f.time-d.simulation.frames[i-1].time;
+            if(levelRun==0)levelBegin=d.simulation.frames[i-1].distance;
+            levelRun+=dt;audit.levelCoastSeconds+=dt;
+            if(levelRun>audit.longestLevelCoastSeconds){
+                audit.longestLevelCoastSeconds=levelRun;audit.longestLevelCoastStartDistance=levelBegin;audit.longestLevelCoastEndDistance=s;
+            }
+            if(returning){returnRun+=dt;audit.returnLevelCoastSeconds+=dt;audit.longestReturnLevelCoastSeconds=std::max(audit.longestReturnLevelCoastSeconds,returnRun);}
+            else returnRun=0;
+        }else{levelRun=0;returnRun=0;}
     }
-    if(audit.longestFlatCoastSeconds>2)d.report.fail("WAITING_TRACK","Unpowered level track holds the physical frame for more than two seconds",0,audit.longestFlatCoastSeconds,2);
+    if(audit.longestFlatCoastSeconds>2*Limits::allowanceFactor)d.report.fail("WAITING_TRACK","Unpowered level track exceeds the two-second pacing target and its five-percent allowance",0,audit.longestFlatCoastSeconds,2*Limits::allowanceFactor);
+    else if(audit.longestFlatCoastSeconds>2)d.report.warnings.push_back("Quiet coast exceeds the nominal two-second pacing target within its five-percent allowance");
     audit.passed=d.report.errors.size()==errors;
 }
 SpatialReplay replaySpatialRefinement(const Design& d,Cancel cancel){
@@ -190,7 +232,12 @@ std::string motionReportJson(const Design& d){
     o<<"{\"performed\":"<<(m.performed?"true":"false")<<",\"passed\":"<<(m.passed?"true":"false")<<",\"positionJoinErrors\":[";
     for(int i=0;i<4;++i){if(i)o<<',';number(o,m.positionJoinError[i]);}o<<"],\"physicalFrameJoinErrors\":[";
     for(int i=0;i<4;++i){if(i)o<<',';number(o,m.orientationJoinError[i]);}
-    o<<"],\"flatCoastSeconds\":"<<m.flatCoastSeconds<<",\"longestFlatCoastSeconds\":"<<m.longestFlatCoastSeconds<<",\"crossings\":[";
+    o<<"],\"flatCoastSeconds\":"<<m.flatCoastSeconds<<",\"longestFlatCoastSeconds\":"<<m.longestFlatCoastSeconds;
+    for(auto [key,value]:std::vector<std::pair<const char*,double>>{{"clifftopActiveSeconds",m.clifftopActiveSeconds},{"clifftopBrakingSeconds",m.clifftopBrakingSeconds},{"returnSeconds",m.returnSeconds},
+        {"levelCoastSeconds",m.levelCoastSeconds},{"longestLevelCoastSeconds",m.longestLevelCoastSeconds},{"longestLevelCoastStartDistance",m.longestLevelCoastStartDistance},
+        {"longestLevelCoastEndDistance",m.longestLevelCoastEndDistance},{"returnLevelCoastSeconds",m.returnLevelCoastSeconds},{"longestReturnLevelCoastSeconds",m.longestReturnLevelCoastSeconds}}){o<<",\""<<key<<"\":";number(o,value);}
+    o<<",\"pacingMethod\":\"Front-seat plateau arrival to first lip section; lip section to cliff departure; final signature exit to complete stop. Semantic intervals, not actuator deployment times.\""
+        <<",\"levelCoastMethod\":\"Diagnostic only: pitch below 3 degrees and vertical curvature times speed below 0.015 per second, including turns/banking. Hardware contact excluded; 60 Hz presentation intervals. Return totals use Return-role sections.\",\"crossings\":[";
     bool comma=false;for(const auto& c:m.crossings){if(comma)o<<',';comma=true;o<<"{\"firstDistance\":"<<c.firstDistance<<",\"secondDistance\":"<<c.secondDistance<<",\"heightSeparation\":"<<c.heightSeparation<<",\"angleRadians\":"<<c.angle<<'}';}
     o<<"],\"sectionSampling\":\"Quarter-metre shape sampling; 60 Hz speed/work event interpolation. Force/rate/jerk acceptance uses native simulation and half-step refinement.\",\"sections\":[";
     for(size_t i=0;i<m.sections.size();++i){if(i)o<<',';const auto& s=m.sections[i];o<<"{\"name\":"<<std::quoted(d.sections[i].name)<<",\"role\":"<<std::quoted(roleName(d.sections[i].role))<<",\"recipeId\":"<<std::quoted(d.sections[i].recipeId)<<",\"start\":"<<d.sections[i].start<<",\"end\":"<<d.sections[i].end;

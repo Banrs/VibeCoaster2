@@ -1,5 +1,6 @@
 #pragma once
 #include "coaster/coaster.hpp"
+#include <optional>
 
 namespace coaster {
 // SI, Z-up; right=cross(forward,up). Centreline specific force is 1g upright
@@ -35,11 +36,19 @@ struct FvdResult {
 // Sampled canonical replay is a diagnostic; ride validation is separate.
 // Cancellation is polled during integration/replay, but not Track::rebuild.
 FvdResult designFvdSection(const FvdRequest&,Cancel cancel={});
+// An inherited physical port is independent of an element's shape knobs.
+// Spatial jets are analytic arc-length derivatives; controls use time derivatives.
+struct FvdDriveJet {double value{},first{},second{};};
+struct FvdEntry {Knot jet;double speed{};FvdControl initial;};
+FvdEntry makeFvdEntry(const Knot&,double speed,double rollingAcceleration,
+    double dragAccelerationCoefficient,FvdDriveJet drive={});
 struct FvdHillRequest {
+    std::optional<FvdEntry> entry;
     double entrySpeed{64},height{105},exitHeight{5},exitPitch{-.1};
     double positiveG{4.0},airtimeG{-.4},rampSeconds{1.15},twistAngle{};
     double exitPositiveG{},exitRampSeconds{},ascentReleaseSeconds{}; // Zero inherits the ascent; otherwise an asymmetric recovery.
     double crestLoadChangeG{}; // Smooth normal-load change across the crest; zero preserves constant airtime.
+    double exitNormalG{},exitReleaseSeconds{.8}; // Optional final force release and upright bank after the recovery.
     double rollingAcceleration{},dragAccelerationCoefficient{};
 };
 struct FvdHillResult { FvdRequest authoring;FvdResult section; };
@@ -67,6 +76,7 @@ struct FvdDiveRequest {
 // The final straight grade is derived from the force solution for graded LSM.
 FvdHillResult designFvdDive(const FvdDiveRequest&,Cancel cancel={});
 struct FvdWaveRequest {
+    std::optional<FvdEntry> entry; // Actual world-space port; absent retains the legacy isolated fixture.
     double entrySpeed{70},entryPitch{-15*pi/180},height{75},exitHeight{-11},turnAngle{pi};
     double bankAngle{70*pi/180},exitNormalG{3.9};
     double rollingAcceleration{},dragAccelerationCoefficient{};
@@ -76,7 +86,10 @@ struct FvdWaveRequest {
 // force timeline. The exit is level and positively curved, ready for a loop.
 FvdHillResult designFvdWave(const FvdWaveRequest&,Cancel cancel={});
 struct FvdLoopRequest {
+    std::optional<FvdEntry> entry; // Actual world-space port; absent retains the legacy isolated fixture.
     double entrySpeed{65},height{145},normalG{3.8},crestG{.9},yawAngle{15*pi/180};
+    double ascentReleaseSeconds{}; // Optional prescribed unload followed by a solved crown hold.
+    double exitPositiveG{}; // Zero inherits normalG; otherwise prescribe the descending recovery load.
     double exitPitch{},exitNormalG{1.5},rollingAcceleration{},dragAccelerationCoefficient{};
 };
 // Upright entry, explicit unloaded inverted crest and real lateral/yaw motion.
@@ -86,17 +99,33 @@ enum class TerrainAct {Clifftop,RavineRoll};
 struct FvdTerrainActRequest {
     TerrainAct kind{TerrainAct::Clifftop};
     double entrySpeed{40},entryPitch{},pitchRateS{},pitchSecondS{},pitchThirdS{};
-    double heightChange{-10},headingChange{65*pi/180},airtimeG{-1.25},outwardBank{30*pi/180},durationScale{1},exitPitch{};
+    double heightChange{-10},headingChange{130*pi/180},airtimeG{-1.25},outwardBank{30*pi/180},durationScale{4./3},exitPitch{};
     double rollingAcceleration{},dragAccelerationCoefficient{};
 };
 // Inherits a planar entry's complete pitch jet, then coordinates rider force
 // and bank through the inbank/outbank act. The exit is upright and level.
 FvdHillResult designFvdTerrainAct(const FvdTerrainActRequest&,Cancel cancel={});
+struct FvdApproachRequest {
+    FvdEntry entry;
+    Vec3 endPosition;
+    double endHeading{},normalG{3.2},bankRampSeconds{1.2};
+    double rollingAcceleration{},dragAccelerationCoefficient{};
+};
+// Level, coordinated banked turn with bounded straight entry/exit durations.
+// The physical port and final position/heading are solved without a spline repair.
+FvdHillResult designFvdApproach(const FvdApproachRequest&,Cancel cancel={});
+
 // Immelmann: half-loop, descending roll and upright valley.
 struct FvdImmelmannRequest {
+    std::optional<FvdEntry> entry; // Actual world-space port; absent retains the legacy isolated fixture.
     double entrySpeed{53},height{95},exitHeight{10};
     double exitPitch{},exitNormalG{1};
     double normalG{4.8},crestG{.6},rollExitG{.3},rampSeconds{1.2},rollOverlapFraction{.35};
+    double yawAngle{}; // Coordinated yaw of the ascending half-loop plane.
+    double rollReleaseFraction{}; // Retain the crown load before releasing through the descending roll.
+    double exitRampSeconds{}; // Zero inherits the ascent ramp; otherwise prescribe the recovery transition.
+    double ascentReleaseSeconds{}; // Zero solves the unload; otherwise solve a crown hold after this release.
+    double exitPositiveG{}; // Zero inherits normalG; descending valley can carry a different peak.
     int hand{1};double step{.0025},rollingAcceleration{},dragAccelerationCoefficient{};
 };
 struct FvdImmelmannResult {

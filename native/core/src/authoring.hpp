@@ -20,6 +20,8 @@ public:
     std::vector<Motor> motors;
 
     explicit MotionBuilder(Design&,Cancel = {});
+    // Uses a source-owned or finalized physical frame, never a spline placeholder.
+    FvdEntry fvdEntry(double speed,FvdDriveJet drive={}) const;
     double coastEnergy(double squaredSpeed,Vec3 from,Vec3 to) const;
     void append(const detail::MotionJet&,Element,Vec3 up={0,0,1},double bank=0);
     Range curve(detail::MotionJet end,double length,Element,const char* name,double releaseBank=0);

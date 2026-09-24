@@ -158,7 +158,8 @@ FieldSpan fieldsForVariant(int variant) {
         field<CliffParameters, &CliffParameters::lipSpeedKmh>("lipSpeedKmh", 0, 500),
         field<CliffParameters, &CliffParameters::dropDegrees>("dropDegrees", 0, 180),
         field<CliffParameters, &CliffParameters::outwardBankDegrees>("outwardBankDegrees", -720, 720),
-        field<CliffParameters, &CliffParameters::approachLengthMeters>("approachLengthMeters", 0, 20000)};
+        field<CliffParameters, &CliffParameters::approachLengthMeters>("approachLengthMeters", 0, 20000),
+        field<CliffParameters, &CliffParameters::approachHeadingDegrees>("approachHeadingDegrees", -200, 200)};
     static const std::array turn{
         field<TurnParameters, &TurnParameters::headingDegrees>("headingDegrees", -3600, 3600),
         field<TurnParameters, &TurnParameters::riseMeters>("riseMeters", -1000, 1000),
@@ -180,8 +181,8 @@ FieldSpan fieldsForVariant(int variant) {
         field<SweepParameters, &SweepParameters::rollDegrees>("rollDegrees", -720, 720)};
     static const std::array camelback{
         field<CamelbackParameters, &CamelbackParameters::profileScale>("profileScale", .8, 1.2),
-        field<CamelbackParameters, &CamelbackParameters::tailCutSeconds>("tailCutSeconds", 0, 2),
-        field<CamelbackParameters, &CamelbackParameters::releaseSeconds>("releaseSeconds", .1, 2),
+        field<CamelbackParameters, &CamelbackParameters::tailCutSeconds>("tailCutSeconds", 0, 1),
+        field<CamelbackParameters, &CamelbackParameters::releaseSeconds>("releaseSeconds", .2, 2),
         field<CamelbackParameters, &CamelbackParameters::exitNormalG>("exitNormalG", 1, 2),
         field<CamelbackParameters, &CamelbackParameters::minimumExitPitchDegrees>("minimumExitPitchDegrees", 0, 15)};
     switch (variant) {
@@ -218,11 +219,12 @@ bool editableField(const RecipeElement& element,std::string_view field) {
         case RideRole::Station:return field=="lengthMeters";
         case RideRole::Brakes:return field=="lengthMeters"||field=="accelerationMps2";
         case RideRole::Departure:case RideRole::CliffLip:return field!="gradeDegrees";
-        case RideRole::CliffApproach:return field=="summitHeightMeters"||field=="outwardBankDegrees"||field=="approachLengthMeters";
+        case RideRole::CliffApproach:return field=="summitHeightMeters"||field=="outwardBankDegrees"||field=="approachLengthMeters"||field=="approachHeadingDegrees";
         case RideRole::CliffDrop:return field=="dropDegrees";
         case RideRole::Wave:return field!="lengthMeters";
-        case RideRole::Immelmann:return field!="yawDegrees";
-        case RideRole::Return:return !std::holds_alternative<SweepParameters>(element.parameters)||field!="negativeG";
+        case RideRole::Return:
+            if(element.anchor==TerrainAnchor::Approach)return false; // Automatic FVD connection to the fixed station port.
+            return !std::holds_alternative<SweepParameters>(element.parameters)||field!="negativeG";
         default:return true;
     }
 }
@@ -339,17 +341,16 @@ RideRecipe defaultRideRecipe() {
         element("station", RideRole::Station, TerrainAnchor::Station, OperationParameters{20, 0, 0, 0}),
         element("departure", RideRole::Departure, TerrainAnchor::Approach, OperationParameters{180, 230.4, 0, 0}),
         element("opening", RideRole::Opening, TerrainAnchor::Approach, HillParameters{160, .15, 50, 3.5, 1.2, 1.5, 1}),
-        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 30, 300}),
+        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 30, 400, -148.016577}),
         element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{100, 32, 0, 7}),
         element("cliff-drop", RideRole::CliffDrop, TerrainAnchor::CliffFoot, CliffParameters{285, 32, 88, 30, 220}),
         element("downhill-lsm", RideRole::DownhillLaunch, TerrainAnchor::CliffFoot, OperationParameters{0, 0, -10, 16}),
         element("camelback", RideRole::Camelback, TerrainAnchor::CliffFoot, CamelbackParameters{}),
         element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 90, 73, 3.5, 500}),
-        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{145, 15, .9, 55, 0}),
-        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{100, 0, .6, 55, -5}),
-        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{260, -70, -90, 0, -1.25, 45}),
+        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{145, 33, 2, 55, 0}),
+        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{85, 45, 3.8, 55, -5}),
+        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{205, -70, -86.720313, 0, -1.2, 45}),
         element("return-crest", RideRole::Return, TerrainAnchor::Ravine, HillParameters{35, -1.25, 0, 3.2, 1.0, 1.5, 1}),
-        element("return-valley", RideRole::Return, TerrainAnchor::Ravine, TurnParameters{-40, -2, 35, 1, 300}),
         element("return-sweep", RideRole::Return, TerrainAnchor::Approach, SweepParameters{300, 0, 0, 0, 0, 0}),
         element("brakes", RideRole::Brakes, TerrainAnchor::Station, OperationParameters{250, 0, 0, -7})
     };
@@ -435,7 +436,7 @@ std::string recipePayload(const RideRecipe& recipe) {
 bool parseRecipe(const std::string& text, RideRecipe& destination, std::string& error) {
     if (text.size() > maxRecipeBytes) { error = "recipe exceeds 1 MiB"; return false; }
     std::istringstream input(text); input.imbue(std::locale::classic());
-    std::string line, header, name;
+    std::string line, name;
     std::size_t count = 0;
     if (!std::getline(input, line)) { error = "invalid recipe header"; return false; }
     if (!line.empty() && line.back() == '\r') line.pop_back();

@@ -14,8 +14,10 @@ inline void planTrimBrakes(Design& d,const std::vector<Frame>& frames) {
         // Segmented fins can follow a stable banked descent; keeping only
         // uphill upright sites left the wave-to-loop run unprotected. Longer
         // banks provide capacity without increasing the rated brake force.
-        const bool inversionApproach=d.track.sample((section.start+section.end)*.5).element==Element::Turn&&d.track.sample(std::min(d.track.length,section.end+1)).element==Element::Inversion;
-        const double centre=section.start+(section.end-section.start)*(inversionApproach?.48:.62);
+        const auto middle=d.track.sample((section.start+section.end)*.5);
+        const bool loopExit=section.role==RideRole::Loop&&middle.tangent.z<0;
+        const bool inversionApproach=(middle.element==Element::Turn||loopExit)&&d.track.sample(std::min(d.track.length,section.end+1)).element==Element::Inversion;
+        const double centre=section.start+(section.end-section.start)*(loopExit?.70:inversionApproach?.48:.62);
         const double speed=replayValueAt(frames,centre),length=std::clamp(speed*(inversionApproach?1.2:.8),18.,inversionApproach?80.:55.);
         const double begin=centre-length*.5,end=centre+length*.5;
         bool fits=speed>20;
@@ -29,7 +31,7 @@ inline void planTrimBrakes(Design& d,const std::vector<Frame>& frames) {
         if(begin-lead-half<frames.front().distance)continue;
         Operation op{begin,end,DriveKind::Trim};
         op.targetSpeed=replayValueAt(frames,begin-lead-half)+1./3.6;
-        op.maxForce=d.request.train.carMass*gravity*.30;op.trimPeakSpeed=25;
+        op.maxForce=d.request.train.carMass*gravity*.45;op.trimPeakSpeed=25;
         op.maxPower=2*op.maxForce*op.trimPeakSpeed;op.rampSeconds=ramp;
         op.exitFadeMeters=std::min(length*.25,speed*.16);op.trimSensorLead=lead;
         d.operations.push_back(op);last=section.start;

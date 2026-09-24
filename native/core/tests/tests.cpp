@@ -116,6 +116,73 @@ static void writeBadProfile(const std::filesystem::path& out,const std::string& 
     std::ofstream f(out,std::ios::binary);f<<"COASTER 6 "<<payload.size()<<' '<<fixtureChecksum(payload)<<'\n'<<payload;
     check(bool(f),"Write correctly checksummed malformed profile");
 }
+// Exercise the actual save envelope/parser and fresh validation. A zero-height
+// highland surface keeps the existing accepted flat fixture's ride and supports
+// unchanged; terrain_profile_tests independently checks nonzero cut geometry.
+static void terrainSlopePersistence(const Design& current){
+    using Block=std::pair<std::string,std::string>;
+    const auto folder=std::filesystem::temp_directory_path()/"coaster-rear-slope-persistence-tests";
+    std::filesystem::create_directories(folder);
+    const auto sourcePath=folder/"source.coaster",fixturePath=folder/"slope.coaster",resavedPath=folder/"resaved.coaster";
+    std::string error;check(current.request.terrain.kind==TerrainKind::Flat,"Rear-slope persistence starts from an accepted flat fixture");
+    check(saveDesign(current,sourcePath.string(),error),"Save rear-slope source fixture: "+error);
+    const auto raw=readBytes(sourcePath),payload=raw.substr(raw.find('\n')+1);
+    const auto split=payload.find("\nEXTENSIONS ");check(split!=std::string::npos,"Terrain fixture contains an extension directory");
+    const auto firstEnd=payload.find('\n');auto metadata=tokens(payload.substr(0,firstEnd));
+    check(metadata.size()==5,"Fixture identity has five canonical fields");metadata[2]="1";
+    std::string prefix;for(size_t i=0;i<metadata.size();++i)prefix+=(i?" ":"")+metadata[i];
+    prefix+=payload.substr(firstEnd,split+1-firstEnd);
+    std::istringstream extensions(payload.substr(split+1));std::string tag;size_t count=0;extensions>>tag>>count;
+    check(tag=="EXTENSIONS"&&bool(extensions),"Fixture directory is readable");
+    std::vector<Block> original;
+    for(size_t i=0;i<count;++i){std::string name;int version=0;size_t size=0;extensions>>name>>version>>size;
+        check(bool(extensions)&&version==1&&extensions.get()=='\n',"Fixture extension header is canonical");
+        std::string body(size,'\0');extensions.read(body.data(),std::streamsize(size));check(bool(extensions),"Fixture extension body is complete");
+        original.push_back({std::move(name),std::move(body)});
+    }
+    auto fixture=[&](const std::vector<Block>& slopes){
+        std::vector<Block> blocks;
+        for(const auto& block:original){
+            if(block.first=="TERRAIN_PROFILE"){
+                blocks.push_back({"TERRAIN_PROFILE","0 0 0 500 500 0\n"});
+                blocks.push_back({"ESCARPMENT","0.5 400 0 0 24\n"});
+                blocks.insert(blocks.end(),slopes.begin(),slopes.end());
+            }else blocks.push_back(block);
+        }
+        std::string updated=prefix+"EXTENSIONS "+std::to_string(blocks.size())+"\n";
+        for(const auto& [name,body]:blocks)updated+=name+" 1 "+std::to_string(body.size())+"\n"+body;
+        std::ofstream file(fixturePath,std::ios::binary|std::ios::trunc);
+        file<<"COASTER 6 "<<updated.size()<<' '<<fixtureChecksum(updated)<<'\n'<<updated;
+        check(bool(file),"Write a freshly checksummed terrain-extension fixture");
+    };
+    const Block legacy{"TERRAIN_BACK_SLOPE","0 0 80 1 0\n"};
+    const Block bounded{"TERRAIN_BACK_SLOPE_BOUNDED","0 0 80 1 0 160\n"};
+    for(const auto& block:{legacy,bounded}){
+        fixture({block});const auto originalBytes=readBytes(fixturePath);Design loaded;
+        const bool loadedOk=loadDesign(fixturePath.string(),loaded,error);
+        check(loadedOk,"Historical/bounded slope receives fresh complete ride validation: "+error);
+        check(loaded.accepted()&&loaded.request.terrain.backSlope.has_value(),"Validated slope is retained in the accepted request");
+        const double width=block.first==legacy.first?0:160;
+        check(*loaded.request.terrain.backSlope==TerrainSlope{0,0,80,1,0,width},"Slope parameters survive the actual persistence parser exactly");
+        near(loaded.track.length,current.track.length,1e-10,"Slope metadata does not regenerate accepted track geometry");
+        check(saveDesign(loaded,resavedPath.string(),error),"Resave a freshly accepted terrain slope: "+error);
+        check(readBytes(resavedPath)==originalBytes,"Historical and bounded canonical slope encodings round trip byte-for-byte");
+    }
+    auto rejected=[&](const std::vector<Block>& blocks,const std::string& expected){
+        fixture(blocks);auto unchanged=current;const auto previous=stableReport(unchanged);
+        const bool loaded=loadDesign(fixturePath.string(),unchanged,error);
+        check(!loaded&&error.find(expected)!=std::string::npos,"Malformed/duplicate terrain extension explicitly rejects: "+error);
+        check(unchanged.accepted()&&stableReport(unchanged)==previous,"Rejected terrain input retains the prior accepted ride");
+    };
+    rejected({legacy,bounded},"Duplicate terrain rear slope");
+    rejected({bounded,legacy},"Duplicate terrain rear slope");
+    rejected({bounded,bounded},"duplicate");
+    for(const std::string body:{"0 0 80 0 0 160\n","0 0 80 1e-13 0 160\n","0 0 80 1 0 0\n","0 0 80 1 0 49\n","0 0 80 1 0 1001\n","0 0 80 1 0 nan\n","0 0 80 1 0\n"})
+        rejected({{"TERRAIN_BACK_SLOPE_BOUNDED",body}},"Invalid terrain rear slope");
+    rejected({{"TERRAIN_BACK_SLOPE_BOUNDED","0 0 80 1 0 160 extra\n"}},"Trailing terrain rear-slope data");
+    rejected({{"TERRAIN_BACK_SLOPE","0 0 80 1 0 160\n"}},"Trailing terrain rear-slope data");
+    for(const auto& path:{sourcePath,fixturePath,resavedPath})std::filesystem::remove(path);
+}
 static void migration(const Design& current){
     const auto folder=std::filesystem::temp_directory_path()/"coaster-geometry-schema6-tests";std::filesystem::create_directories(folder);
     const auto newPath=folder/"current.coaster",badPath=folder/"bad-profile.coaster";
@@ -179,7 +246,7 @@ int main(int argc,char** argv){try{
     if(argc==2&&std::string(argv[1])=="--persistence"){
         GenerationRequest request;request.targets.requireIntensity=false;
         auto d=generate(request);check(d.accepted(),"Persistence fixture accepted");
-        persistence(d);provenance(d);migration(d);
+        persistence(d);provenance(d);migration(d);terrainSlopePersistence(d);
         std::cout<<"PASS "<<checks<<" canonical persistence and invalid-input checks\n";
         return 0;
     }

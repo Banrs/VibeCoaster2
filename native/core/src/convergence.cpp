@@ -24,17 +24,17 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
             report.fail("REFERENCE_UNAVAILABLE","The requested ten-second exposure comparison has no calibrated reference");
         else minimum("INTENSITY_TARGET",m.exposure10Seconds,targets.referenceExposure);
     }
-    auto forcePeak=[&](const char* code,const char* axis,double magnitude,double nominal){
+    auto envelopePeak=[&](const char* code,const char* axis,double magnitude,double nominal,double distance=0){
         if(magnitude<=nominal)return;
-        if(magnitude<nominal*1.01)
-            report.warnings.push_back(std::string(axis)+" peak exceeds nominal by "+std::to_string(100*(magnitude/nominal-1))+"%; within the strictly-below-1% project allowance. ASTM limits are assessed separately.");
-        else report.fail(code,std::string(axis)+" peak reaches or exceeds the one-percent project allowance",0,magnitude,nominal);
+        if(magnitude<=nominal*Limits::allowanceFactor)
+            report.warnings.push_back(std::string(axis)+" peak exceeds nominal by "+std::to_string(100*(magnitude/nominal-1))+"%; within the 5% project allowance. F2291 limits are assessed separately.");
+        else report.fail(code,std::string(axis)+" peak exceeds the five-percent project allowance",distance,magnitude,nominal);
     };
-    forcePeak("VERTICAL_FORCE","Positive Gz",m.maxVerticalG,limits.maxVerticalG);
-    forcePeak("VERTICAL_FORCE","Negative Gz",-m.minVerticalG,-limits.minVerticalG);
-    forcePeak("LATERAL_FORCE","Absolute Gy",m.maxLateralG,limits.maxLateralG);
-    forcePeak("LONGITUDINAL_FORCE","Absolute Gx",m.maxLongitudinalG,limits.maxLongitudinalG);
-    if(m.maxJerkGps>limits.maxJerkGps)report.fail("FORCE_TRANSITION","Vertical force transition exceeds provisional envelope",m.maxJerkDistance,m.maxJerkGps,limits.maxJerkGps);
+    envelopePeak("VERTICAL_FORCE","Positive Gz",m.maxVerticalG,limits.maxVerticalG);
+    envelopePeak("VERTICAL_FORCE","Negative Gz",-m.minVerticalG,-limits.minVerticalG);
+    envelopePeak("LATERAL_FORCE","Absolute Gy",m.maxLateralG,limits.maxLateralG);
+    envelopePeak("LONGITUDINAL_FORCE","Absolute Gx",m.maxLongitudinalG,limits.maxLongitudinalG);
+    envelopePeak("FORCE_TRANSITION","Vertical force rate",m.maxJerkGps,limits.maxJerkGps,m.maxJerkDistance);
     if(!std::isfinite(m.maxEnergyResidual)||m.maxEnergyResidual>.5)report.fail("ENERGY_RESIDUAL","Finite-train energy balance exceeds 0.5 J/kg numerical allowance",0,m.maxEnergyResidual,.5);
     for(int axis=1;axis<=2;++axis){
         double limit=axis==1?limits.maxLateralRateGps:limits.maxLongitudinalRateGps;
@@ -45,7 +45,7 @@ ValidationReport validateSimulationTargets(const SimulationResult& simulation,co
             if(!std::isfinite(value)){report.fail("NONFINITE_METRIC","An assessed component force rate is nonfinite");return report;}
             peak=std::max(peak,value);
         }
-        if(peak>limit)report.fail(axis==1?"LATERAL_FORCE_RATE":"LONGITUDINAL_FORCE_RATE","Rider-axis rate exceeds configured provisional gate",0,peak,limit);
+        envelopePeak(axis==1?"LATERAL_FORCE_RATE":"LONGITUDINAL_FORCE_RATE",axis==1?"Lateral force rate":"Longitudinal force rate",peak,limit);
     }
     for(const auto& assessment:simulation.acceleration){
         if(!assessment.performed)continue; // Synthetic metric fixtures are not complete Design acceptance.

@@ -12,7 +12,6 @@ bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
     ON_SCOPE_EXIT { World->DestroyWorld(false); };
     auto* Controller = World->SpawnActor<AVibeCoasterController>();
     if (!TestNotNull(TEXT("Controller without a ride or generation worker"), Controller)) return false;
-    Controller->Settings.targets.requireIntensity = false;
     TestFalse(TEXT("Default user flow leaves optional reference comparison disabled"), Controller->Settings.targets.requireIntensity);
 
     struct FValidSeed { const TCHAR* Text; uint64 Value; };

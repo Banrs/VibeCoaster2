@@ -57,7 +57,12 @@ std::string extensionTail(const Design& d,Cancel cancel){
         blocks.push_back({"TERRAIN_PROFILE",b.str()});}
     if(r.terrain.plateau>0){const auto& t=r.terrain;std::ostringstream b;b.imbue(std::locale::classic());b<<std::setprecision(17)<<t.plateau<<' '<<t.cliffX<<' '<<t.cliffY<<' '<<t.cliffHeading<<' '<<t.cliffWidth<<'\n';blocks.push_back({"ESCARPMENT",b.str()});}
     if(r.terrain.cliffCurvature!=0){std::ostringstream b;b.imbue(std::locale::classic());b<<std::setprecision(17)<<r.terrain.cliffCurvature<<'\n';blocks.push_back({"CLIFF_FRONT",b.str()});}
-    if(r.terrain.backSlope){const auto& q=*r.terrain.backSlope;std::ostringstream b;b.imbue(std::locale::classic());b<<std::setprecision(17)<<q.x<<' '<<q.y<<' '<<q.height<<' '<<q.gradeX<<' '<<q.gradeY<<'\n';blocks.push_back({"TERRAIN_BACK_SLOPE",b.str()});}
+    if(r.terrain.backSlope){
+        const auto& q=*r.terrain.backSlope;std::ostringstream b;b.imbue(std::locale::classic());
+        b<<std::setprecision(17)<<q.x<<' '<<q.y<<' '<<q.height<<' '<<q.gradeX<<' '<<q.gradeY;
+        if(q.width>0)b<<' '<<q.width;
+        b<<'\n';blocks.push_back({q.width>0?"TERRAIN_BACK_SLOPE_BOUNDED":"TERRAIN_BACK_SLOPE",b.str()});
+    }
     if(!r.terrain.ravines.empty()){std::ostringstream b;b.imbue(std::locale::classic());b<<std::setprecision(17)<<r.terrain.ravines.size()<<'\n';
         for(const auto& q:r.terrain.ravines)b<<q.x0<<' '<<q.y0<<' '<<q.x1<<' '<<q.y1<<' '<<q.depth0<<' '<<q.depth1<<' '<<q.width0<<' '<<q.width1<<'\n';blocks.push_back({"TERRAIN_RAVINES",b.str()});}
     if(!r.terrain.ramps.empty()){std::ostringstream b;b.imbue(std::locale::classic());b<<std::setprecision(17)<<r.terrain.ramps.size()<<'\n';for(const auto& q:r.terrain.ramps)b<<q.x0<<' '<<q.y0<<' '<<q.x1<<' '<<q.y1<<' '<<q.h0<<' '<<q.h1<<' '<<q.grade0<<' '<<q.grade1<<' '<<q.width<<'\n';blocks.push_back({"TERRAIN_RAMPS",b.str()});}
@@ -147,9 +152,12 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
             std::istringstream b(bytes);b.imbue(std::locale::classic());double curvature=0;b>>curvature;
             if(!b||request.terrain.kind!=TerrainKind::Highlands||!std::isfinite(curvature)||curvature<0||curvature>.01){error="Invalid cliff curvature";return false;}
             b>>std::ws;if(!b.eof()){error="Trailing cliff-front data";return false;}request.terrain.cliffCurvature=curvature;
-        }else if(name=="TERRAIN_BACK_SLOPE"){
+        }else if(name=="TERRAIN_BACK_SLOPE"||name=="TERRAIN_BACK_SLOPE_BOUNDED"){
+            if(request.terrain.backSlope){error="Duplicate terrain rear slope";return false;}
+            const bool bounded=name=="TERRAIN_BACK_SLOPE_BOUNDED";
             std::istringstream b(bytes);b.imbue(std::locale::classic());TerrainSlope q;b>>q.x>>q.y>>q.height>>q.gradeX>>q.gradeY;
-            if(!b||request.terrain.kind!=TerrainKind::Highlands||!q.valid()){error="Invalid terrain rear slope";return false;}
+            if(bounded)b>>q.width;
+            if(!b||request.terrain.kind!=TerrainKind::Highlands||!q.valid()||(bounded&&q.width==0)){error="Invalid terrain rear slope";return false;}
             b>>std::ws;if(!b.eof()){error="Trailing terrain rear-slope data";return false;}request.terrain.backSlope=q;
         }else if(name=="MOTION_LANDMARKS"){
             std::istringstream b(bytes);b.imbue(std::locale::classic());size_t landmarkCount=0;b>>landmarkCount;std::set<int> kinds;
@@ -304,7 +312,7 @@ std::string reportJson(const Design& d){
     o<<",\"intensityComparison\":\"Maximum over physical front/middle/rear seats of the strongest ten-second integral of max(vertical_g,0); configured reference identity is external\"";
     auto object=[&](const char* name,const std::vector<std::pair<const char*,double>>& fields){o<<','<<quote(name)<<":{";bool first=true;for(auto [key,value]:fields){if(!first)o<<',';first=false;o<<quote(key)<<':';number(o,value);}o<<'}';};
     const auto& terrain=d.request.terrain;object("terrainProfile",{{"centerXMeters",terrain.centerX},{"centerYMeters",terrain.centerY},{"ridgeHeightMeters",terrain.kind==TerrainKind::Flat?0:terrain.heightMeters},{"radiusXMeters",terrain.radiusX},{"radiusYMeters",terrain.radiusY},{"bend",terrain.bend},{"plateau",terrain.plateau},{"cliffX",terrain.cliffX},{"cliffY",terrain.cliffY},{"cliffHeading",terrain.cliffHeading},{"cliffWidth",terrain.cliffWidth},{"meshStepMeters",Terrain::gridStep},{"globalSlopeBound",terrain.slopeBound()}});
-    if(terrain.backSlope){const auto& q=*terrain.backSlope;object("terrainBackSlope",{{"x",q.x},{"y",q.y},{"height",q.height},{"gradeX",q.gradeX},{"gradeY",q.gradeY}});}
+    if(terrain.backSlope){const auto& q=*terrain.backSlope;object("terrainBackSlope",{{"x",q.x},{"y",q.y},{"height",q.height},{"gradeX",q.gradeX},{"gradeY",q.gradeY},{"width",q.width}});}
     o<<",\"terrainFoothills\":[";for(size_t i=0;i<terrain.foothills.size();++i){if(i)o<<',';const auto& k=terrain.foothills[i];o<<'['<<k.x<<','<<k.y<<','<<k.height<<','<<k.radius<<']';}o<<']';
     o<<",\"terrainRavines\":[";for(size_t i=0;i<terrain.ravines.size();++i){if(i)o<<',';const auto& q=terrain.ravines[i];o<<'['<<q.x0<<','<<q.y0<<','<<q.x1<<','<<q.y1<<','<<q.depth0<<','<<q.depth1<<','<<q.width0<<','<<q.width1<<']';}o<<']';
     o<<",\"terrainRamps\":[";

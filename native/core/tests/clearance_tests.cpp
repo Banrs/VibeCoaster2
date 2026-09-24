@@ -38,7 +38,29 @@ static void coverage(const Track& t,const ClearanceSweep& sweep,size_t stride=1)
     }
     check(!first&&previousSpan+1==t.spans.size()&&end==1,"Coverage finishes at final canonical endpoint");
 }
-int main(){try{
+static void standaloneBranches(){
+    auto circle=[](bool closed){
+        std::vector<AuthoredPoint> points;
+        for(int i=0;i<=160;++i){const double a=(2*pi-(closed?0:.04))*i/160;
+            points.push_back({{50*std::sin(a),50*(1-std::cos(a)),50},0,Element::Turn,{0,0,1}});}
+        if(closed)points.back()=points.front();
+        return compile(points,closed);
+    };
+    const auto closed=circle(true),open=circle(false);
+    const auto clear=validateSelfClearance(closed,TrainConfig{}),collision=validateSelfClearance(open,TrainConfig{});
+    check(clear.valid(),"A closed circle exempts only its adjacent seam from branch clearance");
+    check(std::any_of(collision.errors.begin(),collision.errors.end(),[](const auto& e){return e.code=="TRACK_CLEARANCE";}),
+        "Nearby ends of an open section are real nonadjacent branches, not a wrapped seam");
+    const auto ride=validateGeometry(open,Terrain{},Limits{},TrainConfig{},{});
+    check(!ride.valid()&&ride.errors.front().code=="OPEN_CIRCUIT","Source clearance cannot confer closed-circuit acceptance");
+    check(!validateSelfClearance(Track{},TrainConfig{}).valid(),"Empty source cannot pass branch clearance");
+    auto stale=closed;stale.spans[0].c[0].z+=1;
+    check(!validateSelfClearance(stale,TrainConfig{}).valid(),"Source branch check retains canonical cache verification");
+    check(!validateSelfClearance(closed,TrainConfig{},NAN).valid(),"Nonfinite clearance is rejected");
+    const auto cancelled=validateSelfClearance(closed,TrainConfig{},0,[]{return true;});
+    check(!cancelled.valid()&&cancelled.errors.front().code=="CANCELLED","Source branch cancellation remains explicit");
+}
+int main(){try{standaloneBranches();
     // A foundation has a flat top, not a spherical cap. A shared point is an
     // independent overlap oracle for the separating-direction optimisation.
     const SupportMember footing{{0,0,-2},{0,0,0},1.3,1.3,SupportMemberKind::Footing,false};

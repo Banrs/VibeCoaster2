@@ -1,3 +1,4 @@
+#include "coaster/angular_phase_intent.hpp"
 #include "coaster/fvd.hpp"
 #include "authoring.hpp"
 #include "motion_program.hpp"
@@ -32,6 +33,12 @@ std::string authorshipPayload(const Design& d) {
     }
     const size_t banks=std::count_if(d.forcePrograms.begin(),d.forcePrograms.end(),[](const auto& f){return f.program.gravityReferencedRoll;});
     if(banks){o<<"BANK_REFERENCE "<<banks;for(size_t i=0;i<d.forcePrograms.size();++i)if(d.forcePrograms[i].program.gravityReferencedRoll)o<<' '<<i;o<<'\n';}
+    // Optional/versioned tail leaves every historical all-false payload exact.
+    if(std::any_of(d.forcePrograms.begin(),d.forcePrograms.end(),[](const auto& f){return f.program.additiveTwists;})){
+        o<<"ADDITIVE_TWISTS 1 "<<d.forcePrograms.size();
+        for(const auto& f:d.forcePrograms)o<<' '<<(f.program.additiveTwists?1:0);
+        o<<'\n';
+    }
     return o.str();
 }
 bool parseAuthorshipPayload(const std::string& bytes,Design& d,std::string& error) {
@@ -60,13 +67,25 @@ bool parseAuthorshipPayload(const std::string& bytes,Design& d,std::string& erro
         if(!validIdentifier(source.name,128)){error="Invalid spline programme name";return false;}
     }
     if(!in){error="Truncated authoring programme";return false;}in>>std::ws;
-    if(!in.eof()){
-        std::string tag;size_t count=0;in>>tag>>count;
-        if(!in||tag!="BANK_REFERENCE"||count==0||count>forces){error="Invalid authoring bank reference";return false;}
-        for(size_t i=0;i<count;++i){size_t index=forces;in>>index;
-            if(!in||index>=forces||f[index].program.gravityReferencedRoll){error="Invalid or duplicate bank reference";return false;}
-            f[index].program.gravityReferencedRoll=true;}
-        in>>std::ws;if(!in.eof()){error="Trailing authoring programme data";return false;}
+    bool seenBanks=false,seenAdditive=false;
+    while(!in.eof()){
+        std::string tag;in>>tag;
+        if(tag=="BANK_REFERENCE"){
+            size_t count=0;in>>count;
+            if(!in||seenBanks||count==0||count>forces){error="Invalid or duplicate authoring bank reference";return false;}
+            seenBanks=true;
+            for(size_t i=0;i<count;++i){size_t index=forces;in>>index;
+                if(!in||index>=forces||f[index].program.gravityReferencedRoll){error="Invalid or duplicate bank reference";return false;}
+                f[index].program.gravityReferencedRoll=true;}
+        }else if(tag=="ADDITIVE_TWISTS"){
+            int version=0;size_t count=0;in>>version>>count;
+            if(!in||seenAdditive||version!=1||count==0||count!=forces){error="Invalid or duplicate additive-twist extension";return false;}
+            seenAdditive=true;
+            for(auto& source:f){int enabled=-1;in>>enabled;
+                if(!in||(enabled!=0&&enabled!=1)){error="Invalid additive-twist flag";return false;}
+                source.program.additiveTwists=enabled==1;}
+        }else{error="Trailing authoring programme data";return false;}
+        in>>std::ws;
     }
     d.forcePrograms=std::move(f);d.splinePrograms=std::move(s);return true;
 }
@@ -80,6 +99,22 @@ void assessAuthorship(Design& d,Cancel cancel) {
         if(source.sourceDistances.size()<2||source.firstKnot>=d.track.knots.size()||source.sourceDistances.size()>d.track.knots.size()-source.firstKnot||!finite(source.origin)||!std::isfinite(source.heading)||std::abs(source.hand)!=1||!std::isfinite(source.laneShift)||!std::isfinite(source.laneLength)||(source.laneShift!=0&&source.laneLength<=0)) {d.report.fail("AUTHORING_RANGE","Invalid force source mapping");continue;}
         const auto rebuilt=designFvdSection(source.program,cancel);
         if(!rebuilt.assessment.passed){d.report.fail("AUTHORING_SOURCE","Retained force programme failed its independent canonical replay");continue;}
+        // Preserve physical angular derivatives from independent authoring,
+        // evaluated at the final train's actual time dynamics. These are
+        // numerical source-agreement tolerances, not comfort limits.
+        const auto angular=assessFvdAngularAgreement(d.track,source,rebuilt,d.simulation.frames,{1e-4,1e-3,1e-2},2,cancel);
+        d.report.errors.insert(d.report.errors.end(),angular.report.errors.begin(),angular.report.errors.end());
+        if(angular.cancelled){d.simulation.cancelled=true;return;}
+        try{
+            const auto authoredPhases=deriveFvdRollVelocityPhases(source.program);
+            const auto phases=resolveFvdAngularPhases(d.track,source,rebuilt,authoredPhases.phases);
+            if(!phases.empty()){
+                const auto checked=assessAngularPhases(d.track,d.simulation.frames,phases,{},cancel);
+                d.report.errors.insert(d.report.errors.end(),checked.report.errors.begin(),checked.report.errors.end());
+                if(checked.cancelled){d.simulation.cancelled=true;return;}
+            }
+            if(!authoredPhases.unresolved.empty())d.report.warnings.push_back(source.name+": "+std::to_string(authoredPhases.unresolved.size())+" source intervals have no proven physical roll-velocity sign; signed derivative source agreement is still assessed");
+        }catch(const std::exception& error){d.report.fail("AUTHORING_ANGULAR_INTENT",source.name+": "+error.what());}
         double previous=-1;
         for(size_t i=0;i<source.sourceDistances.size();++i) {
             const double at=source.sourceDistances[i];

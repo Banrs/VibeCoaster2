@@ -1,4 +1,4 @@
-name: Native Windows checks
+name: Native Windows and macOS checks
 
 on:
   push:
@@ -18,21 +18,44 @@ permissions:
 
 jobs:
   native:
-    runs-on: windows-2022
+    name: Native ${{ matrix.platform }} checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            os: windows-2022
+            cli: native/build-ci/Release/coaster_cli.exe
+          - platform: macOS
+            os: macos-15
+            cli: native/build-ci/coaster_cli
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: pwsh
     timeout-minutes: 45
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 1
+      COASTER_CLI: ${{ matrix.cli }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Configure C++20 native core
+      - name: Configure C++20 native core on Windows
+        if: runner.os == 'Windows'
         run: >-
           cmake -S native -B native/build-ci
           -G "Visual Studio 17 2022" -A x64
           -DCMAKE_CXX_STANDARD=20
           -DCMAKE_CXX_FLAGS="/std:c++20 /fp:strict"
+      - name: Configure C++20 native core on macOS
+        if: runner.os == 'macOS'
+        run: >-
+          cmake -S native -B native/build-ci
+          -G "Unix Makefiles"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_STANDARD=20
       - name: Build one compiler worker
         run: cmake --build native/build-ci --config Release --parallel 1
       - name: Run component boundary tests
@@ -45,7 +68,7 @@ jobs:
         run: |
           $out = Join-Path $PWD 'ride-checks'
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          $cli = Join-Path $PWD 'native/build-ci/Release/coaster_cli.exe'
+          $cli = Join-Path $PWD $env:COASTER_CLI
           $json = Join-Path $out 'baseline-42.json'
           $plan = Join-Path $out 'baseline-42-plan.json'
           $trace = Join-Path $out 'baseline-42-trace.json'
@@ -72,13 +95,14 @@ jobs:
         run: |
           $output = Join-Path $PWD 'corpus-checks'
           if (Test-Path -LiteralPath $output) { throw 'Corpus evidence directory must be fresh' }
-          $cli = Join-Path $PWD 'native/build-ci/Release/coaster_cli.exe'
+          $cli = Join-Path $PWD $env:COASTER_CLI
           python native/core/tests/redesign_corpus.py $cli $output
+          if ($LASTEXITCODE -ne 0) { throw "Representative corpus failed with exit code $LASTEXITCODE" }
       - name: Upload native evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-windows-checks
+          name: native-${{ matrix.os }}-checks
           path: |
             ride-checks
             corpus-checks

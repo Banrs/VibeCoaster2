@@ -1,0 +1,90 @@
+{
+  "source": {
+    "url": "https://www.youtube.com/watch?v=0UaOSBGSx20",
+    "localVideo": "out/reference-videos/0UaOSBGSx20.mp4",
+    "publisher": "CoasterTalk Source / CoasterTalk",
+    "ride": "Falcons Flight",
+    "kind": "consumer accelerometer overlay in edited on-ride video",
+    "timebase": "decoded presentation-video seconds, not raw sensor timestamps",
+    "units": "g",
+    "axisOrder": ["vertical", "lateral", "longitudinal"],
+    "precisionCaveat": "Displayed hundredths are video resolution, not measured accuracy. The exact device, seat, sensor rate, synchronization and uncertainty are not documented in the inspected source.",
+    "positionCaveat": "Visual phase identification only; no measured track distance or exact element ports. This is not the same recording as the RFDB export."
+  },
+  "camelbackVisualPhases": [
+    {"phase": "launch exit and low approach", "videoSeconds": [131, 132.5]},
+    {"phase": "ascending shoulder", "videoSeconds": [133, 136]},
+    {"phase": "crown entry and negative-airtime interval", "videoSeconds": [136.5, 139]},
+    {"phase": "broad crown and initial descent", "videoSeconds": [139, 144.5]},
+    {"phase": "descending shoulder and pullout", "videoSeconds": [145, 148]},
+    {"phase": "following banked track; camelback exit visually uncertain", "videoSeconds": [148, 149]}
+  ],
+  "camelbackInstantaneousFrames": [
+    {"t": 131, "phase": "launch exit approach", "g": [1.01, 0.09, 0.77]},
+    {"t": 132, "phase": "low approach", "g": [1.01, 0.12, 0.63]},
+    {"t": 133, "phase": "ascent starts", "g": [2.86, 0.08, 0.18]},
+    {"t": 133.5, "phase": "ascending shoulder", "g": [3.57, 0.09, -0.53]},
+    {"t": 134, "phase": "ascending shoulder", "g": [3.48, 0.05, -0.99]},
+    {"t": 134.5, "phase": "ascending shoulder", "g": [3.53, 0.09, -0.94]},
+    {"t": 135, "phase": "ascending shoulder", "g": [3.43, 0.07, -1.17]},
+    {"t": 135.5, "phase": "ascending shoulder", "g": [3.44, 0.02, -1.21]},
+    {"t": 136, "phase": "upper ascent", "g": [2.91, 0.11, -1.27]},
+    {"t": 136.5, "phase": "crown entry", "g": [0.44, -0.05, -0.96]},
+    {"t": 137, "phase": "negative-airtime crown", "g": [-1.12, -0.07, -0.57]},
+    {"t": 137.5, "phase": "negative-airtime crown", "g": [-0.90, -0.04, -0.51]},
+    {"t": 138, "phase": "crown", "g": [-0.63, -0.08, -0.68]},
+    {"t": 138.5, "phase": "crown", "g": [0.12, 0.02, -0.32]},
+    {"t": 139, "phase": "broad crown", "g": [0.33, 0.00, -0.17]},
+    {"t": 140, "phase": "broad crown", "g": [0.46, -0.02, -0.17]},
+    {"t": 142, "phase": "upper descent", "g": [0.15, -0.07, -0.05]},
+    {"t": 143, "phase": "upper descent", "g": [-0.16, 0.08, -0.12]},
+    {"t": 144, "phase": "descent", "g": [-0.29, -0.09, -0.06]},
+    {"t": 145, "phase": "descending shoulder/pullout", "g": [2.35, 0.08, -0.27]},
+    {"t": 146, "phase": "descending pullout", "g": [2.90, 0.14, -0.52]},
+    {"t": 147, "phase": "descending pullout", "g": [2.67, 0.01, -0.48]},
+    {"t": 148, "phase": "pullout/banked connector", "g": [1.55, 0.14, -0.25]}
+  ],
+  "observedRunningMarkerChanges": [
+    {"axis": "vertical", "side": "positive", "previousAt": 133, "previousG": 3.09, "newBy": 133.5, "newG": 3.65, "attributedVisualPhase": "ascending shoulder", "kind": "running marker changed within bracket, not instantaneous sample"},
+    {"axis": "vertical", "side": "negative", "previousAt": 137, "previousG": -1.14, "newBy": 137.5, "newG": -1.15, "attributedVisualPhase": "negative-airtime crown", "kind": "running marker changed within bracket, not instantaneous sample"},
+    {"axis": "longitudinal", "side": "negative", "previousAt": 135.5, "previousG": -1.33, "newBy": 136, "newG": -1.34, "attributedVisualPhase": "upper ascent", "kind": "running marker changed within bracket, not instantaneous sample"},
+    {"axis": "lateral", "side": "positive", "previousAt": 134, "previousG": 0.31, "newBy": 134.5, "newG": 0.32, "attributedVisualPhase": "ascending shoulder", "kind": "running marker changed within bracket, not instantaneous sample"}
+  ],
+  "unattributablePreexistingMarkers": [
+    {"axis": "lateral", "side": "negative", "g": -0.75, "reason": "already present before camelback"},
+    {"axis": "longitudinal", "side": "positive", "g": 0.91, "reason": "reached during preceding final launch, before camelback body"}
+  ],
+  "clifftopInstantaneousFrames": [
+    {"t": 84, "phase": "cliff launch crest/upper turn", "g": [1.96, 0.16, -0.24]},
+    {"t": 86, "phase": "cliff-edge banked turn", "g": [1.44, 0.16, -0.16]},
+    {"t": 88, "phase": "cliff-edge turn/crest", "g": [0.55, 0.09, -0.12]},
+    {"t": 90, "phase": "banked upper turn", "g": [0.81, -0.17, -0.24]},
+    {"t": 92, "phase": "upper hill transition", "g": [1.82, 0.03, -0.04]},
+    {"t": 94, "phase": "banked upper hill", "g": [0.86, -0.28, -0.05]},
+    {"t": 96, "phase": "banked crest", "g": [0.66, -0.47, -0.16]},
+    {"t": 98, "phase": "banked descent/valley", "g": [1.91, 0.13, -0.11]},
+    {"t": 100, "phase": "upper crest", "g": [0.60, 0.04, -0.26]},
+    {"t": 102, "phase": "light-load banked crest", "g": [0.24, 0.05, -0.12]},
+    {"t": 104, "phase": "banked transition", "g": [1.63, -0.16, -0.08]},
+    {"t": 106, "phase": "clifftop turn/straightening", "g": [1.20, -0.11, -0.10]},
+    {"t": 108, "phase": "cliff-drop brake approach", "g": [1.00, 0.02, -0.14]},
+    {"t": 110, "phase": "cliff-drop brake approach", "g": [1.01, 0.01, -0.09]},
+    {"t": 112, "phase": "braking/hold approach", "g": [0.79, 0.00, -0.93]}
+  ],
+  "otherRepresentativeInstantaneousFrames": [
+    {"t": 48, "phase": "first twisted drop/early hill", "g": [-0.25, 0.01, -0.08]},
+    {"t": 52, "phase": "early banked hill", "g": [-0.10, -0.02, -0.06]},
+    {"t": 56, "phase": "early hill/valley", "g": [2.29, -0.26, -0.25]},
+    {"t": 60, "phase": "early hill pullout", "g": [2.32, 0.02, -0.37]},
+    {"t": 64, "phase": "early hill crown", "g": [0.48, -0.00, -0.25]},
+    {"t": 68, "phase": "early banked crest", "g": [0.36, -0.14, -0.20]},
+    {"t": 72, "phase": "cliff-launch approach hills", "g": [0.97, 0.02, -0.31]},
+    {"t": 150, "phase": "post-camelback banked transition", "g": [-0.10, -0.16, -0.27]},
+    {"t": 155, "phase": "high-speed return hills", "g": [0.47, 0.04, -0.19]},
+    {"t": 160, "phase": "high-speed return bank", "g": [2.44, 0.16, -0.45]},
+    {"t": 165, "phase": "high-speed return bank", "g": [2.11, -0.33, -0.43]},
+    {"t": 170, "phase": "return transition", "g": [1.56, 0.29, -0.38]},
+    {"t": 175, "phase": "late return hill", "g": [2.27, -0.19, -0.56]},
+    {"t": 180, "phase": "late return bank", "g": [2.11, -0.07, -0.46]}
+  ]
+}

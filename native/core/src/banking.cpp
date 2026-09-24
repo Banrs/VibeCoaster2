@@ -89,7 +89,7 @@ void rotateFrame(Knot& knot,detail::AngleJet angle){
     for(int n=0;n<4;++n)for(int i=0;i<=n;++i)result[n]=result[n]+(up[i]*c[n-i]+right[i]*s[n-i])*choose[n][i];
     knot.up=result[0];knot.upFirst=result[1];knot.upSecond=result[2];knot.upThird=result[3];
 }
-void retainForceFrames(Design& d,const std::vector<Knot>& authored,const std::vector<bool>& owned,const std::vector<double>& distance,const std::vector<Frame>& frames){
+void retainAuthoredFrames(Design& d,const std::vector<Knot>& authored,const std::vector<bool>& owned,const std::vector<double>& distance,const std::vector<Frame>& frames){
     auto& knots=d.track.knots;
     // The unconstrained spline frame supplies the interior target. Exact FVD
     // boundary jets enter/release through short C3 angular corrections within
@@ -122,7 +122,7 @@ std::vector<double> continuousRollTarget(const std::vector<double>& upright,cons
 
 void authorBanking(Design& d,const std::vector<Frame>& frames) {
     if(frames.empty())return;
-    const auto authoredKnots=d.track.knots;
+    auto authoredKnots=d.track.knots;
     const size_t count=d.track.knots.size();
     std::vector<Vec3> reference(count);
     std::vector<double> distance(count),time(count),target(count),forceAngle(count),load(count),uprightAngle(count);
@@ -145,9 +145,19 @@ void authorBanking(Design& d,const std::vector<Frame>& frames) {
         const Vec3 required=k.curvature*(speed*speed)+Vec3{0,0,gravity};
         const double normal=dot(required,upright),lateral=dot(required,cross(k.tangent,upright));
         load[i]=norm(required-k.tangent*dot(required,k.tangent))/gravity;
-        authoredOrientation[i]=false; // Only a retained force programme owns physical orientation.
+        authoredOrientation[i]=false;
         for(const auto& source:d.forcePrograms)if(i>=source.firstKnot&&i<source.firstKnot+source.sourceDistances.size())authoredOrientation[i]=true;
-        hardware[i]=distance[i]<margin||distance[i]>d.track.length-margin;
+        // Alignment track remains upright throughout the corridor, including
+        // its unpowered lead-in before the first stator or brake fin.
+        hardware[i]=k.element==Element::Station||k.element==Element::Launch||k.element==Element::Brake||
+            distance[i]<margin||distance[i]>d.track.length-margin;
+        if(!authoredOrientation[i]&&hardware[i]&&norm(k.curvature)+norm(k.third)+norm(k.fourth)==0){
+            // A straight corridor has an exact constant upright frame. Keep
+            // all its jets, so a neighbouring bank cannot leak through the
+            // global fit and its subsequent C3 boundary correction.
+            authoredOrientation[i]=true;auto& fixed=authoredKnots[i];
+            fixed.up=upright;fixed.upFirst=fixed.upSecond=fixed.upThird={};
+        }
         for(const auto& op:d.operations) {
             const double end=op.kind==DriveKind::Station?d.track.length:op.end;
             // A quintic control influences three time cells either side.
@@ -161,7 +171,7 @@ void authorBanking(Design& d,const std::vector<Frame>& frames) {
         // regularized target passes smoothly through upright at zero normal
         // load instead of forcing an antipodal roll branch during airtime.
         const double bank=std::atan2(lateral*normal,normal*normal+.09*gravity*gravity);
-        Vec3 desired=authoredOrientation[i]?k.up:rotate(upright,k.tangent,bank);
+        Vec3 desired=authoredOrientation[i]?authoredKnots[i].up:rotate(upright,k.tangent,bank);
         if(hardware[i])desired=upright;
         const double raw=angle(desired);
         target[i]=i?target[i-1]+std::remainder(raw-target[i-1],2*pi):raw;
@@ -256,6 +266,6 @@ void authorBanking(Design& d,const std::vector<Frame>& frames) {
     }
     if(d.track.closed)d.track.knots.back()=d.track.knots.front();
     d.track.authoredFrame=false;d.track.rebuild();captureCanonicalDerivatives(d.track);
-    if(!d.forcePrograms.empty())retainForceFrames(d,authoredKnots,authoredOrientation,distance,frames);
+    if(std::any_of(authoredOrientation.begin(),authoredOrientation.end(),[](bool owned){return owned;}))retainAuthoredFrames(d,authoredKnots,authoredOrientation,distance,frames);
 }
 }

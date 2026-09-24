@@ -15,10 +15,10 @@ inline Member SteelMember(coaster::Vec3 From, coaster::Vec3 To)
     const auto Delta = To - From;
     return {Position((From + To) * .5), Direction(coaster::unit(Delta)), coaster::norm(Delta) * 100};
 }
-struct Box { Triple Centre, Forward, Up, Scale; };
+struct Box { Triple Forward, Up, Scale; };
 inline Box StationBox(const coaster::StationBox& B)
 {
-    return {Position(B.center), Direction(B.forward), Direction(B.up), {2*B.half.x, 2*B.half.y, 2*B.half.z}};
+    return {Direction(B.forward), Direction(B.up), {2*B.half.x, 2*B.half.y, 2*B.half.z}};
 }
 inline constexpr bool ReversesWinding = true;
 }
