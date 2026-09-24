@@ -296,8 +296,8 @@ def main():
             target = profile / "Saved" / "VibeCoaster2" / "Designs" / "Accepted.vcdesign"
             target.parent.mkdir(parents=True)
             shutil.copy2(source_design, target)
-            (profile / "coaster-verification-profile.txt").write_text(
-                "VibeCoaster isolated runtime verification profile v1\n", encoding="utf-8")
+            (profile / "coaster-verification-profile.txt").write_bytes(
+                b"VibeCoaster isolated runtime verification profile v1\n")
             load_profiles[variant] = profile
     metadata = {
         "executables": {name: {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
