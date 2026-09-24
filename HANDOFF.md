@@ -30,7 +30,7 @@ The exact pointwise reference comparison remains uncertain because recordings ha
 
 ## Delivery and shortcut
 
-Root `Play VibeCoaster2.lnk` and Desktop `VibeCoaster2.lnk` currently directly open the restored published Default1 package/profile. `native/unreal/scripts/create_shortcuts.ps1 -Desktop` verifies manifest/executable hashes and refreshes both links after promotion. Keep dist/current.json unchanged until the new versioned package is verified. Original Default1 package/profile and the rejected rewrite archive remain preserved.
+Root `Play VibeCoaster2.lnk` and Desktop `VibeCoaster2.lnk` now open the current local Default2 game through UnrealEditor -game, using UserData-Development and -CoasterLoad to load the corrected ride automatically. The user explicitly complained about the old target; do not repoint these links to Default1. `native/unreal/scripts/create_shortcuts.ps1 -Desktop` verifies manifest/executable hashes and refreshes both links after promotion. Keep dist/current.json unchanged until the new versioned package is verified. Original Default1 package/profile and the rejected rewrite archive remain preserved.
 
 Before packaging, commit reviewed source, pass Windows/macOS CI, and keep the package source tree clean. Version is now2.0.0-default.2 and Default1 remains an explicitly supported saved provenance. Package only the reviewed source; verify the packaged executable before updating current.json and both shortcuts. Update this handoff with actual commit, CI and package paths on completion.
 
@@ -39,3 +39,5 @@ Before packaging, commit reviewed source, pass Windows/macOS CI, and keep the pa
 Branch codex/legacy-authoring, original HEAD a2149dfb0c91a0264ae70bd49ff74bba1073f930. Preserve staged AGENTS.md/NEXT_SESSION.md deletions and the inherited recovery edits. No compiler/runtime commands active at this snapshot; a release-identity native build follows.
 
 Use one compiler worker. Elevated exec is needed because the normal Windows sandbox helper fails. Git needs process-local safe.directory=D:/Coding/Codex/Vibecoaster2. Build scripts: scratch/build-all-checks.cmd and build-angular-probe.cmd. Python: C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe. Unreal: D:/Games/Epic Games/UE_5.8. Package script: native/unreal/scripts/package.ps1. Runtime helper: scratch/run-balanced-runtime.ps1. Full local research history remains under out/reference-audit; original RFDB exports are untouched in the legacy archive.
+
+Reviewed core commit 840644d0c2acf6bfc4af0eda7af1aa50d19843ca was pushed with explicit user approval. Full Windows/macOS CI: https://github.com/Banrs/VibeCoaster2/actions/runs/35995677863. The startup-load shortcut follow-up does not change native generation/physics. Local final integration and CI are still running.

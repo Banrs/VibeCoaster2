@@ -218,6 +218,11 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
     switch (S.Stage)
     {
     case FState::DefaultView:
+        if (S.LoadOnly && FParse::Param(FCommandLine::Get(), TEXT("CoasterLoad")))
+        {
+            S.Event(TEXT("missing-reference-refusal-skipped"), TEXT(",\"reason\":\"shortcut startup load is already active\""));
+            S.Advance(FState::StartRequest); break;
+        }
         PC.SeedText = S.Seed;
         PC.Settings.targets.requireIntensity = true; // Exercise the unavailable-reference gate independently of the startup preset.
         if (PC.Settings.targets.requireIntensity && !std::isfinite(PC.Settings.targets.referenceExposure))
@@ -232,7 +237,13 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         PC.Settings.targets.requireIntensity = false;
         PC.Settings.terrain = coaster::Terrain{};
         PC.Settings.terrain.kind = S.Terrain == TEXT("highlands") ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat;
-        if (S.LoadOnly) { S.SaveHash = HashFile(S.SavePath); PC.Ride->Load(); S.Event(TEXT("cross-process-load-requested")); }
+        if (S.LoadOnly)
+        {
+            S.SaveHash = HashFile(S.SavePath);
+            const bool StartupLoad = FParse::Param(FCommandLine::Get(), TEXT("CoasterLoad"));
+            if (!StartupLoad) PC.Ride->Load();
+            S.Event(StartupLoad ? TEXT("shortcut-startup-load-requested") : TEXT("cross-process-load-requested"));
+        }
         else { PC.RequestGeneration(); S.Event(TEXT("generation-requested"), TEXT(",\"seed\":") + Q(S.Seed) + TEXT(",\"terrain\":") + Q(S.Terrain)); }
         if (!S.LoadOnly && !PC.InputError.IsEmpty()) { S.Fail(PC.InputError); break; }
         S.Advance(FState::AwaitRide); break;

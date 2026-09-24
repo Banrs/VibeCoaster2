@@ -9,6 +9,8 @@
 #include "EngineUtils.h"
 #include "InputCoreTypes.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include <charconv>
 #include <limits>
@@ -96,7 +98,12 @@ void AVibeCoasterController::RequestGeneration()
 void AVibeCoasterController::PlayerTick(float DeltaSeconds)
 {
     Super::PlayerTick(DeltaSeconds);
-    if (!Ride) for (TActorIterator<AVibeCoasterWorld> It(GetWorld()); It; ++It) { Ride = *It; break; }
+    if (!Ride) for (TActorIterator<AVibeCoasterWorld> It(GetWorld()); It; ++It)
+    {
+        Ride = *It;
+        if (FParse::Param(FCommandLine::Get(), TEXT("CoasterLoad"))) { Menu = false; Ride->Load(); }
+        break;
+    }
 #if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
     if (Verification) Verification->Tick(*this, DeltaSeconds);
 #endif
