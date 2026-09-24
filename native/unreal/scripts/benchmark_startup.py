@@ -1,18 +1,18 @@
-"""Compare Development executables from request through accepted moving playback.
+"""Measure packaged game scene readiness and accepted moving playback.
 
-The benchmark records one cold process and a configurable warm sample set. It
-reports medians and maxima for the warm samples; it deliberately does not
-invent a percentile from five observations. Native progress callbacks and
-Unreal mesh/scene timing records are retained separately so generation and
-saved-ride loading can be diagnosed without collapsing them into one number.
+The first process and configurable later processes are reported separately.
+A nearest-rank p99 appears only with at least 100 valid warm samples. Native
+progress and Unreal mesh/scene timings remain available for diagnosis.
 """
 
 import argparse
 import hashlib
+import math
 import json
 from pathlib import Path
 import queue
 import re
+import shutil
 import statistics
 import subprocess
 import threading
@@ -104,7 +104,7 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
             "-CoasterVerifyBenchmark", f"-CoasterVerifySeed={seed}",
             f"-CoasterVerifyTerrain={terrain}", f"-abslog={log_path.resolve()}", "-stdout", "-FullStdOutLogOutput"]
     if mode == "load":
-        args.append("-CoasterVerifyLoad")
+        args.extend(("-CoasterVerifyLoad", "-CoasterLoad"))
     startup = None
     if hasattr(subprocess, "STARTUPINFO"):
         startup = subprocess.STARTUPINFO()
@@ -132,6 +132,7 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
     progress = []
     timings = []
     first_motion_observed = None
+    ready_observed = None
     try:
         while time.perf_counter() - start < timeout:
             try:
@@ -154,6 +155,8 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
                 timing = parse_timing(line)
                 if timing:
                     timings.append(timing)
+                    if timing["stage"] == "ready":
+                        ready_observed = observed
         else:
             raise TimeoutError(f"Launch-to-motion timed out after {timeout:.0f}s: {log_path}")
         try:
@@ -176,10 +179,11 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
             or not isinstance(candidate, int) or candidate < 0
             or not report.get("convergence", {}).get("passed")):
         raise RuntimeError(f"Benchmark did not produce a valid accepted candidate: {output}")
-    requested_event = events.get("generation-requested") or events.get("cross-process-load-requested")
+    requested_event = (events.get("generation-requested") or events.get("cross-process-load-requested")
+                       or events.get("shortcut-startup-load-requested"))
     committed_event = events.get("accepted-commit")
     moving_event = events.get("first-motion")
-    if not (requested_event and committed_event and moving_event):
+    if not (requested_event and committed_event and moving_event and ready_observed):
         raise RuntimeError(f"Benchmark event stream lacks request/commit/motion markers: {output}")
     native_seconds = next((x["elapsed_seconds"] for x in reversed(timings)
                            if x["stage"] == "native-complete"), None)
@@ -190,11 +194,14 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
                       if name == "parsing" or "saved ride" in name.lower() or "revalidat" in name.lower()]
     parsing_seconds = sum(parsing_values) if parsing_values else None
     wall_motion = first_motion_observed - start
+    ready_seconds = stage_seconds.get("ready")
+    if ready_seconds is None or ready_seconds < 0 or ready_observed > first_motion_observed:
+        raise RuntimeError(f"Missing or invalid engine scene-ready timing: {output}")
     return {
-        "launch_to_motion_seconds": wall_motion,
-        "launch_to_request_seconds": requested_event["wall_seconds"],
-        "request_to_scene_seconds": committed_event["wall_seconds"] - requested_event["wall_seconds"],
-        "scene_to_motion_seconds": moving_event["wall_seconds"] - committed_event["wall_seconds"],
+        "process_to_motion_seconds": wall_motion,
+        "process_to_ready_seconds": ready_observed - start,
+        "request_to_ready_seconds": ready_seconds,
+        "ready_to_motion_seconds": first_motion_observed - ready_observed,
         "geometry_sha1": committed_event["geometry_sha1"],
         "version": events.get("begin", {}).get("geometry_version"),
         "build_commit":events.get("begin",{}).get("build_commit"),
@@ -206,53 +213,50 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
         "parsing_revalidation_seconds": parsing_seconds,
         "mesh_preparation_seconds": stage_seconds.get("mesh-preparation"),
         "scene_commit_seconds": stage_seconds.get("scene-commit"),
-        "ready_seconds": stage_seconds.get("ready"),
     }
 
 
-def samples(rows, variant, sample_kind):
-    return [row for row in rows if row["variant"] == variant and row["sample"] == sample_kind]
+def nearest_rank_p99(values):
+    """Only report a p99 order statistic when the experiment has 100+ samples."""
+    if len(values) < 100:
+        return None
+    return sorted(values)[math.ceil(.99 * len(values)) - 1]
 
 
 def summarize(rows, variants):
     summary = {}
     for variant in variants:
-        cold = samples(rows, variant, "cold")
-        warm = samples(rows, variant, "warm")
-        warm_values = [row["launch_to_motion_seconds"] for row in warm]
-        cold_values = [row["launch_to_motion_seconds"] for row in cold]
-        native_values = [r["native_seconds"] for r in warm if r["native_seconds"] is not None]
-        parsing_values = [r["parsing_revalidation_seconds"] for r in warm if r["parsing_revalidation_seconds"] is not None]
-        mesh_values = [r["mesh_preparation_seconds"] for r in warm if r["mesh_preparation_seconds"] is not None]
-        commit_values = [r["scene_commit_seconds"] for r in warm if r["scene_commit_seconds"] is not None]
-        ready_values = [r["ready_seconds"] for r in warm if r["ready_seconds"] is not None]
-        request_values=[r["request_to_scene_seconds"] for r in warm]
-        summary[variant] = {
-            "cold_seconds": cold_values[0] if len(cold_values) == 1 else None,
-            "warm_sample_count": len(warm_values),
-            "warm_median_seconds": statistics.median(warm_values) if warm_values else None,
-            "warm_max_seconds": max(warm_values) if warm_values else None,
-            "warm_native_median_seconds": statistics.median(native_values) if native_values else None,
-            "warm_parsing_revalidation_median_seconds": statistics.median(parsing_values) if parsing_values else None,
-            "warm_mesh_median_seconds": statistics.median(mesh_values) if mesh_values else None,
-            "warm_scene_commit_median_seconds": statistics.median(commit_values) if commit_values else None,
-            "warm_ready_median_seconds": statistics.median(ready_values) if ready_values else None,
-            "warm_request_to_scene_median_seconds":statistics.median(request_values) if request_values else None,
-            "warm_request_to_scene_max_seconds":max(request_values) if request_values else None,
-        }
+        cold = [r for r in rows if r["variant"] == variant and r["sample"] == "first"]
+        warm = [r for r in rows if r["variant"] == variant and r["sample"] == "warm"]
+        metrics = ("process_to_ready_seconds", "request_to_ready_seconds",
+                   "process_to_motion_seconds", "native_seconds",
+                   "parsing_revalidation_seconds", "mesh_preparation_seconds",
+                   "scene_commit_seconds")
+        values = {name: [r[name] for r in warm if r.get(name) is not None] for name in metrics}
+        result = {"first_process": cold[0] if len(cold) == 1 else None,
+                  "warm_sample_count": len(warm)}
+        for name, group in values.items():
+            result[name] = {"count": len(group),
+                            "median": statistics.median(group) if group else None,
+                            "max": max(group) if group else None,
+                            "p99_nearest_rank": nearest_rank_p99(group)}
+        summary[variant] = result
     return summary
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--before", required=True, type=Path)
-    parser.add_argument("--after", required=True, type=Path)
+    parser.add_argument("--executable", type=Path, help="Benchmark one packaged game.")
+    parser.add_argument("--before", type=Path, help="Baseline executable for comparison.")
+    parser.add_argument("--after", type=Path, help="Candidate executable for comparison.")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--warm-runs", "--runs", dest="warm_runs", type=int, default=5,
-                        help="Warm repetitions per executable after its separate cold run (default: 5).")
+                        help="Warm repetitions per executable after its first-process run (default: 5).")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--terrain", choices=("highlands", "flat"), default="highlands")
     parser.add_argument("--mode", choices=("generate", "load"), default="generate")
+    parser.add_argument("--load-design", type=Path, help="Accepted .vcdesign copied into fresh isolated load profiles.")
+    parser.add_argument("--load-profile", type=Path)
     parser.add_argument("--before-load-profile", type=Path)
     parser.add_argument("--after-load-profile", type=Path)
     parser.add_argument("--timeout", type=float, default=1500,
@@ -262,29 +266,58 @@ def main():
         parser.error("--warm-runs must be positive")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
-    if args.mode == "load" and (args.before_load_profile is None or args.after_load_profile is None):
-        parser.error("--mode load requires --before-load-profile and --after-load-profile")
+    if args.executable:
+        if args.before or args.after or args.before_load_profile or args.after_load_profile:
+            parser.error("--executable cannot be combined with --before/--after options")
+        executables = {"package": args.executable.resolve(strict=True)}
+        load_profiles = {"package": args.load_profile}
+    else:
+        if not args.before or not args.after or args.load_profile:
+            parser.error("Supply --executable or both --before and --after")
+        executables = {name: getattr(args, name).resolve(strict=True) for name in ("before", "after")}
+        load_profiles = {"before": args.before_load_profile, "after": args.after_load_profile}
+    if args.load_design and any(profile is not None for profile in load_profiles.values()):
+        parser.error("--load-design cannot be combined with an existing load profile")
+    if args.mode != "load" and args.load_design:
+        parser.error("--load-design requires --mode load")
+    if args.mode == "load" and not args.load_design and any(profile is None for profile in load_profiles.values()):
+        parser.error("--mode load requires --load-design or a marked profile for every executable")
+    for profile in load_profiles.values():
+        if profile and not (profile / "coaster-verification-profile.txt").is_file():
+            parser.error(f"Not a marked verification profile: {profile}")
+    source_design = args.load_design.resolve(strict=True) if args.load_design else None
+    if source_design and not source_design.is_file():
+        parser.error("--load-design must name a file")
     root = args.output.resolve()
-    root.mkdir(parents=True)
-    executables = {name: getattr(args, name).resolve(strict=True) for name in ("before", "after")}
-    load_profiles = {"before": args.before_load_profile, "after": args.after_load_profile}
+    root.mkdir(parents=True, exist_ok=False)
+    if source_design:
+        for variant in executables:
+            profile = root / f"{variant}-profile"
+            target = profile / "Saved" / "VibeCoaster2" / "Designs" / "Accepted.vcdesign"
+            target.parent.mkdir(parents=True)
+            shutil.copy2(source_design, target)
+            (profile / "coaster-verification-profile.txt").write_text(
+                "VibeCoaster isolated runtime verification profile v1\n", encoding="utf-8")
+            load_profiles[variant] = profile
     metadata = {
         "executables": {name: {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
                          for name, path in executables.items()},
+        "load_design": {"path": str(source_design), "sha256": hashlib.sha256(source_design.read_bytes()).hexdigest()}
+                       if source_design else None,
         "mode": args.mode,
         "terrain": args.terrain,
         "seed": args.seed,
-        "timing": "Process launch through accepted moving-playback event; native callback, mesh preparation, scene commit and ready timings are retained separately.",
-        "samples": "One cold sample and exactly warm_runs warm samples per executable; warm summaries report median and maximum only. No p95 is inferred from five samples.",
-        "cache": "Each repetition uses a new process. The first is reported separately; OS and driver caches are not forcibly cleared, so cold means first process in this experiment, not an empty machine cache.",
+        "timing": "Process-to-ready is local monotonic time from before Popen through observed engine scene-ready log. Request-to-ready is the engine monotonic request-to-commit duration. Process-to-motion ends at the verification event after three moving game ticks; this proves usable playback, not a presented frame.",
+        "samples": "One first-process sample and exactly warm_runs subsequent samples per executable. Nearest-rank p99 is reported only with at least 100 valid warm samples; it is an empirical order statistic, not an SLA confidence bound.",
+        "cache": "Each repetition uses a new process. The first is reported separately; OS and driver caches are not cleared, so it is not a cold-disk measurement.",
         "scope": "Real 2560x1440 rendering; full traversal and screenshots are separate verification.",
     }
     (root / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     rows = []
     variants = tuple(executables)
     for repetition in range(args.warm_runs + 1):
-        sample = "cold" if repetition == 0 else "warm"
-        order = ("before", "after") if repetition % 2 == 0 else ("after", "before")
+        sample = "first" if repetition == 0 else "warm"
+        order = variants if repetition % 2 == 0 else tuple(reversed(variants))
         for variant in order:
             row = {"variant": variant, "sample": sample, "terrain": args.terrain,
                    "seed": args.seed, "repetition": repetition,

@@ -1,0 +1,509 @@
+{
+  "createdThrough": "Blender MCP execute_blender_code",
+  "blender": "5.2.1 LTS",
+  "units": "metres",
+  "assets": [
+    {
+      "name": "SM_LeadCar",
+      "boundsMetres": [
+        [
+          -1.27499998,
+          -0.88,
+          -0.27097765
+        ],
+        [
+          1.26499999,
+          0.88,
+          1.625
+        ]
+      ],
+      "triangles": 25704,
+      "vertices": 13114,
+      "materials": [
+        "VC2_Padding",
+        "VC2_Steel",
+        "VC2_Graphite",
+        "VC2_Petrol",
+        "VC2_Light",
+        "VC2_Pearl",
+        "VC2_Copper",
+        "VC2_Glass"
+      ]
+    },
+    {
+      "name": "SM_TrainCar",
+      "boundsMetres": [
+        [
+          -1.27499998,
+          -0.88,
+          -0.27097765
+        ],
+        [
+          1.26499999,
+          0.88,
+          1.625
+        ]
+      ],
+      "triangles": 25408,
+      "vertices": 12962,
+      "materials": [
+        "VC2_Padding",
+        "VC2_Steel",
+        "VC2_Graphite",
+        "VC2_Petrol",
+        "VC2_Light",
+        "VC2_Pearl",
+        "VC2_Copper",
+        "VC2_Glass"
+      ]
+    },
+    {
+      "name": "SM_TrainCoupler",
+      "boundsMetres": [
+        [
+          -0.5,
+          -0.1,
+          -0.09
+        ],
+        [
+          0.5,
+          0.1,
+          0.09
+        ]
+      ],
+      "triangles": 444,
+      "vertices": 232,
+      "materials": [
+        "VC2_Steel",
+        "VC2_Graphite"
+      ],
+      "runtime": false
+    },
+    {
+      "name": "SM_TrackTieWeb",
+      "boundsMetres": [
+        [
+          -0.05500003,
+          -0.66500002,
+          -0.26573604
+        ],
+        [
+          0.05500003,
+          0.66500002,
+          0.105
+        ]
+      ],
+      "triangles": 720,
+      "vertices": 400,
+      "materials": [
+        "VC2_Petrol",
+        "VC2_Pearl",
+        "VC2_Graphite",
+        "VC2_Steel",
+        "VC2_Copper"
+      ]
+    },
+    {
+      "name": "SM_LSMStator",
+      "boundsMetres": [
+        [
+          -0.47999999,
+          -0.48249999,
+          -0.5
+        ],
+        [
+          0.47999999,
+          0.48249999,
+          0.5
+        ]
+      ],
+      "triangles": 2160,
+      "vertices": 1120,
+      "materials": [
+        "VC2_Graphite",
+        "VC2_Petrol",
+        "VC2_Copper",
+        "VC2_Steel"
+      ]
+    },
+    {
+      "name": "SM_BrakeFin",
+      "boundsMetres": [
+        [
+          -0.47999999,
+          -0.45500001,
+          -0.47350001
+        ],
+        [
+          0.47999999,
+          0.45500001,
+          0.47
+        ]
+      ],
+      "triangles": 568,
+      "vertices": 296,
+      "materials": [
+        "VC2_Steel",
+        "VC2_Graphite",
+        "VC2_Copper",
+        "VC2_Petrol"
+      ]
+    },
+    {
+      "name": "SM_StationRoofPanel",
+      "boundsMetres": [
+        [
+          -1.49600005,
+          -5.6500001,
+          -0.18000001
+        ],
+        [
+          1.49600005,
+          5.6500001,
+          0.18000001
+        ]
+      ],
+      "triangles": 1240,
+      "vertices": 656,
+      "materials": [
+        "VC2_Pearl",
+        "VC2_Petrol",
+        "VC2_Light",
+        "VC2_Graphite"
+      ]
+    },
+    {
+      "name": "SM_StationPost",
+      "boundsMetres": [
+        [
+          -0.2,
+          -0.2,
+          -0.0
+        ],
+        [
+          0.2,
+          0.2,
+          5.22000027
+        ]
+      ],
+      "triangles": 432,
+      "vertices": 232,
+      "materials": [
+        "VC2_Petrol",
+        "VC2_Steel",
+        "VC2_Graphite",
+        "VC2_Copper"
+      ]
+    },
+    {
+      "name": "SM_StationPlatformPanel",
+      "boundsMetres": [
+        [
+          -1.49600005,
+          -1.92499995,
+          -0.80000001
+        ],
+        [
+          1.49600005,
+          1.92499995,
+          0.0
+        ]
+      ],
+      "triangles": 240,
+      "vertices": 128,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Pearl",
+        "VC2_Steel",
+        "VC2_Petrol"
+      ]
+    },
+    {
+      "name": "SM_StationPlatformEndPanel",
+      "boundsMetres": [
+        [
+          -0.49599999,
+          -1.92499995,
+          -0.80000001
+        ],
+        [
+          0.49599999,
+          1.92499995,
+          0.0
+        ]
+      ],
+      "triangles": 240,
+      "vertices": 128,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Pearl",
+        "VC2_Steel",
+        "VC2_Petrol"
+      ]
+    },
+    {
+      "name": "SM_StationQueueDeck",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          0.44000003
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "triangles": 120,
+      "vertices": 64,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Petrol"
+      ]
+    },
+    {
+      "name": "SM_StationRouteRoof",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          -0.88
+        ],
+        [
+          1.0,
+          1.0,
+          0.77499998
+        ]
+      ],
+      "triangles": 180,
+      "vertices": 104,
+      "materials": [
+        "VC2_Petrol",
+        "VC2_Steel",
+        "VC2_Light"
+      ]
+    },
+    {
+      "name": "SM_StationMergeDeck",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          0.44000003
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "triangles": 24,
+      "vertices": 16,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Petrol"
+      ]
+    },
+    {
+      "name": "SM_StationHoldingLane",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.6080001
+        ]
+      ],
+      "triangles": 152,
+      "vertices": 96,
+      "materials": [
+        "VC2_Pearl",
+        "VC2_Graphite",
+        "VC2_Steel",
+        "VC2_Petrol"
+      ]
+    },
+    {
+      "name": "SM_StationBoardingGate",
+      "boundsMetres": [
+        [
+          -0.98000002,
+          -0.75,
+          -1.0
+        ],
+        [
+          0.98000008,
+          0.75,
+          0.89999998
+        ]
+      ],
+      "triangles": 64,
+      "vertices": 40,
+      "materials": [
+        "VC2_Graphite",
+        "VC2_Steel",
+        "VC2_Petrol"
+      ]
+    },
+    {
+      "name": "SM_StationDispatchCabin",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "triangles": 192,
+      "vertices": 112,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Petrol",
+        "VC2_Graphite",
+        "VC2_Glass",
+        "VC2_Steel"
+      ]
+    },
+    {
+      "name": "SM_StationUnloadDeck",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "triangles": 24,
+      "vertices": 16,
+      "materials": [
+        "VC2_Pearl",
+        "VC2_Steel"
+      ]
+    },
+    {
+      "name": "SM_StationExitWalkway",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          0.44000003
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "triangles": 36,
+      "vertices": 24,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Light"
+      ]
+    },
+    {
+      "name": "SM_StationLift",
+      "boundsMetres": [
+        [
+          -0.99000001,
+          -0.94999999,
+          -1.0
+        ],
+        [
+          0.99000001,
+          0.94999999,
+          1.0
+        ]
+      ],
+      "triangles": 96,
+      "vertices": 64,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Petrol",
+        "VC2_Glass",
+        "VC2_Graphite"
+      ]
+    },
+    {
+      "name": "SM_StationStair",
+      "boundsMetres": [
+        [
+          -0.9425,
+          -1.0,
+          -0.8622728
+        ],
+        [
+          0.9425,
+          0.99999994,
+          0.97066939
+        ]
+      ],
+      "triangles": 2152,
+      "vertices": 1312,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Steel"
+      ]
+    },
+    {
+      "name": "SM_StationUnderpass",
+      "boundsMetres": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "triangles": 84,
+      "vertices": 56,
+      "materials": [
+        "VC2_Concrete",
+        "VC2_Petrol",
+        "VC2_Glass",
+        "VC2_Steel"
+      ]
+    },
+    {
+      "name": "SM_StationQueueRail",
+      "boundsMetres": [
+        [
+          -0.98000002,
+          -0.75,
+          -1.0
+        ],
+        [
+          0.98000008,
+          0.75,
+          0.93000007
+        ]
+      ],
+      "triangles": 76,
+      "vertices": 48,
+      "materials": [
+        "VC2_Graphite",
+        "VC2_Steel",
+        "VC2_Petrol"
+      ]
+    }
+  ]
+}

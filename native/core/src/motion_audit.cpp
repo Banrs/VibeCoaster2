@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <future>
 
 namespace coaster {
 namespace {
@@ -207,17 +208,21 @@ SpatialReplay replaySpatialRefinement(const Design& d,Cancel cancel){
         refined.knots.push_back(refined.knots.front());refined.rebuild();
         auto map=[&](double s){const auto at=d.track.locate(s);const bool second=at.parameter>.5;return refined.distanceAtSpan(2*at.span+(second?1:0),at.parameter*2-(second?1:0));};
         auto operations=d.operations;for(auto& op:operations){op.start=map(op.start);op.end=map(op.end);}
+        // The replayed train and the refined spatial certificate read the same
+        // immutable rebuilt track. Run both independent checks before comparing
+        // their results with the original design below.
+        auto refinedSimulation=std::async(std::launch::async,[&]{return simulate(refined,operations,d.request.train,d.request.simulationStep,cancel);});
         for(size_t i=0;i<d.track.spans.size();++i)for(double u:{.125,.375,.625,.875}){
             const auto a=d.track.sampleSpan(i,u),b=refined.sampleSpan(2*i+(u>.5?1:0),u*2-(u>.5?1:0));
             result.maximumPositionError=std::max(result.maximumPositionError,norm(a.position-b.position));result.maximumOrientationError=std::max(result.maximumOrientationError,norm(a.up-b.up));
         }
         if(result.maximumPositionError>.001||result.maximumOrientationError>.001)work.report.fail("SPATIAL_REFINEMENT","Half-spacing canonical reconstruction changes geometry beyond 1 mm / 0.001 frame-vector tolerance",0,std::max(result.maximumPositionError,result.maximumOrientationError),.001);
-        work.simulation=simulate(refined,operations,d.request.train,d.request.simulationStep,cancel);
         result.replay.coarseStep=result.replay.fineStep=d.request.simulationStep;
         auto supports=d.supports;for(auto& support:supports)support.trackDistance=map(support.trackDistance);
         const auto refinedSweep=buildClearanceSweepVerified(refined,d.request.train,cancel);
         const auto clearance=validateGeometry(refined,d.request.terrain,d.request.limits,d.request.train,supports,refinedSweep,cancel);
         for(const auto& error:clearance.errors)work.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
+        work.simulation=refinedSimulation.get();
     }catch(const std::exception& e){if(cancel&&cancel())work.simulation.cancelled=true;work.report.fail("SPATIAL_REFINEMENT",e.what());}
     return work;
 }

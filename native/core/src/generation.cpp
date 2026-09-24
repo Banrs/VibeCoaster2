@@ -51,10 +51,10 @@ static bool improveReturnLayout(const Design& d,RecipeFeedback& feedback,const s
     const double rolling=gravity*train.rollingResistance,drag=.5*train.airDensity*train.dragCdA/(train.cars*train.carMass);
     using State=std::array<double,4>; // x, y, heading, speed
     auto shortArc=[&](double yaw){
-        const double bank=std::copysign(std::acos(.25),yaw),sign=std::copysign(1.,yaw);
+        const double bank=std::copysign(std::acos(1/recipeApproachNormalG),yaw),sign=std::copysign(1.,yaw);
         auto integrate=[&](double hold){
             State state{0,0,yaw,speed};
-            const std::array<double,5> durations{.4,1.2,hold,1.2,.4};
+            const std::array<double,5> durations{.4,recipeApproachBankRampSeconds,hold,recipeApproachBankRampSeconds,.4};
             auto add=[](State a,State b,double step){for(int i=0;i<4;++i)a[i]+=b[i]*step;return a;};
             for(int phase=0;phase<5;++phase){const double duration=durations[phase];const int count=std::max(1,int(std::ceil(duration/.04)));const double dt=duration/count;
                 auto rate=[&](const State& x,double u){const double smooth=u*u*u*u*(35+u*(-84+u*(70-20*u)));

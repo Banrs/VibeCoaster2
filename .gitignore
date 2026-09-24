@@ -25,3 +25,5 @@ native/build-before-move/
 /scratch/
 /profiles/
 /unreal/
+# Retained local assets for the previous running editor-game; current kit is Art/V3.
+/native/unreal/Content/Art/V2/

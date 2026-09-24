@@ -5,6 +5,7 @@
 #include <optional>
 
 namespace coaster {
+inline constexpr double recipeApproachNormalG=2.4,recipeApproachBankRampSeconds=1.8;
 enum class RecipeCompileMode { ClosedCircuit, EnergyCalibrationPrefix };
 struct RecipePort {std::string id;double distance{},speed{};};
 struct RecipeFeedback {

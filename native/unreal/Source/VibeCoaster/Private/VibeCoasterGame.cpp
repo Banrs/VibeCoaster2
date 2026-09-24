@@ -160,7 +160,7 @@ FString AVibeCoasterController::RowText(int32 Row) const
     case 7: return FString::Printf(TEXT("Signature outward roll: %.0f degrees"), Settings.style.signatureRollDegrees);
     case 8: return FString::Printf(TEXT("Return composition: %s"), Settings.style.returnStyle < 0 ? TEXT("seed choice") : Settings.style.returnStyle == 0 ? TEXT("flowing crest") : TEXT("twin airtime"));
     case 9: return Settings.style.automaticTrims ? TEXT("Trim brakes: automatic") : TEXT("Trim brakes: not installed");
-    case 10: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: green highlands") : TEXT("Landscape: flat basin");
+    case 10: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: ochre escarpment") : TEXT("Landscape: flat basin");
     default: return FString();
     }
 }
@@ -249,6 +249,7 @@ void AVibeCoasterHUD::DrawHUD()
         Line(TEXT("Up/Down selects  |  Left/Right changes  |  Enter/G generates"));
         Y += 8 * Scale;
         for (int32 Row = 0; Row < AVibeCoasterController::SetupRowCount; ++Row) Line((Row == PC->SelectedRow ? TEXT("> ") : TEXT("  ")) + PC->RowText(Row), Row == PC->SelectedRow ? Accent : FLinearColor::White);
+        Line(FString::Printf(TEXT("Train: %d two-seat rows | %d riders"), PC->Settings.train.cars, coaster::riderCapacity(PC->Settings.train)));
         Y += 8 * Scale;
         if (PC->Settings.targets.reference.processed) Line(TEXT("Optional external comparison metadata available. C opens comparison."), Amber);
         else if (std::isfinite(PC->Settings.targets.referenceExposure) && !PC->Settings.targets.referenceId.empty()) Line(TEXT("Optional external comparison metadata configured. C opens comparison."), Amber);
@@ -298,13 +299,14 @@ void AVibeCoasterHUD::DrawHUD()
         TArray<FString> StatusLines, TelemetryLines;
         StatusText.ParseIntoArrayLines(StatusLines, false);
         TelemetryText.ParseIntoArrayLines(TelemetryLines, false);
-        const int32 PanelLines = StatusLines.Num() + TelemetryLines.Num() + (PC->Ride->HasRide() ? 1 : 0);
+        const int32 PanelLines = StatusLines.Num() + TelemetryLines.Num() + (PC->Ride->HasRide() ? 2 : 0);
         DrawRect(FLinearColor(.012f, .025f, .044f, .82f), X, Y - 8 * Scale, Width, (PanelLines * 23 + 16) * Scale);
         Line(StatusText, Amber);
         if (const auto* D = PC->Ride->ActiveDesign())
         {
             Line(FString::Printf(TEXT("Active accepted seed %llu | %s%s"), static_cast<unsigned long long>(D->request.seed),
                 UTF8_TO_TCHAR(D->request.terrain.name().c_str()), D->request.targets.reference.processed ? TEXT(" | optional comparison metadata") : TEXT("")));
+            Line(FString::Printf(TEXT("Train: %d two-seat rows | %d riders"), D->request.train.cars, coaster::riderCapacity(D->request.train)));
         }
         if (PC->ShowTelemetry) Line(TelemetryText);
     }

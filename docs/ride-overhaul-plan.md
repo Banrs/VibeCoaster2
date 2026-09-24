@@ -1,6 +1,6 @@
 # Default 3 ride overhaul
 
-**Paused:** The user redirected work to a grand premium station and the other environment/hardware models. The unfinished ride/physics changes are retained in `checkpoints/08-riftwake-paused.patch`; the working generator is restored to Default2. Train refinement is also paused.
+**Active, reopened 25 September 2026:** The user rejected the sparse/flat clifftop, repeated upright/level resets, slow lip, inversion yaw/lateral shapes, and terrain fit in checkpoint `b39622c`. Geometry remains first while independent train/station and startup work continues. The paused patch is already integrated; do not reapply it. Current numerical passes are a baseline, not completion of the visual and motion intent.
 
 The 24 September 2026 request resumes implementation after the stopped Default 2 checkpoint and supersedes its solo-work and force-uplift instructions. The target is a coherent, believable, terrain-integrated ride around 180 seconds, with visible improvements in the running game. FF means Falcon's Flight; TRR means Tormenta Rampaging Run.
 

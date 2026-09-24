@@ -6,6 +6,7 @@
 #include <optional>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 #include <deque>
 
 namespace coaster {
@@ -80,7 +81,7 @@ ValidationReport validateStationDefinition(const StationGeometry& station,Cancel
        station.boxes.size()<4||station.boxes.size()>512) {
         out.fail("STATION_CONFIG","Station bounds or part count are invalid"); return out;
     }
-    std::array<int,5> roles{};
+    std::array<int,17> roles{};
     size_t checked=0;for(const auto& b:station.boxes) {
         if((checked++&63)==0&&cancel&&cancel()){out.fail("CANCELLED","Station definition cancelled");return out;}
         bool valid=finite(b.center)&&norm(b.center)<1000000&&finite(b.half)&&
@@ -89,11 +90,11 @@ ValidationReport validateStationDefinition(const StationGeometry& station,Cancel
         for(Vec3 axis:a) valid=valid&&finite(axis)&&std::abs(norm(axis)-1)<1e-6;
         valid=valid&&std::abs(dot(b.forward,b.right))<1e-6&&std::abs(dot(b.forward,b.up))<1e-6&&
             std::abs(dot(b.right,b.up))<1e-6&&dot(cross(b.forward,b.up),b.right)>1-1e-6;
-        int role=int(b.role); valid=valid&&role>=0&&role<5;
+        int role=int(b.role); valid=valid&&role>=0&&role<int(roles.size());
         if(!valid) { out.fail("STATION_CONFIG","Invalid station part frame, dimensions or role"); return out; }
         ++roles[role];
     }
-    for(int count:roles) if(count==0) {out.fail("STATION_CONFIG","Station is missing a required structural role");return out;}
+    for(size_t i=0;i<5;++i) if(roles[i]==0) {out.fail("STATION_CONFIG","Station is missing a required structural role");return out;}
     std::vector<bool> reached(station.boxes.size()); reached[0]=true;
     std::deque<size_t> queue{0};size_t tested=0;
     // Bounded breadth-first traversal: each reached part is expanded once.
@@ -109,18 +110,86 @@ ValidationReport validateStationDefinition(const StationGeometry& station,Cancel
 }
 StationGeometry buildStation(const Track& track,const Terrain& terrain,const TrainConfig& train,Cancel cancel) {
     auto domain=stationTrackDomain(track,terrain,train,cancel);if(!domain.valid())throw std::runtime_error(domain.errors.front().code+": "+domain.errors.front().message);
-    const auto sample=track.sample(0); const Vec3 u{0,0,1};
-    if(std::abs(sample.tangent.z)>.005||dot(sample.up,u)<.999) throw std::runtime_error("Station requires an upright level start");
+    const auto sample=track.sample(0);const Vec3 u{0,0,1};
+    if(std::abs(sample.tangent.z)>.005||dot(sample.up,u)<.999)throw std::runtime_error("Station requires an upright level start");
     const Vec3 f=unit(Vec3{sample.tangent.x,sample.tangent.y,0}),r=cross(f,u),origin=sample.position;
-    StationGeometry station; station.enabled=true;
+    StationGeometry station;station.enabled=true;
     const double half=(train.cars-1)*train.spacing*.5;
-    station.boardingBegin=-std::max(18.,half+8.); station.boardingEnd=std::max(64.,2*half+38.);
+    station.boardingBegin=-std::max(18.,half+8.);station.boardingEnd=std::max(64.,2*half+38.);
     const double mid=(station.boardingBegin+station.boardingEnd)*.5,len=station.boardingEnd-station.boardingBegin;
+    const double rear=30.,front=rear+2*half,ground=-4.5;
     auto add=[&](double x,double y,double z,Vec3 size,StationRole role) {
         station.boxes.push_back({origin+f*x+r*y+u*z,f,r,u,size,role});
     };
-    for(double side:{-1.,1.}) add(mid,side*3.275,-.4,{len*.5,1.925,.4},StationRole::Platform);
+    auto slab=[&](double x0,double x1,double y0,double y1,double top,StationRole role) {
+        add((x0+x1)*.5,(y0+y1)*.5,top-.15,{(x1-x0)*.5,(y1-y0)*.5,.15},role);
+    };
+    // The certified boarding slabs and track canopy remain the structural
+    // anchor for old saved designs and for both sides of the parked train.
+    for(double side:{-1.,1.})add(mid,side*3.275,-.4,{len*.5,1.925,.4},StationRole::Platform);
     add(mid,0,5.4,{len*.5+1,5.65,.18},StationRole::Canopy);
+
+    // Passenger flow is one-way: grade-level queue -> lift/stair -> feeder ->
+    // per-row gated hold -> train. The opposite platform is unload-only.
+    const double queueStart=rear-18,queueEnd=front+5;
+    slab(queueStart,queueEnd,12,24,ground+.30,StationRole::QueueDeck);
+    // Alternating ends preserve a continuous 1.5 m or wider switchback.
+    for(int i=0;i<3;++i){
+        const double x0=rear-3+(i%2?0:2),x1=front+3-(i%2?2:0),y=15.+3*i;
+        add((x0+x1)*.5,y,ground+.85,{(x1-x0)*.5,.05,.55},StationRole::QueueRail);
+    }
+    slab(queueStart,front+13,24,29,ground+.30,StationRole::ExitWalkway);
+    const double entryLiftX=rear-9,entryStairX=rear-12;
+    const double openingLeft=entryStairX-1.65,openingRight=entryLiftX+1.65;
+    // The lower queue roof stops at the stair/lift bay. A raised roof keeps
+    // at least 2.89 m above the upper stair landing and clears the lift cap.
+    for(const auto span:{std::pair{queueStart,openingLeft},
+                         std::pair{openingRight,queueEnd}})
+        add((span.first+span.second)*.5,18,ground+3.52,
+            {(span.second-span.first)*.5,6,.16},StationRole::RouteRoof);
+    add((openingLeft+openingRight)*.5,18,3.05,
+        {(openingRight-openingLeft)*.5,6,.16},StationRole::RouteRoof);
+    for(double x:{queueStart+1,queueEnd-1})
+        add(x,23.65,ground+1.91,{.18,.18,1.76},StationRole::Post);
+    const double coverBottom=3.05-.16,postBottom=ground+.15;
+    for(double x:{openingLeft,openingRight})
+        add(x,23.65,(coverBottom+postBottom)*.5,
+            {.18,.18,(coverBottom-postBottom)*.5},StationRole::Post);
+
+    slab(rear-14,front+7,5.2,10.7,0,StationRole::MergeDeck);
+    add((rear-14+front+7)*.5,8.85,5.4,
+        {(front+7-rear+14)*.5,3.65,.18},StationRole::RouteRoof);
+    const double laneHalfX=std::min(.74,train.spacing*.36);
+    for(int i=0;i<train.cars;++i){
+        if(cancel&&cancel())throw std::runtime_error("CANCELLED: Station construction cancelled");
+        const double x=rear+i*train.spacing;
+        add(x,5.1,.58,{laneHalfX,2.95,.58},StationRole::HoldingLane);
+        add(x,2.16,.67,{laneHalfX,.10,.67},StationRole::BoardingGate);
+    }
+    add(front+4,6.55,1.65,{1.6,1.55,1.65},StationRole::DispatchCabin);
+    add((rear+front)*.5,-4.65,.035,
+        {(front-rear)*.5+2,.40,.035},StationRole::UnloadDeck);
+
+
+    add(entryLiftX,11.15,(ground+2.65)*.5,
+        {1.35,1.45,(2.65-ground)*.5},StationRole::Lift);
+    add(entryStairX,17,(ground+1.0)*.5,
+        {1.3,7,(1.0-ground)*.5},StationRole::Stair);
+    // Exit riders move along -Y to their own lift or secondary stair. Both
+    // reach a protected passage below the live rail and rejoin the forecourt.
+    slab(front+3,front+10,-12.4,-5.2,0,StationRole::ExitWalkway);
+    add((front+3+front+10)*.5,-8.85,5.4,{3.5,3.65,.18},StationRole::RouteRoof);
+    add(front+9,-11.2,(ground+2.65)*.5,
+        {1.35,1.45,(2.65-ground)*.5},StationRole::Lift);
+    add(front+6,-17,(ground+1.0)*.5,
+        {1.3,7,(1.0-ground)*.5},StationRole::Stair);
+    slab(front+4.4,front+13,-24,-12,ground+.30,StationRole::ExitWalkway);
+    add(front+7.5,-18,3.05,{3.15,6,.16},StationRole::RouteRoof);
+    for(double x:{front+4.55,front+9.8})
+        add(x,-23.65,(coverBottom+postBottom)*.5,
+            {.18,.18,(coverBottom-postBottom)*.5},StationRole::Post);
+    add(front+11.7,0,ground+1.60,{1.7,24,1.75},StationRole::Underpass);
+
     const int count=std::max(2,int(std::ceil((len-8)/16))+1);
     for(int i=0;i<count;++i) {
         if(cancel&&cancel())throw std::runtime_error("CANCELLED: Station construction cancelled");
@@ -130,8 +199,6 @@ StationGeometry buildStation(const Track& track,const Terrain& terrain,const Tra
             add(x,y,2.61,{.2,.2,2.61},StationRole::Post);
             Vec3 anchor=origin+f*x+r*y;
             double low=terrain.height(anchor.x,anchor.y),high=low;
-            // Match the foundation certificate's grid and enclose unsampled
-            // terrain between vertices using the full profile gradient bound.
             constexpr double footingStep=1.8/8;
             for(int ix=0;ix<=8;++ix)for(int iy=0;iy<=8;++iy) {
                 Vec3 p=anchor+f*(-.9+ix*footingStep)+r*(-.9+iy*footingStep);double h=terrain.height(p.x,p.y);low=std::min(low,h);high=std::max(high,h);
@@ -139,14 +206,13 @@ StationGeometry buildStation(const Track& track,const Terrain& terrain,const Tra
             const double footprintRadius=station_validation::footprintRadius(f,r,.9,.9);
             const double enclosure=terrain.localSlopeBound(anchor.x,anchor.y,footprintRadius)*.500005*std::hypot(footingStep,footingStep);
             const double bottom=low-.4-enclosure,top=high+.1+enclosure,platformBottom=origin.z-.8;
-            if(top>=platformBottom-.1) throw std::runtime_error("Terrain leaves no station pier clearance");
+            if(top>=platformBottom-.1)throw std::runtime_error("Terrain leaves no station pier clearance");
             add(x,y,(bottom+top)*.5-origin.z,{.9,.9,(top-bottom)*.5},StationRole::Footing);
             add(x,y,(top+platformBottom)*.5-origin.z,{.3,.3,(platformBottom-top)*.5},StationRole::Pier);
         }
     }
     return station;
-}
-static ValidationReport validateStationImpl(const Track& track,const Terrain& terrain,const TrainConfig& train,const StationGeometry& station,const ClearanceSweep* prepared,Cancel cancel) {
+}static ValidationReport validateStationImpl(const Track& track,const Terrain& terrain,const TrainConfig& train,const StationGeometry& station,const ClearanceSweep* prepared,Cancel cancel) {
     auto out=validateStationDefinition(station,cancel); if(!out.valid()||!station.enabled) return out;
     out=stationTrackDomain(track,terrain,train,cancel);if(!out.valid())return out;
     auto stationStart=track.sample(0);
@@ -279,4 +345,3 @@ bool parseStationPayload(const std::string& text,StationGeometry& destination,st
     destination=std::move(value);error.clear();return true;
 }
 }
-

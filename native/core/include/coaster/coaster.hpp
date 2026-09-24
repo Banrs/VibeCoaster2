@@ -229,7 +229,11 @@ struct Support {Vec3 base,top,attachment; bool hasAttachment{false}; double trac
 constexpr size_t maxSupportMembers=512,maxTotalSupportMembers=60000;
 ValidationReport validateSupportMembers(const Support&,const Terrain&,Cancel cancel={});
 
-enum class StationRole { Platform, Canopy, Post, Pier, Footing };
+enum class StationRole {
+    Platform, Canopy, Post, Pier, Footing, // Persisted roles 0..4 stay stable.
+    QueueDeck, RouteRoof, MergeDeck, HoldingLane, BoardingGate,
+    DispatchCabin, UnloadDeck, ExitWalkway, Lift, Stair, Underpass, QueueRail
+};
 struct StationBox {
     Vec3 center, forward, right, up, half;
     StationRole role{StationRole::Platform};

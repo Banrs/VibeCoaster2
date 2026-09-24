@@ -29,6 +29,105 @@ Knot located(Knot k,Vec3 origin,double yaw){
     k.third=yawed(k.third,yaw);k.fourth=yawed(k.fourth,yaw);k.up=yawed(k.up,yaw);k.upFirst=yawed(k.upFirst,yaw);
     k.upSecond=yawed(k.upSecond,yaw);k.upThird=yawed(k.upThird,yaw);return k;
 }
+void planarImmelmann(const FvdEntry& entry,double rolling,double drag){
+    FvdImmelmannRequest request;request.entry=entry;request.height=95*std::pow(entry.speed/53,2);
+    request.exitHeight=10;request.exitPitch=-5*pi/180;request.exitNormalG=std::cos(request.exitPitch);
+    request.normalG=3.8;request.exitPositiveG=3;request.crestG=.6;request.rollExitG=.6;
+    request.rampSeconds=1;request.exitRampSeconds=1.2;request.rollOverlapFraction=.35;
+    request.planarRoll=true;request.rollingAcceleration=rolling;request.dragAccelerationCoefficient=drag;
+    const Vec3 forward=unit(Vec3{entry.jet.tangent.x,entry.jet.tangent.y,0}),left{-forward.y,forward.x,0};
+    for(int hand:{-1,1}){request.hand=hand;const auto result=designFvdImmelmann(request);good(result.section);samePort(result.section.track.knots.front(),entry.jet);
+        near(result.apex.position.z-entry.jet.position.z,request.height,1e-5,"Planar Immelmann retains its independently integrated rise");
+        near(result.exit.position.z-entry.jet.position.z,request.exitHeight,1e-5,"Planar Immelmann reaches its live valley height");
+        near(result.exit.forward.z,std::sin(request.exitPitch),1e-6,"Planar Immelmann reaches its live valley pitch");
+        near(dot(unit(Vec3{result.exit.forward.x,result.exit.forward.y,0}),forward),-1,1e-8,"Planar Immelmann reverses travel by 180 degrees without steering");
+        near(norm(result.exit.up-unit(Vec3{0,0,1}-result.exit.forward*result.exit.forward.z)),0,1e-6,"Physical half-roll finishes upright");
+        double minimumCenterlineNormal=100,maximumLateralForce=0,twist=0;
+        for(size_t i=0;i<result.section.samples.size();++i){const auto& q=result.section.samples[i];
+            near(dot(q.position-entry.jet.position,left),0,1e-5,"Entire half-loop and roll stay in their inherited vertical plane");
+            near(dot(q.forward,left),0,1e-6,"Planar Immelmann has no hidden lateral velocity");
+            const auto c=sampleFvdControl(result.authoring.controls,q.time);minimumCenterlineNormal=std::min(minimumCenterlineNormal,c.normalG);maximumLateralForce=std::max(maximumLateralForce,std::abs(c.lateralG));
+            near(dot(q.up*c.normalG+cross(q.forward,q.up)*c.lateralG,left),0,1e-6,"Real rider force components balance in the world vertical plane");
+            if(i){const auto& previous=result.section.samples[i-1];twist+=(q.time-previous.time)*(c.rollRate+sampleFvdControl(result.authoring.controls,previous.time).rollRate)*.5;}
+            if(i%31==0){const double a=-gravity*q.forward.z-rolling-drag*q.speed*q.speed,j=-gravity*q.curvature.z*q.speed-2*drag*q.speed*a;
+                const auto dynamics=measureSeatDynamics(result.section.track,q.distance,q.speed,a,j,1.2);
+                check(dynamics.force.vertical>-.5&&dynamics.force.vertical<3.85&&std::abs(dynamics.force.lateral)<.4,
+                    "Planar roll reports its actual bounded lateral and normal seat forces");}
+        }
+        near(twist,hand*pi,1e-6,"Transported physical tangent twist completes a real half-roll");
+        check(minimumCenterlineNormal<1e-5&&maximumLateralForce>.2,"Planar roll includes a genuine unloaded quarter-turn and lateral rider load");
+        check(validateSelfClearance(result.section.track,TrainConfig{}).valid(),"Planar Immelmann clears its actual track envelope");
+        Design saved;ForceAuthoring source;source.name="planar-immelmann";source.program=result.authoring;source.sourceDistances={0,result.section.track.length};saved.forcePrograms.push_back(source);
+        Design loaded;std::string error;check(parseAuthorshipPayload(authorshipPayload(saved),loaded,error),"Planar force/twist controls use the existing saved source format");
+        const auto replay=designFvdSection(loaded.forcePrograms.front().program);good(replay);samePort(replay.track.knots.front(),entry.jet);
+        near(norm(replay.samples.back().position-result.exit.position),0,1e-9,"Saved planar half-roll independently replays its physical path");
+    }
+    int polls=0;check(designFvdImmelmann(request,[&]{return ++polls>10;}).section.cancelled,"Planar half-roll shooting preserves cancellation");
+    request.yawAngle=.1;check(!designFvdImmelmann(request).section.report.valid(),"A planar half-roll cannot silently accept a conflicting yaw programme");
+}
+void signedLoopCrossing(){
+    // The actual inherited loop port from the accepted circuit, including its
+    // complete geometry/frame jets. This catches the wrong-hand low crossing
+    // that an endpoint yaw-only assertion previously accepted.
+    const Knot port{{-122.211485905,-925.077856744,24.2308653628},
+        {.9882820924,-.15263848087,-1.19739839138e-13},{-2.93451902159e-16,-5.42693488748e-15,.00449596258856},
+        {-4.06781624799e-15,-8.1080464366e-13,1},0,Element::Inversion,
+        {-1.99768175679e-5,3.0853853466e-6,1.65444162439e-6},{-2.20534387393e-8,3.4061159391e-9,4.60785346539e-8},
+        {-.00444327931437,.000686256899568,5.38345837124e-16},{-1.63505503029e-6,2.52531456283e-7,-2.02136795977e-5},
+        {-4.55385906425e-8,7.03335753035e-9,-2.23149229445e-8}};
+    FvdLoopRequest request;request.entrySpeed=66.046689252;request.height=140*std::pow(request.entrySpeed/65,2);
+    request.normalG=3.8;request.crestG=1.2;request.yawAngle=0;request.crossingOffset=18;
+    request.rollingAcceleration=gravity*.004;request.dragAccelerationCoefficient=.000175;
+    request.entry=makeFvdEntry(port,request.entrySpeed,request.rollingAcceleration,request.dragAccelerationCoefficient);
+    const Vec3 forward=unit(Vec3{port.tangent.x,port.tangent.y,0}),left{-forward.y,forward.x,0};
+    for(double hand:{1.,-1.}){
+        request.crossingOffset=18*hand;const auto result=designFvdLoop(request);good(result.section);samePort(result.section.track.knots.front(),port);
+        const auto& samples=result.section.samples;const auto& end=samples.back();
+        const auto apex=std::max_element(samples.begin(),samples.end(),[](const auto& a,const auto& b){return a.position.z<b.position.z;});
+        near(apex->position.z-port.position.z,request.height,1e-4,"Signed crossing keeps the requested loop rise");
+        check(apex->up.z<-.9&&dot(apex->forward,forward)<-.9,"Signed crossing retains a real inverted crest");
+        near(std::atan2(dot(end.forward,left),dot(end.forward,forward)),0,1e-6,"Signed loop exits parallel to its actual entry heading");
+        near(end.forward.z,0,1e-6,"Signed loop exits level");near(norm(end.up-Vec3{0,0,1}),0,1e-6,"Signed loop exits physically upright");
+        double previous=0;
+        for(size_t i=0;i<samples.size();++i){const auto& q=samples[i];const double lateral=hand*dot(q.position-port.position,left);
+            check(lateral>=previous-1e-7&&hand*dot(q.forward,left)>=-1e-7,"The entire integrated loop moves only toward its exit side");previous=lateral;
+            if(i%31==0){const double a=-gravity*q.forward.z-request.rollingAcceleration-request.dragAccelerationCoefficient*q.speed*q.speed;
+                const double jerk=-gravity*q.curvature.z*q.speed-2*request.dragAccelerationCoefficient*q.speed*a;
+                const auto dynamics=measureSeatDynamics(result.section.track,q.distance,q.speed,a,jerk,1.2);
+                check(dynamics.force.vertical>.9&&dynamics.force.vertical<3.85&&std::abs(dynamics.force.lateral)<.6,
+                    "Monotone crossing uses the actual bounded normal and lateral rider forces");}
+        }
+        // Independently solve equal forward position/elevation on the low
+        // ascending and descending arms using canonical position/tangent data.
+        const double witnessHeight=port.position.z+request.height*.14;
+        const auto low=[&](auto begin,auto finish){return std::min_element(begin,finish,[&](const auto& a,const auto& b){return std::abs(a.position.z-witnessHeight)<std::abs(b.position.z-witnessHeight);});};
+        double ascent=low(samples.begin(),apex)->distance,descent=low(apex,samples.end())->distance;
+        for(int iteration=0;iteration<10;++iteration){const auto a=result.section.track.sample(ascent),b=result.section.track.sample(descent);const auto delta=b.position-a.position;
+            const double x=dot(delta,forward),z=delta.z,ax=-dot(a.tangent,forward),bx=dot(b.tangent,forward),az=-a.tangent.z,bz=b.tangent.z,det=ax*bz-bx*az;
+            check(std::abs(det)>.01,"Low-arm crossing has independently resolvable tangents");
+            ascent+=(-x*bz+bx*z)/det;descent+=(-ax*z+x*az)/det;
+        }
+        const auto a=result.section.track.sample(ascent),b=result.section.track.sample(descent);const auto delta=b.position-a.position;
+        near(dot(delta,forward),0,1e-7,"Low arms cross at equal physical forward position");near(delta.z,0,1e-7,"Low arms cross at equal physical height");
+        near(dot(delta,left),request.crossingOffset,1e-5,"Descending arm has the requested signed eighteen-metre separation");
+        check(a.tangent.z>0&&b.tangent.z<0&&a.position.z>port.position.z&&a.position.z<port.position.z+request.height*.5,"Crossing witnesses belong to the actual low ascending and descending arms");
+        check(validateSelfClearance(result.section.track,TrainConfig{}).valid(),"Signed loop crossing clears its physical track envelope");
+        Design saved;ForceAuthoring source;source.name="signed-loop";source.program=result.authoring;source.sourceDistances={0,result.section.track.length};saved.forcePrograms.push_back(source);
+        Design loaded;std::string error;check(parseAuthorshipPayload(authorshipPayload(saved),loaded,error),"Signed crossing uses the existing saved force-control format");
+        const auto replay=designFvdSection(loaded.forcePrograms.front().program);good(replay);samePort(replay.track.knots.front(),port);
+        near(norm(replay.samples.back().position-end.position),0,1e-9,"Saved physical crossing independently replays the same path");
+        if(hand>0)planarImmelmann(makeFvdEntry(result.section.track.knots.back(),end.speed,request.rollingAcceleration,request.dragAccelerationCoefficient),request.rollingAcceleration,request.dragAccelerationCoefficient);
+    }
+    // At this nearby speed, a global uniform grid placed an optional knot
+    // only 0.546 ms from the ascending crossing witness. Mandatory phase
+    // subdivision must retain the port without violating source validation.
+    request.entrySpeed=67.27;request.height=140*std::pow(request.entrySpeed/65,2);request.crossingOffset=18;
+    request.entry=makeFvdEntry(port,request.entrySpeed,request.rollingAcceleration,request.dragAccelerationCoefficient);
+    const auto nearby=designFvdLoop(request);good(nearby.section);samePort(nearby.section.track.knots.front(),port);
+    for(size_t i=1;i<nearby.authoring.controls.size();++i)check(nearby.authoring.controls[i].time-nearby.authoring.controls[i-1].time>=.001,
+        "Optional crossing controls preserve required spacing at a nearby inherited speed");
+    int polls=0;check(designFvdLoop(request,[&]{return ++polls>10;}).section.cancelled,"Signed crossing shooting preserves cancellation");
+}
 void loopPlaneYaw(const FvdHillResult& loop,double entryYaw,double requestedYaw){
     good(loop.section);const auto& samples=loop.section.samples;double planeYaw=entryYaw,integral=0,previousOmega=0;
     double minimumSignedOmega=INFINITY,maximumOmega=0;bool ascendingVertical=false,descendingVertical=false,inverted=false;
@@ -177,6 +276,7 @@ int main(int argc,char** argv){try{
     const auto connectedLoop=designFvdLoop(fromWave);good(connectedLoop.section);samePort(connectedLoop.section.track.knots.front(),fromWave.entry->jet);
     const double waveYaw=std::atan2(fromWave.entry->jet.tangent.y,fromWave.entry->jet.tangent.x);
     loopPlaneYaw(connectedLoop,waveYaw,fromWave.yawAngle);
+    signedLoopCrossing();
     FvdImmelmannRequest immelmann;immelmann.rollingAcceleration=prefix.rollingAcceleration;immelmann.dragAccelerationCoefficient=prefix.dragAccelerationCoefficient;
     immelmann.entry=makeFvdEntry(placed,immelmann.entrySpeed,immelmann.rollingAcceleration,immelmann.dragAccelerationCoefficient);
     const auto inverted=designFvdImmelmann(immelmann);good(inverted.section);samePort(inverted.section.track.knots.front(),placed);

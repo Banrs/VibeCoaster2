@@ -91,6 +91,7 @@ struct FvdLoopRequest {
     double ascentReleaseSeconds{}; // Optional prescribed unload followed by a solved crown hold.
     double exitPositiveG{}; // Zero inherits normalG; otherwise prescribe the descending recovery load.
     double exitPitch{},exitNormalG{1.5},rollingAcceleration{},dragAccelerationCoefficient{};
+    double crossingOffset{}; // Nonzero: signed low-arm gap in metres, positive entry-frame left; parallel exit replaces yawAngle.
 };
 // Upright entry, explicit unloaded inverted crest and real lateral/yaw motion.
 // Apex height and the final frame are solved; final XYZ placement remains free.
@@ -127,6 +128,7 @@ struct FvdImmelmannRequest {
     double ascentReleaseSeconds{}; // Zero solves the unload; otherwise solve a crown hold after this release.
     double exitPositiveG{}; // Zero inherits normalG; descending valley can carry a different peak.
     int hand{1};double step{.0025},rollingAcceleration{},dragAccelerationCoefficient{};
+    bool planarRoll{}; // Resolve the half-roll load in both rider axes to preserve the entry vertical plane.
 };
 struct FvdImmelmannResult {
     FvdRequest authoring;FvdResult section;

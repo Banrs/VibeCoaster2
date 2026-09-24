@@ -1,5 +1,7 @@
 # Riftwake Default 3 geometry checkpoint
 
+**Reopened by user review on 25 September 2026:** This is a measured numerical checkpoint. Its clifftop flow/density, brake pacing, inversion lateral shape, and terrain fit were rejected; those requirements remain active in the completion audit.
+
 The native default ride is accepted with seven two-seat row modules (14 riders), a 181.961458 s duration, and the retained 0–180 km/h launch in 1.397 s. Seed 42 accepts on candidate 0; nearby seed 43 accepts on candidate 1 at 181.390625 s using normal defaults.
 
 ## Geometry and dynamics

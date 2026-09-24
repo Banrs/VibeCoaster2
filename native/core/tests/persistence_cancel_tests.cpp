@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <condition_variable>
 #include <future>
+#include <atomic>
 #include <mutex>
 #include <sstream>
 #include <iomanip>
@@ -35,6 +36,10 @@ int main(int argc,char** argv){try{
  // Learn the final checkpoints from a successful control. Inspect the actual
  // temporary at the final callback, without scanning disk during every physics step.
  int totalCalls=0;const bool initialSaved=saveDesign(d,dest.string(),error,[&]{++totalCalls;return false;});if(!initialSaved)std::cerr<<error<<"\n";check(initialSaved,"Uncancelled save commits");
+ Design retained=d;std::atomic<bool> stop=false;
+ const bool loaded=loadDesign(dest.string(),retained,error,[&]{return stop.load();},[&](const WorkProgress& step){if(step.phase==WorkPhase::Geometry)stop.store(true);});
+ check(!loaded&&error.find("CANCELLED")!=std::string::npos,"Cancelled load cannot accept a partial refined replay");
+ check(retained.accepted()&&reportJson(retained)==reportJson(d),"Cancelled load preserves the previous accepted design");
  const auto committed=read(dest);check(committed.rfind("COASTER 6 ",0)==0,"Committed save retains COASTER6 format");check(totalCalls>=2,"Both final checkpoints were polled");
  // This targets the real late boundary without sleeps or thread scheduling.
  write(dest,sentinel);write(other,unrelated);fs::remove(tmp);bool sawTemp=false;int lateCalls=0;

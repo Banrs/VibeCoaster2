@@ -212,10 +212,10 @@ struct Stage {Quaternion dq;Vec3 dp;double dv{},ds{},workRate{},driveRate{};};
 // The smooth off-manifold extension uses normalized q for the rotation but
 // raw q in qdot=1/2*(0,omega)*q. Final normalization restores SO(3), removing
 // the quaternion norm truncation error without changing fourth-order accuracy.
-State rk4Advance(const State& start,const FvdRequest& r,double time,double dt){
+template<class ControlAt> State rk4Advance(const State& start,const FvdRequest& r,double time,double dt,const ControlAt& inputAt){
     const auto stage=[&](Quaternion q,double velocity,double at){
         State state=start;state.t=turned(start.t,q);state.u=turned(start.u,q);state.v=velocity;
-        const auto input=control(r,at);const auto d=derivative(state,input,r);
+        const auto input=inputAt(state,at);const auto d=derivative(state,input,r);
         require(norm(d.omega)*dt<=.1,"FVD_RESOLUTION","FVD angular step exceeds .1 rad; use a smaller step");
         Quaternion dq{-dot(d.omega,q.v)*.5,(d.omega*q.w+cross(d.omega,q.v))*.5};
         return Stage{dq,state.t*velocity,d.dv,velocity,loss(r,velocity)*velocity,input.drive*velocity};
@@ -235,22 +235,25 @@ State rk4Advance(const State& start,const FvdRequest& r,double time,double dt){
     out.t=unit(turned(start.t,rotation));out.u=turned(start.u,rotation);
     out.u=unit(out.u-out.t*dot(out.t,out.u));
     require(finite(out.p)&&norm(out.p)<=100000,"FVD_POSITION","FVD section left the bounded position domain");
-    derivative(out,control(r,time+dt),r);return out;
+    derivative(out,inputAt(out,time+dt),r);return out;
 }
 // Position errors from a fourth-order step are amplified by the fourth
 // derivative of the canonical Hermite span. Step doubling cancels that leading
 // local error before the exact ODE endpoint jets are used for reconstruction.
-State advance(const State& start,const FvdRequest& r,double time,double dt){
-    const auto full=rk4Advance(start,r,time,dt);
-    const auto first=rk4Advance(start,r,time,dt*.5);
-    const auto half=rk4Advance(first,r,time+dt*.5,dt*.5);
+template<class ControlAt> State advance(const State& start,const FvdRequest& r,double time,double dt,const ControlAt& inputAt){
+    const auto full=rk4Advance(start,r,time,dt,inputAt);
+    const auto first=rk4Advance(start,r,time,dt*.5,inputAt);
+    const auto half=rk4Advance(first,r,time+dt*.5,dt*.5,inputAt);
     State out=half;
     out.p=half.p+(half.p-full.p)/15;
     out.t=unit(half.t+(half.t-full.t)/15);
     out.u=half.u+(half.u-full.u)/15;out.u=unit(out.u-out.t*dot(out.t,out.u));
     out.v+=(half.v-full.v)/15;out.s+=(half.s-full.s)/15;
     out.work+=(half.work-full.work)/15;out.drivenWork+=(half.drivenWork-full.drivenWork)/15;
-    derivative(out,control(r,time+dt),r);return out;
+    derivative(out,inputAt(out,time+dt),r);return out;
+}
+State advance(const State& start,const FvdRequest& r,double time,double dt){
+    return advance(start,r,time,dt,[&](const State&,double at){return control(r,at);});
 }
 
 FvdSample sample(const State& state,const FvdRequest& r,double time){
@@ -629,6 +632,119 @@ FvdHillResult designFvdWave(const FvdWaveRequest& input,Cancel cancel){
 }
 
 namespace {
+// A positive lateral tangent angle moves toward entry-frame left even while
+// the loop points backward. Rotating the whole vertical plane does not have
+// that property. Author the actual rider forces and tangent twist required by
+// t=cos(phi)(cos(theta)H+sin(theta)Z)+sin(phi)L, u=-sin(theta)H+cos(theta)Z.
+FvdHillResult loopWithCrossing(const FvdLoopRequest& input,Cancel cancel){
+    FvdHillResult out;auto& base=out.authoring;base.position={};base.speed=input.entrySpeed;base.step=.0025;
+    base.rollingAcceleration=input.rollingAcceleration;base.dragAccelerationCoefficient=input.dragAccelerationCoefficient;
+    const auto initial=initializeEntry(base,input.entry,{0,1,0,0});
+    const Vec3 horizontal=unit(Vec3{base.forward.x,base.forward.y,0}),left{-horizontal.y,horizontal.x,0};
+    const double startHeight=base.position.z,startPitch=std::atan2(base.forward.z,dot(base.forward,horizontal));
+    bool planar=bounded(startPitch,-1e-7,pi/3)&&norm(base.up-(horizontal*(-std::sin(startPitch))+Vec3{0,0,std::cos(startPitch)}))<1e-7;
+    for(int channel:{1,2})planar&=std::abs(channel==1?initial.lateralG:initial.rollRate)<1e-7&&
+        std::abs(initial.first[channel])<1e-7&&std::abs(initial.second[channel])<1e-7;
+    require(planar,"FVD_LOOP_ENTRY_FAMILY","A signed crossing requires an upright planar inherited port; lateral/twist jets cannot be reset");
+    using Parameters=std::array<double,7>;
+    struct Shot {FvdRequest request;State apex,exit,a,b;double apexTime{},aTime{},bTime{},steerEnd{},amplitude{};};
+    auto steering=[&](const FvdRequest& r,const State& state,double time,double end,double amplitude){
+        auto c=sampleFvdControl(r.controls,time);constexpr double begin=1.2;
+        const double duration=end-begin,u=std::clamp((time-begin)/duration,0.,1.);
+        // The nonnegative bump and its first three derivatives vanish at both
+        // ends, preserving all inherited force/frame jets and parallel arms.
+        const std::array<double,9> polynomial{0,0,0,0,256,-1024,1536,-1024,256};
+        double phi=polynomial[8],pd=0,pdd=0,pddd=0;
+        for(int i=7;i>=0;--i){pddd=pddd*u+3*pdd;pdd=pdd*u+2*pd;pd=pd*u+phi;phi=phi*u+polynomial[i];}
+        phi*=amplitude;pd*=amplitude/duration;pdd*=amplitude/(duration*duration);pddd*=amplitude/(duration*duration*duration);
+        const double sp=std::sin(phi),cp=std::cos(phi),sn=-dot(state.u,horizontal),cs=state.u.z,v=state.v;
+        const double td=gravity*(c.normalG-cs)/(v*cp),vd=c.drive-gravity*cp*sn-loss(r,v);
+        const double vdd=c.first[3]+gravity*(sp*pd*sn-cp*cs*td)-2*r.dragAccelerationCoefficient*v*vd;
+        const double factor=-vd/v+std::tan(phi)*pd,nd=c.first[0]+sn*td;
+        const double tdd=gravity*nd/(v*cp)+td*factor,ndd=c.second[0]+cs*td*td+sn*tdd;
+        const double factord=-vdd/v+vd*vd/(v*v)+pd*pd/(cp*cp)+std::tan(phi)*pdd;
+        const double tddd=gravity*ndd/(v*cp)+2*gravity*nd*factor/(v*cp)+td*(factor*factor+factord);
+        c.lateralG=sp*sn-v*pd/gravity;
+        c.first[1]=cp*pd*sn+sp*cs*td-(vd*pd+v*pdd)/gravity;
+        c.second[1]=(cp*pdd-sp*pd*pd)*sn+2*cp*pd*cs*td+sp*(cs*tdd-sn*td*td)-(vdd*pd+2*vd*pdd+v*pddd)/gravity;
+        c.rollRate=-td*sp;c.first[2]=-tdd*sp-td*cp*pd;
+        c.second[2]=-tddd*sp-2*tdd*cp*pd-td*(cp*pdd-sp*pd*pd);
+        return c;
+    };
+    auto shot=[&](const Parameters& p){
+        poll(cancel);Shot s;auto& r=s.request;r=base;constexpr double ramp=1.2,release=1.2;
+        const double peak=ramp+p[0],top=peak+p[1]+input.ascentReleaseSeconds,loaded=top+p[2],unload=loaded+p[3],end=unload+release;
+        const double recovery=input.exitPositiveG==0?input.normalG:input.exitPositiveG;
+        r.controls={initial,{ramp,input.normalG,0,0},{peak,input.normalG,0,0},{top,input.crestG,0,0},
+            {loaded,recovery,0,0},{unload,recovery,0,0},{end,input.exitNormalG,0,0}};
+        if(input.ascentReleaseSeconds>0)r.controls.insert(r.controls.begin()+3,{peak+input.ascentReleaseSeconds,input.crestG,0,0});
+        validate(r);s.steerEnd=loaded;s.amplitude=p[4];s.apexTime=top;s.aTime=top*p[5];s.bTime=top+(end-top)*p[6];
+        std::vector<double> times;for(const auto& c:r.controls)times.push_back(c.time);
+        times.push_back(s.aTime);times.push_back(s.bTime);std::sort(times.begin(),times.end());
+        State state{r.position,r.forward,r.up,r.speed,0};
+        const auto inputAt=[&](const State& q,double time){return steering(r,q,time,loaded,p[4]);};
+        for(size_t i=1;i<times.size();++i){const double begin=times[i-1],stop=times[i],duration=stop-begin;if(duration==0)continue;
+            const int count=std::max(3,int(std::ceil(duration/.005)));const double dt=duration/count;
+            for(int j=0;j<count;++j){poll(cancel);state=advance(state,r,begin+j*dt,dt,inputAt);}
+            if(stop==top)s.apex=state;if(stop==s.aTime)s.a=state;if(stop==s.bTime)s.b=state;
+        }
+        s.exit=state;return s;
+    };
+    const double scale=std::sqrt(input.height/73.),hand=std::copysign(1.,input.crossingOffset);
+    Parameters parameters{1.4*scale,1.5*scale,1.7*scale,1.25*scale,.14*input.crossingOffset/18,.3,.7};
+    const std::array<std::pair<double,double>,7> bounds{{{.01,8},{input.ascentReleaseSeconds>0?.001:.1,12},{.1,12},{.01,8},
+        {hand>0?0:-.4,hand>0?.4:0},{.05,.6},{.4,.95}}};
+    require(shootParameters(parameters,bounds,[&](const Parameters& p){const auto q=shot(p);
+        return Parameters{(q.apex.p.z-startHeight-input.height)/input.height,q.apex.t.z,
+            (q.exit.p.z-startHeight)/input.height,q.exit.t.z-std::sin(input.exitPitch),
+            dot(q.b.p-q.a.p,horizontal)/input.height,(q.b.p.z-q.a.p.z)/input.height,
+            (dot(q.b.p-q.a.p,left)-input.crossingOffset)/input.height};}),
+        "FVD_LOOP_SHOOT","Signed loop crossing cannot close its actual apex, exit and low arms within bounded force phases");
+    auto solved=shot(parameters);const auto normalSource=solved.request;out.authoring=normalSource;
+    std::vector<double> times;for(const auto& c:normalSource.controls)times.push_back(c.time);
+    // Retain force phases and both solved crossing witnesses in the ordinary
+    // saved controls. Fresh source replay, below, must reproduce every target.
+    times.push_back(solved.aTime);times.push_back(solved.bTime);
+    std::sort(times.begin(),times.end());times.erase(std::unique(times.begin(),times.end()),times.end());
+    std::vector<double> refined{times.front()};
+    for(size_t i=1;i<times.size();++i){const double begin=times[i-1],end=times[i];
+        const int count=std::max(1,int(std::ceil((end-begin)/times.back()*118)));
+        for(int j=1;j<=count;++j)refined.push_back(j==count?end:begin+(end-begin)*j/count);
+    }
+    times=std::move(refined);
+    State state{normalSource.position,normalSource.forward,normalSource.up,normalSource.speed,0};
+    out.authoring.controls.clear();out.authoring.controls.push_back(initial);
+    const auto inputAt=[&](const State& q,double time){return steering(normalSource,q,time,solved.steerEnd,solved.amplitude);};
+    for(size_t i=1;i<times.size();++i){const double begin=times[i-1],duration=times[i]-begin;const int count=std::max(1,int(std::ceil(duration/base.step)));const double dt=duration/count;
+        for(int j=0;j<count;++j){poll(cancel);state=advance(state,normalSource,begin+j*dt,dt,inputAt);}
+        out.authoring.controls.push_back(inputAt(state,times[i]));
+    }
+    require(out.authoring.controls.size()<=128,"FVD_LOOP_BUDGET","Signed loop crossing exceeds the persisted control budget");
+    out.section=designFvdSection(out.authoring,cancel);requireInheritedPort(out.section,input.entry);
+    if(!out.section.assessment.passed)return out;
+    const auto at=[&](double time)->const FvdSample&{
+        const auto it=std::lower_bound(out.section.samples.begin(),out.section.samples.end(),time,[](const auto& q,double t){return q.time<t;});
+        require(it!=out.section.samples.end()&&std::abs(it->time-time)<1e-9,"FVD_LOOP_CROSSING","Solved crossing witness is absent from source replay");return *it;
+    };
+    const auto& a=at(solved.aTime);const auto& b=at(solved.bTime);const auto& apex=at(solved.apexTime);const auto& end=out.section.samples.back();
+    require(norm(b.position-a.position-left*input.crossingOffset)<1e-5&&a.forward.z>0&&b.forward.z<0&&
+        a.position.z>startHeight&&a.position.z<startHeight+input.height*.5,
+        "FVD_LOOP_CROSSING","Independent replay missed the signed low-arm crossing");
+    require(std::abs(apex.position.z-startHeight-input.height)<1e-4&&std::abs(apex.forward.z)<1e-6&&dot(apex.forward,horizontal)<-.5&&apex.up.z<-.9&&
+        std::abs(end.position.z-startHeight)<1e-4&&std::abs(end.forward.z-std::sin(input.exitPitch))<1e-6&&dot(end.forward,horizontal)>.9&&
+        std::abs(dot(end.forward,left))<1e-6&&norm(end.up-(horizontal*(-std::sin(input.exitPitch))+Vec3{0,0,std::cos(input.exitPitch)}))<1e-6,
+        "FVD_LOOP_FRAME","Independent crossing replay missed its apex or parallel upright exit");
+    double turn=startPitch,previousLeft=0;
+    for(const auto& q:out.section.samples){poll(cancel);const double lateral=dot(q.position-normalSource.position,left)*hand;
+        const double delta=std::remainder(std::atan2(q.forward.z,dot(q.forward,horizontal))-turn,2*pi);turn+=delta;
+        require(delta>=-1e-7&&turn<=2*pi+input.exitPitch+1e-6&&q.position.z<=startHeight+input.height+1e-4&&
+            (q.time>solved.apexTime||q.forward.z>=-1e-6)&&dot(q.forward,left)*hand>=-1e-7&&lateral>=previousLeft-1e-7,
+            "FVD_LOOP_SHAPE","Signed crossing reversed its lateral travel or left its single loop winding");previousLeft=lateral;
+    }
+    require(std::abs(turn-(2*pi+input.exitPitch))<1e-6&&out.section.assessment.maxEnergyDrift<1e-5,
+        "FVD_LOOP_ENERGY","Signed crossing winding or actual mechanical-energy balance did not close");
+    return out;
+}
 FvdHillResult inheritedLoopWithPlaneYaw(const FvdLoopRequest& input,Cancel cancel){
     FvdHillResult out;auto& r=out.authoring;
     r.step=.0025;r.rollingAcceleration=input.rollingAcceleration;r.dragAccelerationCoefficient=input.dragAccelerationCoefficient;
@@ -745,7 +861,8 @@ FvdHillResult designFvdLoop(const FvdLoopRequest& input,Cancel cancel){
         const double entrySpeed=input.entry?input.entry->speed:input.entrySpeed;
         require(bounded(entrySpeed,45,80)&&bounded(input.height,50,220)&&input.height<entrySpeed*entrySpeed/(2*gravity)&&
             (input.ascentReleaseSeconds==0||bounded(input.ascentReleaseSeconds,.4,3))&&bounded(input.normalG,2.5,5)&&(input.exitPositiveG==0||bounded(input.exitPositiveG,2.5,5))&&bounded(input.crestG,.7,3)&&bounded(input.yawAngle,-.8,.8)&&
-            bounded(input.exitPitch,0,.2)&&bounded(input.exitNormalG,1,3),"FVD_LOOP_INPUT","Loop intent left its bounded force-authoring domain");
+            bounded(input.exitPitch,0,.2)&&bounded(input.exitNormalG,1,3)&&bounded(input.crossingOffset,-100,100),"FVD_LOOP_INPUT","Loop intent left its bounded force-authoring domain");
+        if(input.crossingOffset!=0)return loopWithCrossing(input,cancel);
         if(input.entry)return inheritedLoopWithPlaneYaw(input,cancel);
         auto& r=out.authoring;r.position={};r.speed=input.entrySpeed;r.step=.0025;
         r.rollingAcceleration=input.rollingAcceleration;r.dragAccelerationCoefficient=input.dragAccelerationCoefficient;
@@ -978,13 +1095,20 @@ FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest& input,Cancel ca
         require(bounded(entrySpeed,45,80)&&bounded(input.height,75,180)&&bounded(input.exitHeight,-180,40)&&
             input.exitHeight<input.height&&bounded(input.exitPitch,-.3,0)&&bounded(input.exitNormalG,.8,4)&&bounded(input.normalG,3,5.5)&&(input.exitPositiveG==0||bounded(input.exitPositiveG,3,5.5))&&bounded(input.crestG,.05,4)&&
             bounded(input.rollExitG,.05,3.5)&&bounded(input.rampSeconds,.8,2)&&bounded(exitRamp,.8,2)&&bounded(input.rollOverlapFraction,0,.6)&&
-            bounded(input.yawAngle,-1.4,1.4)&&(input.yawAngle==0||input.rollOverlapFraction==0)&&bounded(input.rollReleaseFraction,0,.6)&&
+            bounded(input.yawAngle,-1.4,1.4)&&(input.yawAngle==0||input.rollOverlapFraction==0)&&(!input.planarRoll||input.yawAngle==0)&&bounded(input.rollReleaseFraction,0,.6)&&
             (input.ascentReleaseSeconds==0||(bounded(input.ascentReleaseSeconds,.4,3)&&input.rollOverlapFraction==0))&&
             (input.hand==1||input.hand==-1)&&bounded(input.step,.0001,.05),"FVD_IMMELMANN_INPUT","Immelmann intent left its bounded authoring family");
         auto& r=out.authoring;r.position={0,0,0};r.speed=input.entrySpeed;r.step=input.step;
         r.rollingAcceleration=input.rollingAcceleration;r.dragAccelerationCoefficient=input.dragAccelerationCoefficient;
         const auto initial=initializeEntry(r,input.entry,{0,1,0,0});
         const double startHeight=r.position.z;const auto horizontal=unit(Vec3{r.forward.x,r.forward.y,0});
+        if(input.planarRoll){
+            const auto upright=unit(Vec3{0,0,1}-r.forward*r.forward.z);
+            bool planar=norm(r.up-upright)<1e-7;
+            for(int channel:{1,2})planar&=std::abs(channel==1?initial.lateralG:initial.rollRate)<1e-7&&
+                std::abs(initial.first[channel])<1e-7&&std::abs(initial.second[channel])<1e-7;
+            require(planar,"FVD_IMMELMANN_ENTRY_FAMILY","Planar half-roll requires an upright planar entry without resetting lateral/twist jets");
+        }
         validate(r);
         using Parameters=std::array<double,5>;
         // Unknowns: peak hold, apex unload (or crown hold), roll duration, physical twist and
@@ -1020,12 +1144,38 @@ FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest& input,Cancel ca
             }),times.end());
             for(size_t i=1;i<times.size();++i)require(times[i]-times[i-1]>=.001,
                 "FVD_IMMELMANN_KNOT_SPACING","Merged force and roll phases must retain at least 0.001 s between distinct controls");
+            if(input.planarRoll){
+                std::vector<double> refined{times.front()};
+                for(size_t i=1;i<times.size();++i){const double begin=times[i-1],end=times[i];
+                    const int count=begin>=rollBegin&&end<=rollEnd?std::max(1,int(std::ceil((end-begin)/(rollEnd-rollBegin)*96))):1;
+                    for(int j=1;j<=count;++j)refined.push_back(j==count?end:begin+(end-begin)*j/count);
+                }
+                times=std::move(refined);
+            }
             r.controls.clear();r.twists.clear();
             for(double time:times){auto c=sampleFvdControl(force,time);
                 if(time>=rollBegin&&time<=rollEnd){const auto spin=sampleFvdControl(roll,time);
                     c.rollRate+=spin.rollRate;c.first[2]+=spin.first[2];c.second[2]+=spin.second[2];}
+                if(input.planarRoll&&time>=rollBegin){
+                    // Exact integral of the smooth rate ramps above. With
+                    // roll phi, Z=B*cos(phi)^2 and Gy=-B*sin(phi)*cos(phi)
+                    // retain a vertical-plane resultant while the rider turns.
+                    const auto integral=[](double u){return u*u*u*u*(2.5+u*(-3+u));};
+                    double angle=rate*(rollEnd-rollBegin-ramp);
+                    if(time<rollBegin+ramp)angle=rate*ramp*integral((time-rollBegin)/ramp);
+                    else if(time<rollEnd-ramp)angle=rate*(time-rollBegin-ramp*.5);
+                    else if(time<rollEnd){const double elapsed=time-(rollEnd-ramp);
+                        angle=rate*(rollEnd-rollBegin-1.5*ramp+elapsed-ramp*integral(elapsed/ramp));}
+                    const double sn=std::sin(angle),cs=std::cos(angle),w=c.rollRate,a=c.first[2];
+                    const double b=c.normalG,bd=c.first[0],bdd=c.second[0],difference=cs*cs-sn*sn;
+                    c.normalG=b*cs*cs;c.first[0]=bd*cs*cs-2*b*sn*cs*w;
+                    c.second[0]=bdd*cs*cs-4*bd*sn*cs*w-2*b*difference*w*w-2*b*sn*cs*a;
+                    c.lateralG=-b*sn*cs;c.first[1]=-bd*sn*cs-b*difference*w;
+                    c.second[1]=-bdd*sn*cs-2*bd*difference*w+4*b*sn*cs*w*w-b*difference*a;
+                }
                 r.controls.push_back(c);
             }
+            require(!input.planarRoll||r.controls.size()<=128,"FVD_IMMELMANN_BUDGET","Planar half-roll exceeds the persisted control budget");
         };
         const auto shoot=[&](const Parameters& p,bool apexOnly=false){
             controls(p);const double apexTime=apexAt(p),rollTime=apexTime+p[2];State state{r.position,r.forward,r.up,r.speed,0};Shot result;result.minimumZ=startHeight+input.height;
@@ -1099,6 +1249,9 @@ FvdImmelmannResult designFvdImmelmann(const FvdImmelmannRequest& input,Cancel ca
             require(q.position.z>=startHeight+std::min(0.,input.exitHeight)-1e-5&&
                 (q.time>apexTime+1e-8?q.position.z<=previousHeight+1e-5:q.position.z>=previousHeight-1e-5),
                 "FVD_IMMELMANN_SHAPE","Integrated Immelmann left its single ascending-then-descending height domain");
+            if(input.planarRoll){const Vec3 left{-horizontal.y,horizontal.x,0};
+                require(std::abs(dot(q.position-r.position,left))<1e-5&&std::abs(dot(q.forward,left))<1e-6,
+                    "FVD_IMMELMANN_PLANE","Independent half-roll replay acquired unintended lateral displacement or heading");}
             previousHeight=q.position.z;
         }
         out.exit=out.section.samples.back();

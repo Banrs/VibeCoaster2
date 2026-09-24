@@ -31,6 +31,7 @@ public:
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Supports;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> LSMHardware;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> BrakeHardware;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> LeadCars;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Cars;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationSteel;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationConcrete;
@@ -38,6 +39,18 @@ public:
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> PlatformEnds;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> RoofPanels;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationPosts;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationQueueDecks;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationRouteRoofs;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationMergeDecks;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationHoldingLanes;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationBoardingGates;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationDispatchCabins;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationUnloadDecks;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationExitWalkways;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationLifts;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationStairs;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationUnderpasses;
+    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationQueueRails;
     UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> Chunks;
 };
 
@@ -82,8 +95,6 @@ private:
     UPROPERTY() TObjectPtr<UMaterialInterface> GroundMaterial;
     UPROPERTY() TObjectPtr<UMaterialInterface> StructureMaterial;
     UPROPERTY() TObjectPtr<UMaterialInterface> FootingMaterial;
-    UPROPERTY() TObjectPtr<UMaterialInterface> LSMMaterial;
-    UPROPERTY() TObjectPtr<UMaterialInterface> BrakeMaterial;
     void StartQueuedJob();
     void PollJob();
     void CommitChunks();

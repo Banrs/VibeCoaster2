@@ -117,6 +117,7 @@ struct FCoasterRuntime
     coaster::ComparisonHistory Comparisons;
     TArray<FString> ComparisonLines;
     TArray<FTransform> CarTransforms;
+    TArray<FTransform> PassengerCarTransforms;
     TArray<VibeMesh::FTrimFin> TrimFins;
     bool TrainPoseDirty = true, CameraPoseDirty = true;
     double PresentedDistance = -1;
@@ -139,6 +140,7 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     Supports = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Supports"));
     LSMHardware = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LSMHardware"));
     BrakeHardware = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("BrakeHardware"));
+    LeadCars = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LeadCar"));
     Cars = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Train"));
     StationSteel = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationSteel"));
     StationConcrete = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationConcrete"));
@@ -146,20 +148,59 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     PlatformEnds = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("PlatformEnds"));
     RoofPanels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("RoofPanels"));
     StationPosts = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationPosts"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrainCar(TEXT("/Game/Art/V072/Import1/SM_TrainCar.SM_TrainCar"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrackTie(TEXT("/Game/Art/V072/TrackWeb1/SM_TrackTieWeb.SM_TrackTieWeb"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> Platform(TEXT("/Game/Art/V072/Import1/SM_StationPlatformPanel.SM_StationPlatformPanel"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformEnd(TEXT("/Game/Art/V072/Import1/SM_StationPlatformEndPanel.SM_StationPlatformEndPanel"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> Roof(TEXT("/Game/Art/V072/Import1/SM_StationRoofPanel.SM_StationRoofPanel"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> Post(TEXT("/Game/Art/V072/Import1/SM_StationPost.SM_StationPost"));
+    StationQueueDecks = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationQueueDecks"));
+    StationRouteRoofs = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationRouteRoofs"));
+    StationMergeDecks = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationMergeDecks"));
+    StationHoldingLanes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationHoldingLanes"));
+    StationBoardingGates = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationBoardingGates"));
+    StationDispatchCabins = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationDispatchCabins"));
+    StationUnloadDecks = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationUnloadDecks"));
+    StationExitWalkways = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationExitWalkways"));
+    StationLifts = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationLifts"));
+    StationStairs = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationStairs"));
+    StationUnderpasses = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationUnderpasses"));
+    StationQueueRails = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationQueueRails"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> LeadCar(TEXT("/Game/Art/V3/SM_LeadCar.SM_LeadCar"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrainCar(TEXT("/Game/Art/V3/SM_TrainCar.SM_TrainCar"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrackTie(TEXT("/Game/Art/V3/SM_TrackTieWeb.SM_TrackTieWeb"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Platform(TEXT("/Game/Art/V3/SM_StationPlatformPanel.SM_StationPlatformPanel"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformEnd(TEXT("/Game/Art/V3/SM_StationPlatformEndPanel.SM_StationPlatformEndPanel"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Roof(TEXT("/Game/Art/V3/SM_StationRoofPanel.SM_StationRoofPanel"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Post(TEXT("/Game/Art/V3/SM_StationPost.SM_StationPost"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> QueueDeck(TEXT("/Game/Art/V3/SM_StationQueueDeck.SM_StationQueueDeck"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> RouteRoof(TEXT("/Game/Art/V3/SM_StationRouteRoof.SM_StationRouteRoof"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> MergeDeck(TEXT("/Game/Art/V3/SM_StationMergeDeck.SM_StationMergeDeck"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> HoldingLane(TEXT("/Game/Art/V3/SM_StationHoldingLane.SM_StationHoldingLane"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> BoardingGate(TEXT("/Game/Art/V3/SM_StationBoardingGate.SM_StationBoardingGate"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> DispatchCabin(TEXT("/Game/Art/V3/SM_StationDispatchCabin.SM_StationDispatchCabin"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> UnloadDeck(TEXT("/Game/Art/V3/SM_StationUnloadDeck.SM_StationUnloadDeck"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> ExitWalkway(TEXT("/Game/Art/V3/SM_StationExitWalkway.SM_StationExitWalkway"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Lift(TEXT("/Game/Art/V3/SM_StationLift.SM_StationLift"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Stair(TEXT("/Game/Art/V3/SM_StationStair.SM_StationStair"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Underpass(TEXT("/Game/Art/V3/SM_StationUnderpass.SM_StationUnderpass"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> QueueRail(TEXT("/Game/Art/V3/SM_StationQueueRail.SM_StationQueueRail"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-    Ties->SetStaticMesh(TrackTie.Object); Supports->SetStaticMesh(Cylinder.Object); Cars->SetStaticMesh(TrainCar.Object);
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> LSMStator(TEXT("/Game/Art/V3/SM_LSMStator.SM_LSMStator"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> BrakeFin(TEXT("/Game/Art/V3/SM_BrakeFin.SM_BrakeFin"));
+    Ties->SetStaticMesh(TrackTie.Object); Supports->SetStaticMesh(Cylinder.Object); LeadCars->SetStaticMesh(LeadCar.Object); Cars->SetStaticMesh(TrainCar.Object);
     PlatformPanels->SetStaticMesh(Platform.Object); PlatformEnds->SetStaticMesh(PlatformEnd.Object);
     RoofPanels->SetStaticMesh(Roof.Object); StationPosts->SetStaticMesh(Post.Object);
+    StationQueueDecks->SetStaticMesh(QueueDeck.Object);
+    StationRouteRoofs->SetStaticMesh(RouteRoof.Object);
+    StationMergeDecks->SetStaticMesh(MergeDeck.Object);
+    StationHoldingLanes->SetStaticMesh(HoldingLane.Object);
+    StationBoardingGates->SetStaticMesh(BoardingGate.Object);
+    StationDispatchCabins->SetStaticMesh(DispatchCabin.Object);
+    StationUnloadDecks->SetStaticMesh(UnloadDeck.Object);
+    StationExitWalkways->SetStaticMesh(ExitWalkway.Object);
+    StationLifts->SetStaticMesh(Lift.Object);
+    StationStairs->SetStaticMesh(Stair.Object);
+    StationUnderpasses->SetStaticMesh(Underpass.Object);
+    StationQueueRails->SetStaticMesh(QueueRail.Object);
     StationSteel->SetStaticMesh(Cube.Object); StationConcrete->SetStaticMesh(Cube.Object);
-    LSMHardware->SetStaticMesh(Cube.Object); BrakeHardware->SetStaticMesh(Cube.Object);
-    for (auto* Component : {Ties.Get(), Supports.Get(), LSMHardware.Get(), BrakeHardware.Get(), Cars.Get(), StationSteel.Get(), StationConcrete.Get(), PlatformPanels.Get(), PlatformEnds.Get(), RoofPanels.Get(), StationPosts.Get()})
+    LSMHardware->SetStaticMesh(LSMStator.Object); BrakeHardware->SetStaticMesh(BrakeFin.Object);
+    for (auto* Component : {Ties.Get(), Supports.Get(), LSMHardware.Get(), BrakeHardware.Get(), LeadCars.Get(), Cars.Get(), StationSteel.Get(), StationConcrete.Get(), PlatformPanels.Get(), PlatformEnds.Get(), RoofPanels.Get(), StationPosts.Get(), StationQueueDecks.Get(), StationRouteRoofs.Get(), StationMergeDecks.Get(), StationHoldingLanes.Get(), StationBoardingGates.Get(), StationDispatchCabins.Get(), StationUnloadDecks.Get(), StationExitWalkways.Get(), StationLifts.Get(), StationStairs.Get(), StationUnderpasses.Get(), StationQueueRails.Get()})
     {
         Component->SetupAttachment(RootComponent);
         Component->SetMobility(EComponentMobility::Movable);
@@ -176,33 +217,32 @@ AVibeCoasterWorld::~AVibeCoasterWorld() = default;
 void AVibeCoasterWorld::BeginPlay()
 {
     Super::BeginPlay();
-    RailMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Rail.M_Rail"));
+    RailMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Art/V3/Materials/M_VC2_Petrol.M_VC2_Petrol"));
     GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Ground_Highlands.M_Ground_Highlands"));
-    StructureMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Structure.M_Structure"));
-    FootingMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Footing.M_Footing"));
-    LSMMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_LSM.M_LSM"));
-    BrakeMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Brake.M_Brake"));
+    StructureMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Art/V3/Materials/M_VC2_Steel.M_VC2_Steel"));
+    FootingMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Art/V3/Materials/M_VC2_Concrete.M_VC2_Concrete"));
     Camera = GetWorld()->SpawnActor<ACameraActor>();
     Camera->SetActorLocationAndRotation(FVector(-6000, 3000, 2500), FRotator(-12, -25, 0));
     Camera->GetCameraComponent()->SetFieldOfView(82);
     auto* Sun = GetWorld()->SpawnActor<ADirectionalLight>();
-    Sun->SetActorRotation(FRotator(-35, -35, 0));
+    Sun->SetActorRotation(FRotator(-30, -35, 0));
     auto* SunComponent = Cast<UDirectionalLightComponent>(Sun->GetLightComponent());
     SunComponent->SetMobility(EComponentMobility::Movable);
-    SunComponent->SetIntensity(6.f);
-    SunComponent->SetLightColor(FLinearColor(1.f, .92f, .8f));
+    SunComponent->SetIntensity(7.f);
+    SunComponent->SetLightColor(FLinearColor(1.f, .88f, .72f));
     SunComponent->bAtmosphereSunLight = true;
     SunComponent->MarkRenderStateDirty();
     GetWorld()->SpawnActor<ASkyAtmosphere>();
     auto* Sky = GetWorld()->SpawnActor<ASkyLight>();
     Sky->GetLightComponent()->SetMobility(EComponentMobility::Movable);
-    Sky->GetLightComponent()->SetIntensity(.65f);
+    Sky->GetLightComponent()->SetIntensity(.8f);
+    Sky->GetLightComponent()->SetLightColor(FLinearColor(.78f, .87f, 1.f));
     Sky->GetLightComponent()->SetRealTimeCaptureEnabled(true);
     auto* Fog = GetWorld()->SpawnActor<AExponentialHeightFog>();
     Fog->GetComponent()->SetFogDensity(.00015f);
-    Fog->GetComponent()->SetStartDistance(60000.f);
-    Fog->GetComponent()->SetFogMaxOpacity(.5f);
-    if (!RailMaterial || !GroundMaterial || !StructureMaterial || !FootingMaterial || !LSMMaterial || !BrakeMaterial)
+    Fog->GetComponent()->SetStartDistance(80000.f);
+    Fog->GetComponent()->SetFogMaxOpacity(.35f);
+    if (!RailMaterial || !GroundMaterial || !StructureMaterial || !FootingMaterial)
         Runtime->Message = TEXT("Missing generated materials. Run scripts/package.ps1 -PrepareOnly before playing.");
 }
 void AVibeCoasterWorld::EndPlay(const EEndPlayReason::Type Reason)
@@ -371,10 +411,22 @@ void AVibeCoasterWorld::PollJob()
             Runtime->NextChunk = Runtime->NextTie = Runtime->NextSupport = Runtime->NextStation = Runtime->NextLSM = Runtime->NextBrake = 0;
             Staging = GetWorld()->SpawnActor<AVibeCoasterAssembly>();
             Staging->SetActorHiddenInGame(true);
-            if (!Staging->Ties->GetStaticMesh() || !Staging->Cars->GetStaticMesh() ||
+            if (!Staging->Ties->GetStaticMesh() || !Staging->LeadCars->GetStaticMesh() || !Staging->Cars->GetStaticMesh() ||
                 !Staging->LSMHardware->GetStaticMesh() || !Staging->BrakeHardware->GetStaticMesh() ||
                 !Staging->PlatformPanels->GetStaticMesh() || !Staging->PlatformEnds->GetStaticMesh() ||
-                !Staging->RoofPanels->GetStaticMesh() || !Staging->StationPosts->GetStaticMesh())
+                !Staging->RoofPanels->GetStaticMesh() || !Staging->StationPosts->GetStaticMesh() ||
+                !Staging->StationQueueDecks->GetStaticMesh() ||
+                !Staging->StationRouteRoofs->GetStaticMesh() ||
+                !Staging->StationMergeDecks->GetStaticMesh() ||
+                !Staging->StationHoldingLanes->GetStaticMesh() ||
+                !Staging->StationBoardingGates->GetStaticMesh() ||
+                !Staging->StationDispatchCabins->GetStaticMesh() ||
+                !Staging->StationUnloadDecks->GetStaticMesh() ||
+                !Staging->StationExitWalkways->GetStaticMesh() ||
+                !Staging->StationLifts->GetStaticMesh() ||
+                !Staging->StationStairs->GetStaticMesh() ||
+                !Staging->StationUnderpasses->GetStaticMesh() ||
+                !Staging->StationQueueRails->GetStaticMesh())
             {
                 Retire(Staging); Staging = nullptr; Runtime->Prepared.Reset();
                 Runtime->Message = TEXT("Missing validated model assets; active ride retained. Import the current validated art kit before packaging.");
@@ -384,12 +436,11 @@ void AVibeCoasterWorld::PollJob()
             Staging->Supports->PreAllocateInstancesMemory(Runtime->Prepared->Supports.Num());
             Staging->LSMHardware->PreAllocateInstancesMemory(Runtime->Prepared->LSMHardware.Num());
             Staging->BrakeHardware->PreAllocateInstancesMemory(Runtime->Prepared->BrakeHardware.Num());
-            Staging->Cars->PreAllocateInstancesMemory(Runtime->Prepared->Design->request.train.cars);
+            Staging->LeadCars->PreAllocateInstancesMemory(1);
+            Staging->Cars->PreAllocateInstancesMemory(FMath::Max(0, Runtime->Prepared->Design->request.train.cars - 1));
             // Authored car/tie/station material slots remain intact; canonical
             // support solids and fallback station boxes use the existing palette.
             Staging->Supports->SetMaterial(0, StructureMaterial);
-            Staging->LSMHardware->SetMaterial(0, LSMMaterial);
-            Staging->BrakeHardware->SetMaterial(0, BrakeMaterial);
             Staging->StationSteel->SetMaterial(0, StructureMaterial); Staging->StationConcrete->SetMaterial(0, FootingMaterial);
             Runtime->Message = TEXT("Validated. Preparing hidden render chunks...");
         }
@@ -458,6 +509,18 @@ void AVibeCoasterWorld::CommitChunks()
             case VibeMesh::EStationInstanceKind::PlatformEnd: Component = Staging->PlatformEnds; break;
             case VibeMesh::EStationInstanceKind::Roof: Component = Staging->RoofPanels; break;
             case VibeMesh::EStationInstanceKind::Post: Component = Staging->StationPosts; break;
+            case VibeMesh::EStationInstanceKind::QueueDeck: Component = Staging->StationQueueDecks; break;
+            case VibeMesh::EStationInstanceKind::RouteRoof: Component = Staging->StationRouteRoofs; break;
+            case VibeMesh::EStationInstanceKind::MergeDeck: Component = Staging->StationMergeDecks; break;
+            case VibeMesh::EStationInstanceKind::HoldingLane: Component = Staging->StationHoldingLanes; break;
+            case VibeMesh::EStationInstanceKind::BoardingGate: Component = Staging->StationBoardingGates; break;
+            case VibeMesh::EStationInstanceKind::DispatchCabin: Component = Staging->StationDispatchCabins; break;
+            case VibeMesh::EStationInstanceKind::UnloadDeck: Component = Staging->StationUnloadDecks; break;
+            case VibeMesh::EStationInstanceKind::ExitWalkway: Component = Staging->StationExitWalkways; break;
+            case VibeMesh::EStationInstanceKind::Lift: Component = Staging->StationLifts; break;
+            case VibeMesh::EStationInstanceKind::Stair: Component = Staging->StationStairs; break;
+            case VibeMesh::EStationInstanceKind::Underpass: Component = Staging->StationUnderpasses; break;
+            case VibeMesh::EStationInstanceKind::QueueRail: Component = Staging->StationQueueRails; break;
         }
         check(Component);
         Batch.Reset();
@@ -473,7 +536,8 @@ void AVibeCoasterWorld::CommitChunks()
     Runtime->ComparisonLines.Reset();
     for (const auto& Line : coaster::comparisonLines(*Runtime->Design, &Runtime->Comparisons.previous))
         Runtime->ComparisonLines.Add(FString(UTF8_TO_TCHAR(Line.c_str())));
-    for (int32 I = 0; I < Runtime->Design->request.train.cars; ++I) Active->Cars->AddInstance(FTransform::Identity);
+    Active->LeadCars->AddInstance(FTransform::Identity);
+    for (int32 I = 1; I < Runtime->Design->request.train.cars; ++I) Active->Cars->AddInstance(FTransform::Identity);
     Active->SetActorHiddenInGame(false);
     const double ReadySeconds = FPlatformTime::Seconds();
     UE_LOG(LogCoasterGeneration, Display, TEXT("CoasterTiming request=%llu stage=scene-commit elapsedSeconds=%.6f totalSeconds=%.6f"),
@@ -532,16 +596,22 @@ void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
     {
         const double Half = (D.request.train.cars - 1) * D.request.train.spacing * .5;
         Runtime->CarTransforms.Reset(D.request.train.cars);
+        Runtime->PassengerCarTransforms.Reset(FMath::Max(0, D.request.train.cars - 1));
         for (int32 Car = 0; Car < D.request.train.cars; ++Car)
         {
             const auto P = D.track.sample(Runtime->Distance + Half - Car * D.request.train.spacing);
-            // Imported centimetre-sized cars retain the canonical rail pivot,
-            // finite-train spacing and the exact sample used before batching.
-            Runtime->CarTransforms.Emplace(VibeMesh::Rotation(P), VibeMesh::Position(P.position), FVector::OneVector);
+            // Car 0 is the physical front; passengers follow it in the same canonical train spacing.
+            const FTransform Transform(VibeMesh::Rotation(P), VibeMesh::Position(P.position), FVector::OneVector);
+            Runtime->CarTransforms.Add(Transform);
+            if (Car > 0) Runtime->PassengerCarTransforms.Add(Transform);
         }
-        // UE updates changed instance bounds/GPU data at frame end.
-        // MarkRenderStateDirty would rebuild the entire scene proxy.
-        Active->Cars->BatchUpdateInstancesTransforms(0, Runtime->CarTransforms, false, false, true);
+        if (Runtime->CarTransforms.Num() > 0)
+        {
+            // Update the lead and passenger components from the same full pose array.
+            Active->LeadCars->UpdateInstanceTransform(0, Runtime->CarTransforms[0], false, false, true);
+            if (Runtime->PassengerCarTransforms.Num() > 0)
+                Active->Cars->BatchUpdateInstancesTransforms(0, Runtime->PassengerCarTransforms, false, false, true);
+        }
         Runtime->TrainPoseDirty = false;
     }
     if (Runtime->CameraPoseDirty || Moved || Runtime->Overview)

@@ -18,6 +18,8 @@ public class VibeCoaster : ModuleRules
                 WorkingDirectory = Path.GetFullPath(Path.Combine(CoreRoot, "../..")),
                 RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
             };
+            Info.ArgumentList.Add("-c");
+            Info.ArgumentList.Add("safe.directory=" + Info.WorkingDirectory.Replace('\\', '/'));
             foreach (string Argument in Arguments) Info.ArgumentList.Add(Argument);
             using (var Git = Process.Start(Info)) {
                 string Result = Git.StandardOutput.ReadToEnd().Trim(); Git.WaitForExit();

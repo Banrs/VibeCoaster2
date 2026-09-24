@@ -19,7 +19,7 @@ struct FChunk
     TArray<FVector2D> UV;
     bool Ground = false, Structure = false, Footing = false;
 };
-enum class EStationInstanceKind : uint8 { CubeSteel, CubeConcrete, Platform, PlatformEnd, Roof, Post };
+enum class EStationInstanceKind : uint8 { CubeSteel, CubeConcrete, Platform, PlatformEnd, Roof, Post, QueueDeck, RouteRoof, MergeDeck, HoldingLane, BoardingGate, DispatchCabin, UnloadDeck, ExitWalkway, Lift, Stair, Underpass, QueueRail };
 struct FStationInstance
 {
     FTransform Transform;

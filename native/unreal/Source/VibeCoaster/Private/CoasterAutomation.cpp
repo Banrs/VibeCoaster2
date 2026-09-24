@@ -34,9 +34,14 @@ bool RailChunkMatchesUnbatchedReference(const VibeMesh::FChunk& Chunk,
             const auto P = Track.sample(S);
             for (int32 SideIndex = 0; SideIndex < 8; ++SideIndex)
             {
+                constexpr double KeelY[8] = {.84, .69, 0, -.69, -.84, -.56, 0, .56};
+                constexpr double KeelZ[8] = {0, .69, 1, .69, 0, -.69, -1, -.69};
                 const double Angle = 2 * coaster::pi * SideIndex / 8;
-                const auto N = P.right * std::cos(Angle) + P.up * std::sin(Angle);
-                const auto V = P.position + P.right * Side + P.up * Height + N * Radius;
+                const auto Offset = TubeIndex == 2
+                    ? P.right * KeelY[SideIndex] + P.up * KeelZ[SideIndex]
+                    : P.right * std::cos(Angle) + P.up * std::sin(Angle);
+                const auto N = coaster::unit(Offset);
+                const auto V = P.position + P.right * Side + P.up * Height + Offset * Radius;
                 const int32 Index = (TubeIndex * Rings + Ring) * 8 + SideIndex;
                 if (!Chunk.Vertices[Index].Equals(FVector(V.x * 100., -V.y * 100., V.z * 100.), 1e-8) ||
                     !Chunk.Normals[Index].Equals(FVector(N.x, -N.y, N.z), 1e-12) ||
@@ -84,35 +89,71 @@ bool StationRepresentationMatches(const VibeMesh::FPreparedRide& Prepared,
         const auto& Box = Boxes[Instance.SourceBoxIndex];
         FVector Min(-50), Max(50);
         const bool Cube = Instance.Kind == Kind::CubeSteel || Instance.Kind == Kind::CubeConcrete;
-        const bool ConcreteRole = Box.role == coaster::StationRole::Platform || Box.role == coaster::StationRole::Footing;
+        const bool ConcreteRole = Box.role == coaster::StationRole::Platform || Box.role == coaster::StationRole::Footing ||
+            Box.role == coaster::StationRole::QueueDeck || Box.role == coaster::StationRole::MergeDeck ||
+            Box.role == coaster::StationRole::HoldingLane || Box.role == coaster::StationRole::UnloadDeck ||
+            Box.role == coaster::StationRole::ExitWalkway || Box.role == coaster::StationRole::Stair ||
+            Box.role == coaster::StationRole::Underpass;
         if (Cube)
         {
             if ((Instance.Kind == Kind::CubeConcrete) != ConcreteRole) return false;
         }
         else
         {
-            if (!Instance.Transform.GetScale3D().Equals(FVector::OneVector, 1e-12)) return false;
-            switch (Instance.Kind)
+            Kind Expected = Kind::CubeSteel;
+            bool Functional = true;
+            switch (Box.role)
             {
-            case Kind::Platform: Min = FVector(-150, -192.5, -80); Max = FVector(150, 192.5, 0); break;
-            case Kind::PlatformEnd: Min = FVector(-50, -192.5, -80); Max = FVector(50, 192.5, 0); break;
-            case Kind::Roof: Min = FVector(-150, -565, -18); Max = FVector(150, 565, 18); break;
-            case Kind::Post: Min = FVector(-20, -20, 0); Max = FVector(20, 20, 522); break;
-            default: return false;
+            case coaster::StationRole::QueueDeck: Expected = Kind::QueueDeck; break;
+            case coaster::StationRole::RouteRoof: Expected = Kind::RouteRoof; break;
+            case coaster::StationRole::MergeDeck: Expected = Kind::MergeDeck; break;
+            case coaster::StationRole::HoldingLane: Expected = Kind::HoldingLane; break;
+            case coaster::StationRole::BoardingGate: Expected = Kind::BoardingGate; break;
+            case coaster::StationRole::DispatchCabin: Expected = Kind::DispatchCabin; break;
+            case coaster::StationRole::UnloadDeck: Expected = Kind::UnloadDeck; break;
+            case coaster::StationRole::ExitWalkway: Expected = Kind::ExitWalkway; break;
+            case coaster::StationRole::Lift: Expected = Kind::Lift; break;
+            case coaster::StationRole::Stair: Expected = Kind::Stair; break;
+            case coaster::StationRole::Underpass: Expected = Kind::Underpass; break;
+            case coaster::StationRole::QueueRail: Expected = Kind::QueueRail; break;
+            default: Functional = false; break;
             }
-            const bool Platform = Instance.Kind == Kind::Platform || Instance.Kind == Kind::PlatformEnd;
-            if (Platform && Box.role != coaster::StationRole::Platform) return false;
-            if (Instance.Kind == Kind::Roof && Box.role != coaster::StationRole::Canopy) return false;
-            if (Instance.Kind == Kind::Post && Box.role != coaster::StationRole::Post) return false;
+            if (Functional)
+            {
+                if (Instance.Kind != Expected ||
+                    !Instance.Transform.GetScale3D().Equals(FVector(Box.half.x, Box.half.y, Box.half.z), 1e-12))
+                    return false;
+                Min = FVector(-100); Max = FVector(100);
+                const double Side = coaster::dot(Box.center - Midline, Box.right);
+                const bool ReverseStair = Box.role == coaster::StationRole::Stair && Side < 0;
+                const auto Forward = VibeMesh::Direction(Box.forward) * (ReverseStair ? -1. : 1.);
+                if (!Instance.Transform.GetRotation().GetAxisX().Equals(Forward, 1e-8)) return false;
+            }
+            else
+            {
+                if (!Instance.Transform.GetScale3D().Equals(FVector::OneVector, 1e-12)) return false;
+                switch (Instance.Kind)
+                {
+                case Kind::Platform: Min = FVector(-150, -192.5, -80); Max = FVector(150, 192.5, 0); break;
+                case Kind::PlatformEnd: Min = FVector(-50, -192.5, -80); Max = FVector(50, 192.5, 0); break;
+                case Kind::Roof: Min = FVector(-150, -565, -18); Max = FVector(150, 565, 18); break;
+                case Kind::Post: Min = FVector(-20, -20, 0); Max = FVector(20, 20, 522); break;
+                default: return false;
+                }
+                const bool Platform = Instance.Kind == Kind::Platform || Instance.Kind == Kind::PlatformEnd;
+                if (Platform && Box.role != coaster::StationRole::Platform) return false;
+                if (Instance.Kind == Kind::Roof && Box.role != coaster::StationRole::Canopy) return false;
+                if (Instance.Kind == Kind::Post && Box.role != coaster::StationRole::Post) return false;
+                if (Platform)
+                {
+                    // Imported stripe is local +Y. Its direction must point toward
+                    // the actual midline on both platform sides, without mirroring scale.
+                    const auto Inward = VibeMesh::Position(Midline) - Instance.Transform.GetLocation();
+                    if (FVector::DotProduct(Instance.Transform.GetRotation().GetAxisY(), Inward) <= 0) return false;
+                }
+                else if (!Instance.Transform.GetRotation().GetAxisX().Equals(VibeMesh::Direction(Box.forward), 1e-8)) return false;
+            }
             if (!Instance.Transform.GetRotation().GetAxisZ().Equals(VibeMesh::Direction(Box.up), 1e-8)) return false;
-            if (Platform)
-            {
-                // Imported stripe is local +Y. Its direction must point toward
-                // the actual midline on both platform sides, without mirroring scale.
-                const auto Inward = VibeMesh::Position(Midline) - Instance.Transform.GetLocation();
-                if (FVector::DotProduct(Instance.Transform.GetRotation().GetAxisY(), Inward) <= 0) return false;
-            }
-            else if (!Instance.Transform.GetRotation().GetAxisX().Equals(VibeMesh::Direction(Box.forward), 1e-8)) return false;
         }
         coaster::Vec3 Low{1e30, 1e30, 1e30}, High{-1e30, -1e30, -1e30};
         for (double X : {Min.X, Max.X}) for (double Y : {Min.Y, Max.Y}) for (double Z : {Min.Z, Max.Z})
@@ -146,7 +187,7 @@ bool StationRepresentationMatches(const VibeMesh::FPreparedRide& Prepared,
     return true;
 }
 }
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterCoordinateTest, "VibeCoaster.CoordinateContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterCoordinateTest, "VibeCoaster.CoordinateContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
 bool FCoasterCoordinateTest::RunTest(const FString& Parameters)
 {
     const FVector P = VibeMesh::Position({1, 2, 3});
@@ -167,7 +208,7 @@ bool FCoasterCoordinateTest::RunTest(const FString& Parameters)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterMeshTest, "VibeCoaster.MeshContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterMeshTest, "VibeCoaster.MeshContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
 bool FCoasterMeshTest::RunTest(const FString& Parameters)
 {
     // Engine-produced indices/normals are the reference, not our permutation.
@@ -328,7 +369,7 @@ bool FCoasterMeshTest::RunTest(const FString& Parameters)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterStationArtTest, "VibeCoaster.StationArtContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoasterStationArtTest, "VibeCoaster.StationArtContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
 bool FCoasterStationArtTest::RunTest(const FString& Parameters)
 {
     // Adapter-only fixtures deliberately exercise dimensions not present in the
@@ -374,6 +415,28 @@ bool FCoasterStationArtTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Station tiling checks cancellation between modules"),
         VibeMesh::AppendStationBoxInstances(Cancelled, Boxes[0], 0, Midline, [&] { return ++Calls > 2; }));
     TestTrue(TEXT("Cancellation leaves a bounded partial buffer without source mutation"), Calls > 2 && Cancelled.Station.Num() == 1 && Boxes[0].half.x == 2.375);
+    const std::array<coaster::StationRole, 12> FunctionalRoles = {
+        coaster::StationRole::QueueDeck, coaster::StationRole::RouteRoof,
+        coaster::StationRole::MergeDeck, coaster::StationRole::HoldingLane,
+        coaster::StationRole::BoardingGate, coaster::StationRole::DispatchCabin,
+        coaster::StationRole::UnloadDeck, coaster::StationRole::ExitWalkway,
+        coaster::StationRole::Lift, coaster::StationRole::Stair,
+        coaster::StationRole::Underpass, coaster::StationRole::QueueRail
+    };
+    std::vector<coaster::StationBox> FunctionalBoxes;
+    VibeMesh::FPreparedRide FunctionalPrepared;
+    for (size_t I = 0; I < FunctionalRoles.size(); ++I)
+    {
+        const double Side = FunctionalRoles[I] == coaster::StationRole::Stair ? -7. : 7.;
+        FunctionalBoxes.push_back({Midline + F * (50. + 10. * I) + R * Side + U * 1.3,
+            F, R, U, {1.2 + .1 * I, .7 + .03 * I, .35 + .02 * I}, FunctionalRoles[I]});
+        if (!TestTrue(TEXT("Functional station role has a bounded imported-asset placement"),
+            VibeMesh::AppendStationBoxInstances(FunctionalPrepared, FunctionalBoxes.back(),
+                int32(I), Midline, [] { return false; }))) return false;
+    }
+    TestTrue(TEXT("All functional station roles preserve centred normalized bounds and exit-stair orientation"),
+        FunctionalPrepared.Station.Num() == int32(FunctionalRoles.size()) &&
+        StationRepresentationMatches(FunctionalPrepared, FunctionalBoxes, Midline));
     return true;
 }
 
@@ -392,36 +455,62 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
         const TCHAR* Name;
         FVector Min, Max;
         TArray<FName> MaterialNames;
+        bool NormalizedStation = false;
     };
-    // Actual evaluated Blender bounds, expressed in imported centimetres. Slabs
-    // deliberately have 4 mm end seams; module placement still uses 3 m / 1 m.
+    // Evaluated Blender MCP source bounds at canonical runtime pivots.
+    // These are measured source dimensions, independently checked against
+    // imported buffers; train and hardware containment remain guarded below.
     const TArray<FAssetContract> Contracts = {
-        {TEXT("SM_TrainCar"), FVector(-127.5, -85, 10), FVector(127.5, 85, 151),
-            {TEXT("VCTrain4_Trim_IceCyan"), TEXT("VCTrain4_StructuralCarbon"), TEXT("VCTrain4_WindDeflector_ClearCyan"),
-             TEXT("VCTrain4_Metal_BrushedAluminium"), TEXT("VCTrain4_Shell_PearlTitanium"), TEXT("VCTrain4_Padding_Graphite"),
-             TEXT("VCTrain4_Restraint_Ceramic"), TEXT("VCTrain4_Rubber_GripAndTyre"), TEXT("VCTrain4_Shell_DeepPetrol"), TEXT("VCTrain4_Metal_DarkChassis")}},
-        {TEXT("SM_TrackTieWeb"), FVector(-7, -82.5, -27.55840421), FVector(7, 82.5, 8),
-            {TEXT("VC_ENVKIT_BlueSteel"), TEXT("VC_ENVKIT_Graphite"), TEXT("VC_ENVKIT_MachinedSteel")}},
-        {TEXT("SM_StationPlatformPanel"), FVector(-149.6, -192.5, -80), FVector(149.6, 192.5, 0),
-            {TEXT("VC_ENVKIT_Concrete"), TEXT("VC_ENVKIT_ConcreteEdge"), TEXT("VC_ENVKIT_DarkRecess"), TEXT("VC_ENVKIT_Graphite"), TEXT("VC_ENVKIT_SafetyOchre")}},
-        {TEXT("SM_StationPlatformEndPanel"), FVector(-49.6, -192.5, -80), FVector(49.6, 192.5, 0),
-            {TEXT("VC_ENVKIT_Concrete"), TEXT("VC_ENVKIT_ConcreteEdge"), TEXT("VC_ENVKIT_DarkRecess"), TEXT("VC_ENVKIT_Graphite"), TEXT("VC_ENVKIT_SafetyOchre")}},
-        {TEXT("SM_StationRoofPanel"), FVector(-149.6, -565, -18), FVector(149.6, 565, 18),
-            {TEXT("VC_ENVKIT_BlueSteel"), TEXT("VC_ENVKIT_DarkRecess"), TEXT("VC_ENVKIT_Graphite"), TEXT("VC_ENVKIT_LightDiffuser")}},
-        {TEXT("SM_StationPost"), FVector(-20, -20, 0), FVector(20, 20, 522),
-            {TEXT("VC_ENVKIT_BlueSteel"), TEXT("VC_ENVKIT_DarkRecess"), TEXT("VC_ENVKIT_Graphite"), TEXT("VC_ENVKIT_MachinedSteel")}}
+        {TEXT("SM_LeadCar"), FVector(-127.5, -88, -27.097765), FVector(126.5, 88, 162.5),
+            {TEXT("VC2_Padding"), TEXT("VC2_Steel"), TEXT("VC2_Graphite"), TEXT("VC2_Petrol"), TEXT("VC2_Light"), TEXT("VC2_Pearl"), TEXT("VC2_Copper"), TEXT("VC2_Glass")}},
+        {TEXT("SM_TrainCar"), FVector(-127.5, -88, -27.097765), FVector(126.5, 88, 162.5),
+            {TEXT("VC2_Padding"), TEXT("VC2_Steel"), TEXT("VC2_Graphite"), TEXT("VC2_Petrol"), TEXT("VC2_Light"), TEXT("VC2_Pearl"), TEXT("VC2_Copper"), TEXT("VC2_Glass")}},
+        {TEXT("SM_TrackTieWeb"), FVector(-5.500003, -66.500002, -26.573604), FVector(5.500003, 66.500002, 10.5),
+            {TEXT("VC2_Petrol"), TEXT("VC2_Pearl"), TEXT("VC2_Graphite"), TEXT("VC2_Steel"), TEXT("VC2_Copper")}},
+        {TEXT("SM_LSMStator"), FVector(-47.999999, -48.249999, -50), FVector(47.999999, 48.249999, 50),
+            {TEXT("VC2_Graphite"), TEXT("VC2_Petrol"), TEXT("VC2_Copper"), TEXT("VC2_Steel")}},
+        {TEXT("SM_BrakeFin"), FVector(-47.999999, -45.500001, -47.350001), FVector(47.999999, 45.500001, 47),
+            {TEXT("VC2_Steel"), TEXT("VC2_Graphite"), TEXT("VC2_Copper"), TEXT("VC2_Petrol")}},
+        {TEXT("SM_StationRoofPanel"), FVector(-149.600005, -565.00001, -18.000001), FVector(149.600005, 565.00001, 18.000001),
+            {TEXT("VC2_Pearl"), TEXT("VC2_Petrol"), TEXT("VC2_Light"), TEXT("VC2_Graphite")}},
+        {TEXT("SM_StationPost"), FVector(-20, -20, -0), FVector(20, 20, 522.000027),
+            {TEXT("VC2_Petrol"), TEXT("VC2_Steel"), TEXT("VC2_Graphite"), TEXT("VC2_Copper")}},
+        {TEXT("SM_StationPlatformPanel"), FVector(-149.600005, -192.499995, -79.999995), FVector(149.600005, 192.500007, 0),
+            {TEXT("VC2_Concrete"), TEXT("VC2_Pearl"), TEXT("VC2_Steel"), TEXT("VC2_Petrol")}},
+        {TEXT("SM_StationPlatformEndPanel"), FVector(-49.599999, -192.499995, -79.999995), FVector(49.599999, 192.500007, 0),
+            {TEXT("VC2_Concrete"), TEXT("VC2_Pearl"), TEXT("VC2_Steel"), TEXT("VC2_Petrol")}},
+        {TEXT("SM_StationQueueDeck"), FVector(-100), FVector(100), {TEXT("VC2_Concrete"), TEXT("VC2_Petrol")}, true},
+        {TEXT("SM_StationRouteRoof"), FVector(-100), FVector(100), {TEXT("VC2_Petrol"), TEXT("VC2_Steel"), TEXT("VC2_Light")}, true},
+        {TEXT("SM_StationMergeDeck"), FVector(-100), FVector(100), {TEXT("VC2_Concrete"), TEXT("VC2_Petrol")}, true},
+        {TEXT("SM_StationHoldingLane"), FVector(-100), FVector(100), {TEXT("VC2_Pearl"), TEXT("VC2_Graphite"), TEXT("VC2_Steel"), TEXT("VC2_Petrol")}, true},
+        {TEXT("SM_StationBoardingGate"), FVector(-100), FVector(100), {TEXT("VC2_Graphite"), TEXT("VC2_Steel"), TEXT("VC2_Petrol")}, true},
+        {TEXT("SM_StationDispatchCabin"), FVector(-100), FVector(100), {TEXT("VC2_Concrete"), TEXT("VC2_Petrol"), TEXT("VC2_Graphite"), TEXT("VC2_Glass"), TEXT("VC2_Steel")}, true},
+        {TEXT("SM_StationUnloadDeck"), FVector(-100), FVector(100), {TEXT("VC2_Pearl"), TEXT("VC2_Steel")}, true},
+        {TEXT("SM_StationExitWalkway"), FVector(-100), FVector(100), {TEXT("VC2_Concrete"), TEXT("VC2_Light")}, true},
+        {TEXT("SM_StationLift"), FVector(-100), FVector(100), {TEXT("VC2_Concrete"), TEXT("VC2_Petrol"), TEXT("VC2_Glass"), TEXT("VC2_Graphite")}, true},
+        {TEXT("SM_StationStair"), FVector(-100), FVector(100), {TEXT("VC2_Concrete"), TEXT("VC2_Steel")}, true},
+        {TEXT("SM_StationUnderpass"), FVector(-100), FVector(100), {TEXT("VC2_Concrete"), TEXT("VC2_Petrol"), TEXT("VC2_Glass"), TEXT("VC2_Steel")}, true},
+        {TEXT("SM_StationQueueRail"), FVector(-100), FVector(100), {TEXT("VC2_Graphite"), TEXT("VC2_Steel"), TEXT("VC2_Petrol")}, true}
     };
     constexpr double ToleranceCm = .02;
     for (const auto& Contract : Contracts)
     {
         const FString Label(Contract.Name);
-        const FString AssetRoot = Label == TEXT("SM_TrackTieWeb") ? TEXT("/Game/Art/V072/TrackWeb1") : TEXT("/Game/Art/V072/Import1");
+        const FString AssetRoot = TEXT("/Game/Art/V3");
         const FString Path = FString::Printf(TEXT("%s/%s.%s"), *AssetRoot, Contract.Name, Contract.Name);
         UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Path);
         if (!TestNotNull(Label + TEXT(" loads the actual current imported asset"), Mesh)) continue;
         const auto AssetBounds = Mesh->GetBoundingBox(); // waits for pending mesh build data
-        TestTrue(Label + TEXT(" has centimetre bounds at its authored pivot"),
-            AssetBounds.Min.Equals(Contract.Min, ToleranceCm) && AssetBounds.Max.Equals(Contract.Max, ToleranceCm));
+        const bool BoundsContract = Contract.NormalizedStation
+            ? AssetBounds.Min.X >= Contract.Min.X - ToleranceCm &&
+                AssetBounds.Min.Y >= Contract.Min.Y - ToleranceCm &&
+                AssetBounds.Min.Z >= Contract.Min.Z - ToleranceCm &&
+                AssetBounds.Max.X <= Contract.Max.X + ToleranceCm &&
+                AssetBounds.Max.Y <= Contract.Max.Y + ToleranceCm &&
+                AssetBounds.Max.Z <= Contract.Max.Z + ToleranceCm
+            : AssetBounds.Min.Equals(Contract.Min, ToleranceCm) &&
+                AssetBounds.Max.Equals(Contract.Max, ToleranceCm);
+        TestTrue(Label + TEXT(" stays inside its authored centimetre envelope"), BoundsContract);
         const auto& Materials = Mesh->GetStaticMaterials();
         TestEqual(Label + TEXT(" has the expected material-slot count"), Materials.Num(), Contract.MaterialNames.Num());
         bool MaterialContract = true;
@@ -433,14 +522,17 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
             MaterialContract &= Contract.MaterialNames.Contains(SourceName) && !Found.Contains(SourceName) && Material != nullptr;
             if (Material) MaterialContract &= Material->GetPathName().StartsWith(AssetRoot + TEXT("/Materials/"));
             if (Material)
-                TestTrue(Label + TEXT(" clear shield uses translucent shading; structure stays opaque"),
-                    Material->GetBlendMode() == (SourceName == FName(TEXT("VCTrain4_WindDeflector_ClearCyan")) ? BLEND_Translucent : BLEND_Opaque));
+                TestTrue(Label + TEXT(" materials support instanced static meshes at runtime"),
+                    Material->GetUsageByFlag(MATUSAGE_InstancedStaticMeshes));
+            if (Material)
+                TestTrue(Label + TEXT(" glass is translucent and structural materials are opaque"),
+                    Material->GetBlendMode() == (SourceName == FName(TEXT("VC2_Glass")) ? BLEND_Translucent : BLEND_Opaque));
             Found.Add(SourceName);
         }
         TestTrue(Label + TEXT(" preserves distinct authored material roles without a default-material fallback"), MaterialContract && Found.Num() == Contract.MaterialNames.Num());
         FBox VertexBounds(ForceInit);
         int64 VertexCount = 0, TriangleCount = 0;
-        bool GeometryValid = true, TrainBodyFit = true, TieAssemblyFit = true;
+        bool GeometryValid = true, TrainEnvelopeFit = true, TieAssemblyFit = true;
         // The temporary flag permits reading resident buffers; the asset is not saved.
         const bool PreviousCPUAccess = Mesh->bAllowCPUAccess;
         Mesh->bAllowCPUAccess = true;
@@ -457,13 +549,14 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
             if (Label == TEXT("SM_TrackTieWeb"))
             {
                 const auto Webs = coaster::trackWebsLocal();
+                const auto Saddles = coaster::trackTieSaddlesLocal();
                 const coaster::StationBox Tie{{0,0,-.19},{1,0,0},{0,1,0},{0,0,1},{.07,.825,.08},coaster::StationRole::Post};
                 // Test whole triangles in one convex certified solid, not just
                 // isolated vertices in a non-convex union. Art pivot is the tie.
                 for (int32 I = 0; I + 2 < Triangles.Num(); I += 3)
                 {
                     bool Contained = false;
-                    for (const auto& Box : {Tie, Webs[0], Webs[1]})
+                    for (const auto& Box : {Tie, Webs[0], Webs[1], Saddles[0], Saddles[1]})
                     {
                         bool AllCorners = true;
                         for (int32 Corner = 0; Corner < 3; ++Corner)
@@ -486,22 +579,25 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
                 const bool Finite = FMath::IsFinite(P.X) && FMath::IsFinite(P.Y) && FMath::IsFinite(P.Z);
                 GeometryValid &= Finite;
                 if (Finite) VertexBounds += P;
-                if (Label == TEXT("SM_TrainCar"))
-                    TrainBodyFit &= Finite && std::abs(P.X) <= 127.5 + ToleranceCm &&
-                        std::abs(P.Y) <= 85 + ToleranceCm && P.Z >= -ToleranceCm && P.Z <= 240 + ToleranceCm;
+                if (Label == TEXT("SM_TrainCar") || Label == TEXT("SM_LeadCar"))
+                    TrainEnvelopeFit &= Finite && std::abs(P.X) <= 100 * coaster::trainHalfLength + ToleranceCm &&
+                        std::abs(P.Y) <= 100 * coaster::patronHalfWidth + ToleranceCm &&
+                        P.Z >= 100 * coaster::trainEnvelopeBottom - ToleranceCm &&
+                        P.Z <= 100 * coaster::patronTopHeight(coaster::TrainConfig{}) + ToleranceCm;
             }
         }
         Mesh->bAllowCPUAccess = PreviousCPUAccess;
         TestTrue(Label + TEXT(" has actual finite indexed LOD0 geometry"), GeometryValid && VertexCount > 0 && TriangleCount > 0);
         TestTrue(Label + TEXT(" actual vertices match its centimetre bounds and pivot, not a recentered approximation"),
-            VertexBounds.IsValid && VertexBounds.Min.Equals(Contract.Min, ToleranceCm) && VertexBounds.Max.Equals(Contract.Max, ToleranceCm));
+            VertexBounds.IsValid && VertexBounds.Min.Equals(AssetBounds.Min, ToleranceCm) &&
+            VertexBounds.Max.Equals(AssetBounds.Max, ToleranceCm));
         if (Label == TEXT("SM_TrackTieWeb"))
             TestTrue(TEXT("Every imported tie/web triangle is contained in one canonical hardware solid at the unchanged tie pivot"), TieAssemblyFit);
-        if (Label == TEXT("SM_TrainCar"))
+        if (Label == TEXT("SM_TrainCar") || Label == TEXT("SM_LeadCar"))
         {
-            TestTrue(TEXT("All imported train vertices fit the unchanged above-rail body and 2.55 x 1.70 m footprint"), TrainBodyFit);
-            TestTrue(TEXT("Train origin remains at the rail midpoint: body bottom +10 cm, top +151 cm, not bounds-centred"),
-                VertexBounds.Min.Z > 0 && FMath::IsNearlyEqual(VertexBounds.GetCenter().Z, 80.5, ToleranceCm));
+            TestTrue(TEXT("All imported train vertices fit the unchanged occupied clearance envelope"), TrainEnvelopeFit);
+            TestTrue(TEXT("Train origin remains at the rail midpoint with below-rail wheel retention and raised seating"),
+                VertexBounds.Min.Z < 0 && VertexBounds.Max.Z > 150 && VertexBounds.GetCenter().Z > 0);
         }
     }
     return true;

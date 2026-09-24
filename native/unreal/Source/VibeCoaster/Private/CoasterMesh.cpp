@@ -18,8 +18,13 @@ void EngineTriangle(FChunk& Chunk, int32 A, int32 B, int32 C)
     // an additional swap exposes backfaces and flips two-sided shading normals.
     Chunk.Indices.Append({A, B, C});
 }
-void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double Begin, double End, double Side, double Height, double Radius)
+void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double Begin, double End, double Side, double Height, double Radius, bool Keel = false)
 {
+    // The centre spine is a shallow, faceted aero keel. Its profile stays
+    // inside the original 0.16 m circular envelope, with the same top web
+    // attachment and bottom support-contact points as the canonical tube.
+    constexpr double KeelY[RingSides] = {.84, .69, 0, -.69, -.84, -.56, 0, .56};
+    constexpr double KeelZ[RingSides] = {0, .69, 1, .69, 0, -.69, -1, -.69};
     const int32 Rings = Samples.Num();
     const int32 Base = Chunk.Vertices.Num();
     for (int32 I = 0; I < Rings; ++I)
@@ -30,9 +35,10 @@ void Tube(FChunk& Chunk, TArrayView<const coaster::TrackSample> Samples, double 
         for (int32 J = 0; J < RingSides; ++J)
         {
             const double Angle = 2 * coaster::pi * J / RingSides;
-            const auto Normal = P.right * std::cos(Angle) + P.up * std::sin(Angle);
-            Chunk.Vertices.Add(Position(Centre + Normal * Radius));
-            Chunk.Normals.Add(Direction(Normal));
+            const auto Offset = P.right * (Keel ? KeelY[J] : std::cos(Angle)) +
+                P.up * (Keel ? KeelZ[J] : std::sin(Angle));
+            Chunk.Vertices.Add(Position(Centre + Offset * Radius));
+            Chunk.Normals.Add(Direction(coaster::unit(Offset)));
             Chunk.UV.Add(FVector2D(S / 4, double(J) / RingSides));
             if (I + 1 < Rings)
             {
@@ -54,7 +60,11 @@ bool AppendStationBoxInstances(FPreparedRide& Out, const coaster::StationBox& Bo
     const auto B = VibeCoordinates::StationBox(Box);
     const FVector F(B.Forward.X, B.Forward.Y, B.Forward.Z), U(B.Up.X, B.Up.Y, B.Up.Z);
     const FQuat Frame = FRotationMatrix::MakeFromXZ(F, U).ToQuat();
-    const bool Concrete = Box.role == coaster::StationRole::Platform || Box.role == coaster::StationRole::Footing;
+    const bool Concrete = Box.role == coaster::StationRole::Platform || Box.role == coaster::StationRole::Footing ||
+        Box.role == coaster::StationRole::QueueDeck || Box.role == coaster::StationRole::MergeDeck ||
+        Box.role == coaster::StationRole::HoldingLane || Box.role == coaster::StationRole::UnloadDeck ||
+        Box.role == coaster::StationRole::ExitWalkway || Box.role == coaster::StationRole::Stair ||
+        Box.role == coaster::StationRole::Underpass;
     const auto CubeKind = Concrete ? EStationInstanceKind::CubeConcrete : EStationInstanceKind::CubeSteel;
     // A quaternion cannot represent skew or scale in the saved axes. Details are
     // enabled only for the canonical orthonormal station frame and exact sizes.
@@ -63,6 +73,24 @@ bool AppendStationBoxInstances(FPreparedRide& Out, const coaster::StationBox& Bo
         coaster::norm(coaster::cross(Box.forward, Box.up) - Box.right) < 1e-9 &&
         std::abs(coaster::dot(Box.forward, Box.up)) < 1e-9;
     const double Side = coaster::dot(Box.center - StationMidline, Box.right);
+    EStationInstanceKind FunctionalKind = EStationInstanceKind::CubeSteel;
+    bool Functional = true;
+    switch (Box.role)
+    {
+    case coaster::StationRole::QueueDeck: FunctionalKind = EStationInstanceKind::QueueDeck; break;
+    case coaster::StationRole::RouteRoof: FunctionalKind = EStationInstanceKind::RouteRoof; break;
+    case coaster::StationRole::MergeDeck: FunctionalKind = EStationInstanceKind::MergeDeck; break;
+    case coaster::StationRole::HoldingLane: FunctionalKind = EStationInstanceKind::HoldingLane; break;
+    case coaster::StationRole::BoardingGate: FunctionalKind = EStationInstanceKind::BoardingGate; break;
+    case coaster::StationRole::DispatchCabin: FunctionalKind = EStationInstanceKind::DispatchCabin; break;
+    case coaster::StationRole::UnloadDeck: FunctionalKind = EStationInstanceKind::UnloadDeck; break;
+    case coaster::StationRole::ExitWalkway: FunctionalKind = EStationInstanceKind::ExitWalkway; break;
+    case coaster::StationRole::Lift: FunctionalKind = EStationInstanceKind::Lift; break;
+    case coaster::StationRole::Stair: FunctionalKind = EStationInstanceKind::Stair; break;
+    case coaster::StationRole::Underpass: FunctionalKind = EStationInstanceKind::Underpass; break;
+    case coaster::StationRole::QueueRail: FunctionalKind = EStationInstanceKind::QueueRail; break;
+    default: Functional = false; break;
+    }
     const bool Platform = Rigid && Box.role == coaster::StationRole::Platform &&
         std::abs(Box.half.y - 1.925) < 1e-9 && std::abs(Box.half.z - .4) < 1e-9 &&
         std::abs(Side) > Box.half.y;
@@ -79,7 +107,18 @@ bool AppendStationBoxInstances(FPreparedRide& Out, const coaster::StationBox& Bo
         Out.Station.Add({FTransform(Rotation, Position(Centre), Scale), Kind, SourceBoxIndex});
         return true;
     };
-    if (Platform || Roof)
+    if (Functional && Rigid)
+    {
+        // Functional assets are authored in a centred [-1,1] metre envelope.
+        // Scaling by the canonical half-extents keeps every piece in its
+        // clearance-validated source box, including variable station lengths.
+        // The exit stair climbs toward the rail on the negative station side.
+        const FQuat DetailFrame = Box.role == coaster::StationRole::Stair && Side < 0
+            ? Frame * FQuat(0, 0, 1, 0) : Frame;
+        if (!Add(FunctionalKind, Box.center,
+            FVector(Box.half.x, Box.half.y, Box.half.z), DetailFrame)) return false;
+    }
+    else if (Platform || Roof)
     {
         double Begin = -Box.half.x, Remaining = 2 * Box.half.x;
         // Source platform stripe is at -Y, hence imported local +Y. On the
@@ -140,7 +179,7 @@ bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel)
         Chunk.Indices.Reserve(3 * (Rings - 1) * RingSides * 6);
         Tube(Chunk, MakeArrayView(Samples), Begin, End, -.65, 0, .085);
         Tube(Chunk, MakeArrayView(Samples), Begin, End, .65, 0, .085);
-        Tube(Chunk, MakeArrayView(Samples), Begin, End, 0, -coaster::spineDepth, coaster::spineRadius);
+        Tube(Chunk, MakeArrayView(Samples), Begin, End, 0, -coaster::spineDepth, coaster::spineRadius, true);
         for (const FVector& P : Chunk.Vertices) Out.Bounds += P;
         Vertices += Chunk.Vertices.Num();
         Out.Chunks.Add(MoveTemp(Chunk));

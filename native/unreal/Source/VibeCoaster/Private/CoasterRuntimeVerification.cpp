@@ -70,7 +70,7 @@ FString GeometryIdentity(const coaster::Design& D)
 
 struct FCoasterRuntimeVerification::FState
 {
-    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, AwaitGenerationPhase, CancelGeneration, AwaitGenerationCancel, AwaitMeshPhase, AwaitMeshCancel, AwaitScenePhase, AwaitSceneCancel, Finish, Done } Stage = Init;
+    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, StationQueueView, StationQueueCaptured, StationExitView, StationExitCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, AwaitGenerationPhase, CancelGeneration, AwaitGenerationCancel, AwaitMeshPhase, AwaitMeshCancel, AwaitScenePhase, AwaitSceneCancel, Finish, Done } Stage = Init;
     FString Output, Profile, SavePath, Error, Identity, SaveHash, PendingShot, FrameRows = TEXT("wall_seconds,ride_seconds,distance_m,speed_ms,wall_frame_ms,engine_delta_ms\n");
     FString Seed = TEXT("42"), Terrain = TEXT("highlands");
     uint64 CommittedRevision = 0;
@@ -79,6 +79,9 @@ struct FCoasterRuntimeVerification::FState
     bool LoadOnly = false, Screenshots = true, RefusalChecked = false, Traversed = false, SaveChecked = false, LoadChecked = false, PauseChecked = false, RestartChecked = false;
     double Started = FPlatformTime::Seconds(), StageStarted = Started, TraversalStarted = 0, PreviousTick = 0, PauseTime = 0, LastRideTime = 0, LastDistance = 0, ShotRequested = 0, Duration = 0, FinalDistance = 0;
     TArray<double> ShotTimes;
+    TWeakObjectPtr<AActor> StationReviewTarget;
+    FTransform RiderCameraPose;
+    FVector QueueReviewEye, QueueReviewTarget, ExitReviewEye, ExitReviewTarget;
     TSharedFuture<FString> CsvFinished;
     bool CsvStarted = false, PoseChecked = false, SaveCancelChecked = false, Benchmark = false;
     bool GenerationCancelChecked = false, MeshCancelChecked = false, SceneCancelChecked = false;
@@ -188,6 +191,11 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
     if (S.Stage == FState::Finish)
     {
         if (S.Error.IsEmpty() && !S.PollCapture(PC)) return;
+        if (S.StationReviewTarget.IsValid())
+        {
+            S.StationReviewTarget->SetActorTransform(S.RiderCameraPose);
+            S.StationReviewTarget.Reset();
+        }
 #if CSV_PROFILER
         if (S.CsvStarted) { S.CsvFinished = FCsvProfiler::Get()->EndCapture(); S.CsvStarted = false; }
         if (S.CsvFinished.IsValid() && !S.CsvFinished.IsReady()) { if (Now - S.StageStarted < 30) return; S.Error += TEXT(" CSV flush timeout."); }
@@ -370,6 +378,57 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (Now - S.StageStarted < 1) break;
         S.Capture(PC, TEXT("station")); S.Advance(FState::StationCaptured); break;
     case FState::StationCaptured:
+    {
+        const auto& D = *PC.Ride->ActiveDesign();
+        const auto Start = D.track.sample(0);
+        const auto Origin = Start.position, Forward = Start.tangent, Right = Start.right, Up = Start.up;
+        double RowX = 0, LeftEdge = 0, RightEdge = 0;
+        int32 Rows = 0;
+        for (const auto& Box : D.station.boxes)
+        {
+            const double Y = coaster::dot(Box.center - Origin, Right);
+            LeftEdge = FMath::Min(LeftEdge, Y - Box.half.y);
+            RightEdge = FMath::Max(RightEdge, Y + Box.half.y);
+            if (Box.role == coaster::StationRole::HoldingLane)
+            { RowX += coaster::dot(Box.center - Origin, Forward); ++Rows; }
+        }
+        if (Rows > 0 && Rows != D.request.train.cars)
+        { S.Fail(TEXT("Station holding lanes do not match the actual train rows")); break; }
+        if (Rows == 0 || !S.Screenshots)
+        { PC.Ride->TogglePause(); S.Advance(FState::PauseProbe); break; }
+        RowX /= Rows;
+        const auto Position = [&](double X, double Y, double Z)
+        {
+            const auto P = VibeCoordinates::Position(Origin + Forward * X + Right * Y + Up * Z);
+            return FVector(P.X, P.Y, P.Z);
+        };
+        S.QueueReviewEye = Position(RowX - 3, RightEdge + 15, 7);
+        S.QueueReviewTarget = Position(RowX, 7, -.5);
+        S.ExitReviewEye = Position(RowX + 8, LeftEdge - 15, 7);
+        S.ExitReviewTarget = Position(RowX, -5, -.5);
+        S.StationReviewTarget = PC.GetViewTarget();
+        if (!S.StationReviewTarget.IsValid()) { S.Fail(TEXT("Station review camera target is unavailable")); break; }
+        S.RiderCameraPose = S.StationReviewTarget->GetActorTransform();
+        S.StationReviewTarget->SetActorLocationAndRotation(S.QueueReviewEye,
+            (S.QueueReviewTarget - S.QueueReviewEye).Rotation());
+        S.Event(TEXT("station-queue-review-pose"), TEXT(",\"rows\":") + FString::FromInt(Rows));
+        S.Advance(FState::StationQueueView); break;
+    }
+    case FState::StationQueueView:
+        if (Now - S.StageStarted < .5) break;
+        S.Capture(PC, TEXT("station-queue-operation")); S.Advance(FState::StationQueueCaptured); break;
+    case FState::StationQueueCaptured:
+        if (!S.StationReviewTarget.IsValid()) { S.Fail(TEXT("Station review camera was lost")); break; }
+        S.StationReviewTarget->SetActorLocationAndRotation(S.ExitReviewEye,
+            (S.ExitReviewTarget - S.ExitReviewEye).Rotation());
+        S.Advance(FState::StationExitView); break;
+    case FState::StationExitView:
+        if (Now - S.StageStarted < .5) break;
+        S.Capture(PC, TEXT("station-unload-exit")); S.Advance(FState::StationExitCaptured); break;
+    case FState::StationExitCaptured:
+        if (!S.StationReviewTarget.IsValid()) { S.Fail(TEXT("Station review camera was lost")); break; }
+        S.StationReviewTarget->SetActorTransform(S.RiderCameraPose);
+        S.StationReviewTarget.Reset();
         PC.Ride->TogglePause(); S.Advance(FState::PauseProbe); break;
     case FState::PauseProbe:
         if (P.Time < 2) break;
