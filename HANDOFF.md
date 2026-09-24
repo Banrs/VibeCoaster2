@@ -1,6 +1,18 @@
-# VibeCoaster2 basic generator checkpoint
+# VibeCoaster2 - stopped checkpoint for the next sessions
 
-Updated 24 September 2026. Source is reviewed and local verification is complete. Release 2.0.0-default.2 is being prepared; Windows/macOS CI, versioned packaging, packaged-runtime verification and promotion remain. No agents are active or needed.
+**User stopped work on 24 September 2026 and requested local cleanup with no more tests. Do not resume builds, tests or delivery automatically.** All agent-owned build/runtime processes are stopped. The remaining remote Windows checkpoint run was cancelled at the user's request. No standalone Default2 package was completed or promoted.
+
+## Repository and playable state
+
+- Branch: `codex/legacy-authoring`.
+- Reviewed native recovery commit: `840644d0c2acf6bfc4af0eda7af1aa50d19843ca`.
+- Latest code/shortcut commit: `18d3fb28a389a4878cea2afbed2fe412f8ef8f4a`.
+- Both commits were pushed with explicit user approval. A final documentation/cleanup checkpoint is local only.
+- Release identity: `2.0.0-default.2`. Default1 saves remain readable and receive fresh validation.
+- Root `Play VibeCoaster2.lnk` and Desktop `VibeCoaster2.lnk` launch the **current local Default2 game**, automatically loading the corrected ride. They invoke UnrealEditor with the project, `-game`, `-UserDir="D:/Coding/Codex/Vibecoaster2/UserData-Development"` and `-CoasterLoad`. Press Space to ride.
+- The user specifically objected when these links still targeted Default1. **Do not restore that stale target.** Preserve `UserData-Development` and `native/unreal/Binaries` so the working shortcut remains usable.
+- Recreate the current links with `native/unreal/scripts/create_shortcuts.ps1 -Desktop -Development -UnrealRoot "D:/Games/Epic Games/UE_5.8"`.
+- `dist/current.json` still points to the preserved Default1 standalone package. Running the shortcut helper without `-Development` before a new promotion would revert the links to that old package.
 
 ## User direction
 
@@ -18,26 +30,32 @@ Camelback: one isotropic planar asymmetric fit, 3.53824 px RMS / 12.7918 px max 
 
 The exact pointwise reference comparison remains uncertain because recordings have no surveyed distance. Approximate per-phase goals and known limitations are documented in docs/reference-force-audit.md. The optional calibrated-reference intensity flag stays separate; no whole-standard legal-certification claim.
 
-## Completed local verification
+## Completed verification (do not rerun merely for handoff)
 
-- 16/16 component suites: out/recovery-adaptive-components.log, including 66303 FVD checks.
-- 10/10 integration suites: out/recovery-balanced-integration.log, before the bounded force-feedback addition; CI will run the final complete suite.
-- 8/8 final corpus, save/reload and seed diversity: out/recovery-final-generator-corpus/summary.json.
-- The 310 km/h high-airtime case now passes after shortening only the final camelback hold by .1s and multiplying signature airtime by .95. Both coarse bounded corrections are explicit in planning JSON and require full new validation. The default needs no force correction. No limits were relaxed for this case.
-- A short crown-hold solver seed fixes two nearby-speed Immelmann construction failures, with regression coverage.
-- All11 retained default sources pass angular agreement at1/2/4/8 subdivisions. Max velocity/acceleration/jerk error3.11e-10/3.06e-8/1.39e-5 vs unchanged1e-4/1e-3/1e-2 tolerances: out/recovery-balanced-angular.log.
-- Both 2560x1440 front/rear Unreal traversals completed, matching geometrySHA1 09CDA5902EC0D2B52E1BE049AF94125BDC382329. Pause/restart/load/pose and generation/mesh/scene/save cancellation checks pass. All46 captures per seat were inspected by the primary agent: out/recovery-final-generator-visual-review.json. Human approval, continuous-video review, keyboard interaction and GPU performance are not claimed.
+- Final local component suites: **16/16**, `out/recovery-adaptive-components.log`; **66303 FVD checks**, `out/recovery-crown-seed-fvd-tests.log`.
+- Final local integration suites: **10/10**, `out/default2-final-integration.log`.
+- Final local corpus: **8/8**, save/reload and seed diversity, `out/recovery-final-generator-corpus/summary.json`.
+- Source `18d3fb2` Windows/macOS component + baseline CI: **both passed**, https://github.com/Banrs/VibeCoaster2/actions/runs/35996407473.
+- Full checkpoint CI for the identical native core at `840644d`: **macOS passed components, all integration tests and all8 corpus cases; Windows was cancelled on user request while its full suite was running**, https://github.com/Banrs/VibeCoaster2/actions/runs/35995677863. Downloaded macOS evidence: `out/default2-ci-macos`.
+- Default1-provenance corrected save successfully revalidated under runtime Default2: `out/default2-compatible-baseline-report.json`.
+- Both 2560x1440 front/rear Unreal traversals passed with geometry SHA1 `09CDA5902EC0D2B52E1BE049AF94125BDC382329`. Pause/restart/load/pose and generation/mesh/scene/save cancellation checks passed. Root inspected all46 captures per seat, retained in `out/recovery-final-generator-runtime-front` and `-rear`. Agent review: `out/recovery-final-generator-visual-review.json`. This is captured-frame review, not human approval, continuous-video review, keyboard testing or a GPU performance claim.
+- The actual shortcut startup path also passed its full traversal and load/pose/cancellation checks under app2.0.0-default.2, source18d3fb2. `out/default2-shortcut-startup/result.json` and its events confirm automatic loading of the same geometry. The unavailable-reference test is explicitly skipped for this already-loading startup flow; the ordinary front/rear tests exercised it.
+- All11 retained sources pass angular agreement at1/2/4/8 subdivisions: max velocity/acceleration/jerk disagreement3.11e-10/3.06e-8/1.39e-5 against unchanged1e-4/1e-3/1e-2 tolerances. `out/recovery-balanced-angular.log`.
 
-## Delivery and shortcut
+## Important implementation details
 
-Root `Play VibeCoaster2.lnk` and Desktop `VibeCoaster2.lnk` now open the current local Default2 game through UnrealEditor -game, using UserData-Development and -CoasterLoad to load the corrected ride automatically. The user explicitly complained about the old target; do not repoint these links to Default1. `native/unreal/scripts/create_shortcuts.ps1 -Desktop` verifies manifest/executable hashes and refreshes both links after promotion. Keep dist/current.json unchanged until the new versioned package is verified. Original Default1 package/profile and the rejected rewrite archive remain preserved.
+A short crown-hold starting estimate fixes two reproducible nearby-speed Immelmann solve failures without changing requested forces or heights. Return composition adjusts bounded upstream authored bearings, then rebuilds the real FVD source and repeats every acceptance check; no points or endpoints are snapped.
 
-Before packaging, commit reviewed source, pass Windows/macOS CI, and keep the package source tree clean. Version is now2.0.0-default.2 and Default1 remains an explicitly supported saved provenance. Package only the reviewed source; verify the packaged executable before updating current.json and both shortcuts. Update this handoff with actual commit, CI and package paths on completion.
+The 310km/h, airtime1.1, roll55 case passes after shortening only the final camelback constant-load hold by0.1s and multiplying signature airtime by0.95. These coarse bounded corrections are recorded in planning JSON and followed by full new validation. The default needs neither force correction. No force or standard limits were relaxed to pass that case.
+
+## Interrupted delivery and cleanup
+
+Standalone packaging from18d3fb2 was stopped during cooking. Its log is `out/default2-package.log`; build evidence is `native/unreal/Saved/BuildRuns/20260924-120626-375`. No `dist/2.0.0-default.2/.../package-manifest.json` was produced, and `dist/current.json` was not changed. Completing and verifying a standalone package is optional future work only when a new user request resumes it.
+
+Cleanup removed this session's three marked verification-profile copies, partial `native/unreal/Saved/Cooked/Windows`, one-use crown-probe files and regenerated contact sheets. Original screenshots, reports, accepted designs, source/reference inputs, working game binaries and build caches remain. Reusable runtime helpers moved to `out/default2-delivery-tools`. Receipt: `out/default2-cleanup-receipt.json`.
+
+The original Default1 package/profile, rejected rewrite branch/archive, RFDB exports and historical recovery evidence remain untouched. `out/default2-delivery-state.json` records the stopped status. Older session-state notes and earlier handoffs are superseded by this file.
 
 ## Environment
 
-Branch codex/legacy-authoring, original HEAD a2149dfb0c91a0264ae70bd49ff74bba1073f930. Preserve staged AGENTS.md/NEXT_SESSION.md deletions and the inherited recovery edits. No compiler/runtime commands active at this snapshot; a release-identity native build follows.
-
-Use one compiler worker. Elevated exec is needed because the normal Windows sandbox helper fails. Git needs process-local safe.directory=D:/Coding/Codex/Vibecoaster2. Build scripts: scratch/build-all-checks.cmd and build-angular-probe.cmd. Python: C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe. Unreal: D:/Games/Epic Games/UE_5.8. Package script: native/unreal/scripts/package.ps1. Runtime helper: scratch/run-balanced-runtime.ps1. Full local research history remains under out/reference-audit; original RFDB exports are untouched in the legacy archive.
-
-Reviewed core commit 840644d0c2acf6bfc4af0eda7af1aa50d19843ca was pushed with explicit user approval. Full Windows/macOS CI: https://github.com/Banrs/VibeCoaster2/actions/runs/35995677863. The startup-load shortcut follow-up does not change native generation/physics. Local final integration and CI are still running.
+Work solo; no agents are needed or active. One compiler worker if work is explicitly resumed. Normal exec/image tools encounter a Windows sandbox-helper failure; elevated exec was used. Git requires process-local `safe.directory=D:/Coding/Codex/Vibecoaster2`. Python: `C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`. Unreal: `D:/Games/Epic Games/UE_5.8`. Native build helpers remain in scratch; package helper is `native/unreal/scripts/package.ps1`. No tests or builds remain running.
