@@ -394,8 +394,9 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                 };
                 double CliffBegin = 0, CliffEnd = 0, LoopBegin = 0, LoopEnd = 0;
                 double ImmelBegin = 0, ImmelEnd = 0, SignatureBegin = 0, SignatureEnd = 0;
-                double ReturnBegin = 0, ReturnEnd = 0;
+                double ReturnBegin = 0, ReturnEnd = 0, ReviewWaveBegin = 0, ReviewWaveEnd = 0;
                 if (!RoleSpan(coaster::RideRole::CliffApproach, CliffBegin, CliffEnd) ||
+                    !RoleSpan(coaster::RideRole::Wave, ReviewWaveBegin, ReviewWaveEnd) ||
                     !RoleSpan(coaster::RideRole::Loop, LoopBegin, LoopEnd) ||
                     !RoleSpan(coaster::RideRole::Immelmann, ImmelBegin, ImmelEnd) ||
                     !RoleSpan(coaster::RideRole::Signature, SignatureBegin, SignatureEnd) ||
@@ -408,7 +409,7 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                 Boosts.Sort([](const coaster::Operation& A, const coaster::Operation& B) { return A.start < B.start; });
                 if (Boosts.Num() < 2)
                 { S.Fail(TEXT("Review cameras need both physical booster phases")); break; }
-                S.ReviewExpected = 6 + Boosts.Num();
+                S.ReviewExpected = 7 + Boosts.Num();
                 double PlateauArrival = -1, CliffDeparture = -1;
                 for (const auto& Landmark : D.landmarks)
                 {
@@ -439,23 +440,23 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                     const coaster::Vec3 HorizontalBend{K.curvature.x, K.curvature.y, 0};
                     const coaster::Vec3 HorizontalUp{K.up.x, K.up.y, 0};
                     const double Bend = coaster::norm(HorizontalBend);
-                    if (Bend < PeakHorizontalBend * .25 ||
+                    if (Bend < PeakHorizontalBend * .12 ||
                         std::abs(K.tangent.z) > std::sin(15. * coaster::pi / 180.) ||
                         coaster::norm(HorizontalUp) < std::sin(10. * coaster::pi / 180.))
                         continue;
                     // A bank tilted away from horizontal curvature is the
                     // outward move, irrespective of the section's display name.
                     const double Outward = -coaster::dot(HorizontalBend / Bend, HorizontalUp);
-                    const double Score = Outward * Bend;
+                    const double Exposure = std::max(0., K.position.z - D.request.terrain.height(K.position.x, K.position.y));
+                    const double Score = Outward * (1. + std::min(100., Exposure) / 100.);
                     if (Outward > .15 && Score > OutwardScore)
                     { OutwardAt = At; OutwardScore = Score; OutwardBend = Bend; }
                 }
                 if (OutwardAt < 0)
                 { S.Fail(TEXT("Review cameras found no slow, curved outward bank on the plateau")); break; }
                 bool Planned = true;
-                Planned &= AddReview(TEXT("review-cliff-winding"), TEXT("clifftop-shelf"), TEXT("side"),
-                    CliffBegin + .16 * CliffLength, CliffBegin,
-                    CliffBegin + .36 * CliffLength, -1);
+                Planned &= AddReview(TEXT("review-cliff-winding"), TEXT("whole-clifftop-shelf"), TEXT("overview"),
+                    CliffBegin + .50 * CliffLength, CliffBegin, CliffEnd, -1);
                 const double BankSpan = std::min(75., std::max(35., .5 / OutwardBend));
                 Planned &= AddReview(TEXT("review-cliff-outward-bank"), TEXT("outward-bank-on-plateau"), TEXT("near-rail"),
                     OutwardAt, OutwardAt - BankSpan, OutwardAt + BankSpan, 0);
@@ -474,17 +475,22 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
                 const double PullBegin = LastBoost.end + 10.;
                 const double PullEnd = FMath::Min(D.track.length, LastBoost.end +
                     std::max(180., LastBoost.targetSpeed * 3.));
-                double Pullout = (PullBegin + PullEnd) * .5, Strongest = -1e30;
+                double Pullout = PullBegin, LowestPullout = std::numeric_limits<double>::infinity();
                 for (int32 I = 0; I <= 48; ++I)
                 {
                     const double At = FMath::Lerp(PullBegin, PullEnd, double(I) / 48.);
                     const auto K = D.track.sample(At);
-                    const double UpwardBend = coaster::dot(K.curvature, K.up);
-                    if (UpwardBend > Strongest) { Strongest = UpwardBend; Pullout = At; }
+                    if (coaster::dot(K.curvature, K.up) > 0 && K.position.z < LowestPullout)
+                    { LowestPullout = K.position.z; Pullout = At; }
                 }
                 const double PullSpan = std::max(40., LastBoost.targetSpeed * .7);
-                Planned &= AddReview(TEXT("review-boost-pullout"), TEXT("downstream-upward-bend"), TEXT("near-rail"),
+                Planned &= AddReview(TEXT("review-boost-pullout"), TEXT("downstream-low-pullout"), TEXT("near-rail"),
                     Pullout, Pullout - PullSpan, Pullout + PullSpan, 0);
+                double ReviewWaveCrest = (ReviewWaveBegin + ReviewWaveEnd) * .5;
+                for (const auto& Landmark : D.landmarks)
+                    if (Landmark.kind == coaster::LandmarkKind::WaveCrest) ReviewWaveCrest = Landmark.distance;
+                Planned &= AddReview(TEXT("review-wave-turnaround"), TEXT("post-camelback-180-turn"), TEXT("side"),
+                    ReviewWaveCrest, ReviewWaveBegin, ReviewWaveEnd, 0);
                 Planned &= AddReview(TEXT("review-loop-immel-spacing"), TEXT("loop-to-immelmann"), TEXT("overview"),
                     (LoopEnd + ImmelBegin) * .5, LoopBegin, ImmelEnd, 1);
                 const double SignatureLength = SignatureEnd - SignatureBegin;
@@ -708,7 +714,20 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             auto Eye = Centre + Right * (Side * Distance) - Horizontal * (Distance * .24) +
                 coaster::Vec3{0,0,CameraHeight};
             Eye.z = std::max(Eye.z, D.request.terrain.height(Eye.x, Eye.y) + 12.);
-            const auto Look = Centre * .35 + Feature.position * .65;
+            const auto Look = Feature.position + coaster::Vec3{0,0,1.2};
+            // A steep bench can occlude a low side camera even when the camera
+            // itself is above terrain. Lift the eye until its sight line clears
+            // the same triangle surface used by the ride's clearance checks.
+            double TerrainCameraLift = 0;
+            for (int32 ReviewRayIndex = 1; ReviewRayIndex < 40; ++ReviewRayIndex)
+            {
+                const double ReviewRayFraction = double(ReviewRayIndex) / 40.;
+                const auto RayPoint = Eye * (1. - ReviewRayFraction) + Look * ReviewRayFraction;
+                const double RequiredRayLift = (D.request.terrain.height(RayPoint.x, RayPoint.y) + 1. - RayPoint.z) /
+                    (1. - ReviewRayFraction);
+                TerrainCameraLift = std::max(TerrainCameraLift, RequiredRayLift);
+            }
+            if (TerrainCameraLift > 0) Eye.z += TerrainCameraLift + 2.;
             const auto E = VibeCoordinates::Position(Eye), L = VibeCoordinates::Position(Look);
             const FVector EyeCm(E.X, E.Y, E.Z), LookCm(L.X, L.Y, L.Z);
             S.ReviewTarget->SetActorLocationAndRotation(EyeCm, (LookCm - EyeCm).Rotation());
