@@ -91,7 +91,7 @@ if (-not $SkipEditorPreparation) {
     Write-Host 'Importing the reviewed runtime art manifest through Unreal editor APIs...'
     $ArtReceipt = Join-Path $ProjectRoot 'Saved/V3ArtImport.json'
     if (Test-Path -LiteralPath $ArtReceipt) { Remove-Item -LiteralPath $ArtReceipt -Force }
-    $ArtScript = Join-Path $ProjectRoot 'scripts/import_v2_art.py'
+    $ArtScript = Join-Path $ProjectRoot 'scripts/import_v3_art.py'
     Invoke-HiddenEditor -Arguments @("`"$Project`"", '/Engine/Maps/Entry', "-ExecutePythonScript=`"$ArtScript`"", '-unattended', '-nop4', '-nosplash', '-stdout', '-FullStdOutLogOutput') -LogName 'ArtImport'
     if (-not (Test-Path -LiteralPath $ArtReceipt -PathType Leaf)) { throw 'Editor did not produce its art import receipt. Inspect the import log.' }
 }

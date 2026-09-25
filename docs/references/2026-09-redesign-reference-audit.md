@@ -1,6 +1,6 @@
 # Riftwake redesign reference audit — 25 September 2026
 
-This audit distinguishes published ride dimensions, a 2023 design animation, actual ride footage, consumer acceleration recordings, and the current Riftwake source replay. It sets **design targets**, not a claim that a consumer-device trace is surveyed ride telemetry. The current comparison is the completed, native-accepted but user-rejected `out/riftwake-completion-07-{report,trace,plan}.json` candidate.
+This audit distinguishes published ride dimensions, a 2023 design animation, actual ride footage, consumer acceleration recordings, and the Riftwake source replay. It sets **design targets**, not a claim that a consumer-device trace is surveyed ride telemetry. Its comparison is the completed out/riftwake-completion-07 default.3 candidate. Default.3 is again the playable baseline; the specific criticisms that motivated this study remain historical context, and the later default.4 redesign was rejected.
 
 ## Source and footage provenance
 

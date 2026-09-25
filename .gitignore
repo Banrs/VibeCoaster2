@@ -25,9 +25,10 @@ native/build-before-move/
 /scratch/
 /profiles/
 /unreal/
-# Retained local assets for the previous running editor-game; current kit is Art/V3.
+# Legacy V2 art is outside the active V3 package.
 /native/unreal/Content/Art/V2/
 
 # Regenerable local code graph and structural extraction cache.
 /graphify-out/
 /native/core/graphify-out/
+/native/unreal/Source/VibeCoaster/graphify-out/

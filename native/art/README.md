@@ -23,7 +23,7 @@ instance/profile for the ride kit. Source assets are saved before review scripts
 move copies or set up lights. Preview scripts render the real meshes; they do
 not substitute concept images for model geometry.
 
-Run `native/unreal/scripts/import_v2_art.py` through Unreal editor Python to
+Run `native/unreal/scripts/import_v3_art.py` through Unreal editor Python to
 create the `/Game/Art/V3` meshes and materials. Its import receipt is
 `native/unreal/Saved/V3ArtImport.json`. Terrain palette preparation belongs to
 `native/unreal/scripts/create_content.py` and runs separately. No external

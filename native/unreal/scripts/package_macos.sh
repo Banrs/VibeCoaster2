@@ -159,7 +159,7 @@ run_logged ContentBootstrap "$editor" "$project" /Engine/Maps/Entry \
 art_receipt="$project_root/Saved/V3ArtImport.json"
 rm -f -- "$art_receipt"
 run_logged ArtImport "$editor" "$project" /Engine/Maps/Entry \
-    "-ExecutePythonScript=$script_dir/import_v2_art.py" -unattended -nop4 -nosplash -stdout -FullStdOutLogOutput \
+    "-ExecutePythonScript=$script_dir/import_v3_art.py" -unattended -nop4 -nosplash -stdout -FullStdOutLogOutput \
     "-abslog=$run_dir/ArtImport.engine.log"
 [[ -s "$art_receipt" ]] || fail 'Editor did not produce the art import receipt'
 fi

@@ -1,10 +1,10 @@
 # VibeCoaster2
 
-C++20 hybrid FVD/spline coaster authoring and Unreal 5.8 viewer. Development has returned to the pre-rewrite **Default 1** source on `codex/legacy-authoring`. The rejected rewrite remains preserved on its own branch and in local packages.
+C++20 hybrid FVD/spline coaster authoring and Unreal 5.8 viewer. **Riftwake default.3** is the current source and playable baseline on codex/legacy-authoring. The rejected default.4 package and generated history were moved beside the legacy checkpoints at D:/Coding/Codex/vibecoasterlegacy.
 
-Default 1 is the visual starting point, not an accepted final design. Its useful post-package edits are being reviewed individually. Current findings and outstanding design requirements are recorded in [Legacy authoring recovery](docs/legacy-authoring-recovery.md).
+The rollback followed feedback about constant roll, late LSM placement in section 1, and the clifftop. The next design task is specified in [HANDOFF.md](HANDOFF.md); use the [code map](docs/CODE_MAP.md) to find the relevant implementation paths.
 
-Start with [HANDOFF.md](HANDOFF.md) for current status, build commands, and unresolved issues. Double-click `Play VibeCoaster2.lnk` in the repository or `VibeCoaster2` on the desktop to launch the current Default 2 local game and automatically load its corrected ride; press Space to ride. Until the standalone package is promoted, the shortcuts use Unreal game mode and the isolated `UserData-Development` profile. Recreate that shortcut with `native/unreal/scripts/create_shortcuts.ps1 -Desktop -Development -UnrealRoot "D:/Games/Epic Games/UE_5.8"`. `dist/current.json` still identifies the preserved Default 1 standalone package; the helper without `-Development` follows that published pointer.
+Start with [HANDOFF.md](HANDOFF.md) for status and evidence. Double-click Play VibeCoaster2.lnk in the repository or VibeCoaster2 on the desktop to launch the verified default.3 standalone and automatically load the accepted ride from UserData-Riftwake-V3; press Space to ride. Both shortcuts and dist/current.json select the same default.3 package.
 
 The original camelback image, trace, fit and clifftop reference remain in [docs/references](docs/references). Historical checkpoint reports document their original snapshots; their acceptance wording does not override the current design issues.
 
