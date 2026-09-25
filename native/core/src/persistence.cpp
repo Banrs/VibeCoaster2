@@ -170,7 +170,7 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
             std::istringstream b(bytes);b.imbue(std::locale::classic());size_t roleCount=0;b>>roleCount;
             if(!b||roleCount==0||roleCount>512){error="Invalid section role count";return false;}
             for(size_t j=0;j<roleCount;++j){int role=0;std::string id;b>>role>>std::quoted(id);
-                if(!b||role<int(RideRole::Unspecified)||role>int(RideRole::Brakes)||id.empty()||id.size()>(role==int(RideRole::Unspecified)?128u:64u)){error="Invalid section role or recipe ID";return false;}
+                if(!b||role<=int(RideRole::Unspecified)||role>int(RideRole::Brakes)||id.empty()||id.size()>64){error="Invalid section role or recipe ID";return false;}
                 sectionRoles.push_back({RideRole(role),std::move(id)});}
             b>>std::ws;if(!b.eof()){error="Trailing section role data";return false;}
         }else if(name=="TERRAIN_RAVINES"){
@@ -225,9 +225,10 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
         if(sectionRoles.size()!=result.sections.size()){error="Recipe requires a complete typed section mapping";return false;}
         for(size_t i=0;i<sectionRoles.size();++i){
             const auto& [role,id]=sectionRoles[i];
+            const auto element=std::find_if(request.recipe.elements.begin(),request.recipe.elements.end(),[&](const RecipeElement& e){return e.id==id&&e.role==role;});
+            if(element==request.recipe.elements.end()){error="Section does not belong to its saved recipe";return false;}
             result.sections[i].role=role;result.sections[i].recipeId=id;
         }
-        for(const auto& section:result.sections)if(!recipeOwnerForSection(result,section)){error="Section does not belong to its saved recipe or a retained Loop transition source";return false;}
     }else if(!sectionRoles.empty()){error="Typed sections require their saved recipe";return false;}
     for(const auto& op:result.operations)if(!validDriveParameters(op)){error="Missing or invalid operation profile";return false;}
     p>>std::ws;if(!p.eof()){error="Unexpected data after extensions";return false;}out=std::move(result);return true;
@@ -241,9 +242,6 @@ bool recheck(Design& d,Cancel cancel,WorkRecorder* work=nullptr){
     for(const auto& op:d.operations)if(!validDriveParameters(op)){d.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return false;}
     if(work)work->enter(WorkPhase::Geometry,d.candidate,"Checking saved track and clearance");
     d.track.rebuild();d.inversionDimensions=d.request.recipe.elements.empty()?measureInversionDimensions(d.track,cancel):measureInversionDimensions(d.track,d.sections,cancel);
-    if(!d.request.recipe.elements.empty())for(const auto& section:d.sections)if(section.role==RideRole::Unspecified&&!recipeOwnerForSection(d,section)){
-        d.report.fail("MOTION_RECIPE_MAP","Derived Loop section does not match its complete retained source and hardware",section.start);return false;
-    }
     // Rebuild certifies the numerical interpolation domain. Independent
     // dynamics and spatial checks can now overlap the solid-clearance pass;
     // no result is accepted until all of them have joined and passed.
@@ -270,10 +268,6 @@ bool recheck(Design& d,Cancel cancel,WorkRecorder* work=nullptr){
     evaluateTargets(d,&sweep);
     if(work)work->enter(WorkPhase::Authorship,d.candidate,"Checking editable sources and continuous motion");
     assessAuthorship(d,cancel);assessMotion(d,cancel);
-    const auto dimensions=validateReferenceDimensions(d,cancel);
-    d.report.errors.insert(d.report.errors.end(),dimensions.errors.begin(),dimensions.errors.end());
-    const auto reference=validateInversionReferenceForces(d,d.simulation);
-    d.report.errors.insert(d.report.errors.end(),reference.errors.begin(),reference.errors.end());
     if(work)work->enter(WorkPhase::Refinement,d.candidate,"Checking independent time and spatial refinement");
     verifyConvergenceWith(d,[&]{return fine.get();},cancel);
     if(fine.valid()){stopFine.store(true);fine.wait();}

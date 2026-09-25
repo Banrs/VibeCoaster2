@@ -39,8 +39,8 @@ struct TurnParameters {
     bool operator==(const TurnParameters&) const=default;
 };
 struct InversionParameters {
-    // Requested body rise, subject to the actual category ceiling. The force
-    // solver must reach this height from the independently realized entry energy.
+    // Reference height at 65m/s for a loop or 53m/s for an Immelmann. Actual
+    // scale follows entry energy; the native solve verifies the resulting port.
     double referenceRiseMeters{100},yawDegrees{15},crestG{1},entryPitchDegrees{55},exitPitchDegrees{-15};
     bool operator==(const InversionParameters&) const=default;
 };

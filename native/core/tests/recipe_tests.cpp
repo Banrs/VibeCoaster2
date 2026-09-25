@@ -1,7 +1,5 @@
 #include "coaster/recipe.hpp"
-#include "../src/acceptance_internal.hpp"
 #include "coaster/coaster.hpp"
-#include "coaster/fvd.hpp"
 #include "../src/recipe_compiler.hpp"
 
 #include <algorithm>
@@ -62,52 +60,6 @@ void authorshipTwistFlags() {
 // A banked circular circuit has exact derivative jets and constant elevation.
 // Its synthetic constant-speed trace makes the semantic timing independently
 // calculable, without running generation or prescribing any real ride shape.
-void forceOnlyAuthorship() {
-    using namespace coaster;
-    FvdRequest request;const auto source=designFvdSection(request);
-    check(source.report.valid()&&source.assessment.passed,"The force-only authorship fixture has a valid independently replayed source");
-    Design d;d.track=source.track;d.simulation.completed=true;
-    ForceAuthoring retained;retained.name="force-only";retained.program=request;
-    for(const auto& span:d.track.spans)retained.sourceDistances.push_back(span.start);
-    retained.sourceDistances.push_back(d.track.length);d.forcePrograms={retained};
-    for(const auto& q:source.samples)d.simulation.frames.push_back({q.time,q.distance,q.speed,{}});
-    assessAuthorship(d);
-    check(d.splinePrograms.empty()&&d.report.valid()&&d.authorship.passed,"Fully force-authored geometry must not require a fabricated spline programme");
-    auto edited=d;edited.forcePrograms[0].program.controls.back().normalG=1.1;assessAuthorship(edited);
-    check(!edited.report.valid()&&!edited.authorship.passed,"Force-only authoring still rejects geometry that disagrees with retained controls");
-    d.forcePrograms.clear();assessAuthorship(d);
-    check(!d.report.valid()&&d.report.errors.back().code=="AUTHORING_MISSING","Removing actual force sources still fails authorship validation");
-}
-
-void derivedLoopOwnership() {
-    using namespace coaster;
-    Design d;d.request.recipe=defaultRideRecipe();d.track.closed=false;d.track.authoredGeometry=d.track.authoredFrame=true;
-    const auto loop=std::find_if(d.request.recipe.elements.begin(),d.request.recipe.elements.end(),[](const RecipeElement& e){return e.role==RideRole::Loop;});
-    const size_t owner=size_t(loop-d.request.recipe.elements.begin());const std::string id=loop->id+"-energy-brake";
-    for(int i=0;i<4;++i)d.track.knots.push_back({{10.*i,0,20},{1,0,0},{0,0,0},{0,0,1},0,Element::Brake});
-    d.track.rebuild();ForceAuthoring force;force.name=id;force.sourceDistances={0,10,20};d.forcePrograms={force};
-    d.sections={{"arbitrary-display-name",0,10,0,true,RideRole::Unspecified,id},{"second-piece",10,20,0,true,RideRole::Unspecified,id}};
-    d.operations={{2,18,DriveKind::Brake,48,10000,1000000,.5}};
-    check(recipeOwnerForSection(d,d.sections[0])==owner,"Split brake source retains its saved Loop parent independently of display names");
-    d.sections[1].start=11;
-    check(!recipeOwnerForSection(d,d.sections[0]),"A gap in derived source coverage cannot hide an inversion span");d.sections[1].start=10;
-    d.sections[1].end=21;
-    check(!recipeOwnerForSection(d,d.sections[0]),"Derived sections cannot extend outside the actual FVD source");d.sections[1].end=20;
-    d.track.knots[1].element=Element::Inversion;
-    check(!recipeOwnerForSection(d,d.sections[0]),"An inversion body cannot be relabeled as its energy brake");d.track.knots[1].element=Element::Brake;
-    const auto motor=d.operations;d.operations.clear();
-    check(!recipeOwnerForSection(d,d.sections[0]),"The saved energy-brake source needs real Brake hardware");d.operations=motor;
-    d.forcePrograms.push_back(force);
-    check(!recipeOwnerForSection(d,d.sections[0]),"A derived section needs a unique source mapping");d.forcePrograms.pop_back();
-    auto unknown=d.sections[0];unknown.recipeId=loop->id+"-unknown";
-    check(!recipeOwnerForSection(d,unknown),"Arbitrary untyped section IDs remain rejected");
-    const std::string link=loop->id+"-bank-connection";for(auto& part:d.sections)part.recipeId=link;
-    d.forcePrograms[0].name=link;for(auto& knot:d.track.knots)knot.element=Element::Turn;d.operations.clear();
-    check(recipeOwnerForSection(d,d.sections[0])==owner,"The separate bank-link source belongs to its saved Loop without requiring brake hardware");
-    d.request.recipe.elements[owner].role=RideRole::Opening;
-    check(!recipeOwnerForSection(d,d.sections[0]),"Only a saved Loop can own these derived transition sources");
-}
-
 void motionDiagnostics() {
     using namespace coaster;
     Design d;d.track.closed=true;d.track.authoredGeometry=d.track.authoredFrame=true;
@@ -236,8 +188,6 @@ void energyBootstrap() {
 int main() {
     using namespace coaster;
     authorshipTwistFlags();
-    forceOnlyAuthorship();
-    derivedLoopOwnership();
     motionDiagnostics();
     energyBootstrap();
     const auto recipe = defaultRideRecipe();
@@ -298,10 +248,6 @@ int main() {
     check(payload.find("lipSpeedKmh=")==std::string::npos,"Unused cliff speed metadata is absent from editable recipes");
     auto noOp=recipe;std::get<CliffParameters>(noOp.elements[3].parameters).lipSpeedKmh+=1;
     check(!validateRecipe(noOp,error),"A silent no-op edit to role-specific fixed metadata is rejected");
-    auto staleSignature=recipe;std::get<SweepParameters>(staleSignature.elements[11].parameters).negativeG=-.9;
-    check(!validateRecipe(staleSignature,error),"The solved signature does not silently accept an unused airtime metadata edit");
-    auto resetEntry=recipe;std::get<InversionParameters>(resetEntry.elements[9].parameters).entryPitchDegrees=45;
-    check(!validateRecipe(resetEntry,error),"Inversions inherit the upstream FVD port instead of accepting a no-op entry-pitch reset");
     auto wrongAnchor=recipe;wrongAnchor.elements[7].anchor=TerrainAnchor::Station;
     check(!validateRecipe(wrongAnchor,error),"Protected placement intent cannot silently ignore an unrelated terrain anchor");
 

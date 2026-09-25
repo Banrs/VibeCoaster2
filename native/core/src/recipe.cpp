@@ -222,8 +222,6 @@ bool editableField(const RecipeElement& element,std::string_view field) {
         case RideRole::CliffApproach:return field=="summitHeightMeters"||field=="outwardBankDegrees"||field=="approachLengthMeters"||field=="approachHeadingDegrees";
         case RideRole::CliffDrop:return field=="dropDegrees";
         case RideRole::Wave:return field!="lengthMeters";
-        case RideRole::Signature:return field!="negativeG"; // Solved from the live force/height/heading constraints.
-        case RideRole::Loop:case RideRole::Immelmann:return field!="entryPitchDegrees"; // Inherit the actual upstream FVD port.
         case RideRole::Return:
             if(element.anchor==TerrainAnchor::Approach)return false; // Automatic FVD connection to the fixed station port.
             return !std::holds_alternative<SweepParameters>(element.parameters)||field!="negativeG";
@@ -343,15 +341,15 @@ RideRecipe defaultRideRecipe() {
         element("station", RideRole::Station, TerrainAnchor::Station, OperationParameters{20, 0, 0, 0}),
         element("departure", RideRole::Departure, TerrainAnchor::Approach, OperationParameters{180, 230.4, 0, 0}),
         element("opening", RideRole::Opening, TerrainAnchor::Approach, HillParameters{160, .15, 50, 3.5, 1.2, 1.5, 1}),
-        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{284.5, 50, 35, -50, 580, -131.929703164387}),
-        element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{34, 70, 0, 13}),
+        element("cliff-approach", RideRole::CliffApproach, TerrainAnchor::Plateau, CliffParameters{285, 50, 35, 0, 1000, -158.016577}),
+        element("cliff-lip", RideRole::CliffLip, TerrainAnchor::Plateau, OperationParameters{70, 70, 0, 13}),
         element("cliff-drop", RideRole::CliffDrop, TerrainAnchor::CliffFoot, CliffParameters{285, 32, 88, 30, 220}),
         element("downhill-lsm", RideRole::DownhillLaunch, TerrainAnchor::CliffFoot, OperationParameters{0, 0, -8, 16}),
         element("camelback", RideRole::Camelback, TerrainAnchor::CliffFoot, CamelbackParameters{}),
-        element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 70, 84, 3.0, 500}),
-        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{74, 0, 1.2, 55, 0}),
-        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{66, 0, 1, 55, -5}),
-        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{554, -70, -45.83662361046586, 2.864788975654116, -.75, 45}),
+        element("wave", RideRole::Wave, TerrainAnchor::WaveBench, TurnParameters{180, 90, 73, 3.0, 500}),
+        element("loop", RideRole::Loop, TerrainAnchor::LoopBasin, InversionParameters{140, 0, 1.2, 55, 0}),
+        element("immelmann", RideRole::Immelmann, TerrainAnchor::ImmelmannShoulder, InversionParameters{95, 0, .6, 55, -5}),
+        element("signature", RideRole::Signature, TerrainAnchor::Ravine, SweepParameters{540, -70, -86.720313, 0, -.75, 45}),
         element("return-crest", RideRole::Return, TerrainAnchor::Ravine, HillParameters{35, -1.25, 0, 3.2, 1.0, 1.5, 1}),
         element("return-sweep", RideRole::Return, TerrainAnchor::Approach, SweepParameters{300, 0, 0, 0, 0, 0}),
         element("brakes", RideRole::Brakes, TerrainAnchor::Station, OperationParameters{250, 0, 0, -7})

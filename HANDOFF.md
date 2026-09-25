@@ -1,8 +1,25 @@
-# Riftwake default.4 — verified and activated
+# Riftwake default.3 restored — redesign paused
+
+Updated 25 September 2026 after the user explicitly requested: "default 3 worked better. revert to that". **Default.3 is now the active playable version and source baseline. Do not resume the redesign without a new user instruction. Work solo; all subagents are finished.**
+
+The user rejected default.4: section 1 had unnecessary constant roll and the LSM still felt too late; the clifftop was also wrong. Native acceptance and the prior agent visual review did not establish that those design requirements were met. The default.4 record below is historical and superseded.
+
+- Native source is restored exactly to the default.3 delivery baseline `6a68f85` (compiled package source `9631e488f93e71a1fa2056550264b7d1a31967ed`). `git diff 6a68f85 -- native` was empty after restoration.
+- Active package: `native/unreal/Packaged/run-20260924-231703-433/Windows/VibeCoaster/Binaries/Win64/VibeCoaster.exe`, SHA256 `DBB65AF1F0F6E9B54D05E2DB83B48994237F4E845580B244B609650B42A29EF4`.
+- Active profile: `UserData-Riftwake-V3`; accepted-save SHA256 `D48ED31CF62621405EE43A859C3E6E1EA468E405B383217FC7FB3E84895A0CF7`. It matches the preserved default.3 save.
+- Restored `dist/current.json` and both root/desktop Play shortcuts; manifest/executable/save hashes and shortcut targets/arguments were verified. Restoration receipt: `out/default3-restoration.json`.
+- Default.4's package, profile, outputs and committed history remain available for reference. Its active pointer and shortcuts were backed up before restoration. No running game was closed. Relaunch through Play to use default.3.
+- Graphify refresh crashed after the source rollback. `graphify-out/.needs_update` remains: the existing default.4 index is stale and must not be treated as current source. Refresh it before graph-based development.
+- No new package or geometry was generated during this rollback. Existing `native/build` binaries may still be from default.4; rebuild before using the native CLI for future work. The active standalone is the verified default.3 binary above.
+- Relevant handoff for the next model: earlier user requests remain context, but this rollback is not approval of default.4. Reference research remains in `docs/references/2026-09-redesign-reference-audit.md`. The rejected implementation is retained at `b92efe0`.
+
+---
+
+# Rejected default.4 delivery record — historical
 
 Updated 25 September 2026. **Work solo. All subagents are finished; do not spawn or resume any.** The redesign requested in this conversation is implemented, packaged, reviewed and activated. Current evidence is in [checkpoint11](docs/checkpoints/11-riftwake-fvd-redesign.md). Completion-07 is retained as rollback, not as visual acceptance of the new work.
 
-## Current playable delivery
+## Historical default.4 delivery
 
 - Package source: `f110b1b2b62ec632f0a2366939d9c564312972f9`. Later delivery/docs/shortcut commits do not change that binary identity.
 - Standalone: `native/unreal/Packaged/run-20260925-124313-111/Windows/VibeCoaster/Binaries/Win64/VibeCoaster.exe`.

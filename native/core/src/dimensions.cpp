@@ -1,6 +1,4 @@
 #include "coaster/coaster.hpp"
-#include "acceptance_internal.hpp"
-#include <unordered_map>
 #include <stdexcept>
 namespace coaster {
 namespace {
@@ -34,30 +32,6 @@ template<size_t N>static std::pair<double,double> bounds(const std::array<double
     return {lo,hi};
 }
 std::pair<double,double> polynomialBounds(const std::array<double,8>& coefficients){return bounds(coefficients);}
-std::pair<double,double> canonicalPolynomialBounds(const std::array<double,10>& coefficients){return bounds(coefficients);}
-ValidationReport validateReferenceDimensions(const Design& d,Cancel cancel){
-    ValidationReport report;if(d.generationVersion!=generatorVersion||d.request.recipe.elements.empty())return report;
-    if(d.sections.empty()){report.fail("ELEMENT_SIZE_SOURCE","Current recipe requires typed sections for actual size checks");return report;}
-    struct Range {double low{INFINITY},high{-INFINITY},start{};RideRole role{};};
-    std::unordered_map<std::string,Range> elements;double lowest=INFINITY,highest=-INFINITY;size_t section=0;
-    for(size_t i=0;i<d.track.spans.size();++i){
-        if((i&127)==0&&cancel&&cancel()){report.fail("CANCELLED","Canonical size check cancelled");return report;}
-        const auto& span=d.track.spans[i];std::array<double,10> z;for(size_t n=0;n<z.size();++n)z[n]=span.c[n].z;
-        const auto [lo,hi]=canonicalPolynomialBounds(z);lowest=std::min(lowest,lo);highest=std::max(highest,hi);
-        while(section+1<d.sections.size()&&span.start>=d.sections[section].end-1e-8)++section;
-        const auto& owner=d.sections[section];auto [at,inserted]=elements.try_emplace(owner.recipeId);auto& extent=at->second;
-        if(inserted){extent.start=owner.start;extent.role=owner.role;}extent.low=std::min(extent.low,lo);extent.high=std::max(extent.high,hi);
-    }
-    for(const auto& [id,extent]:elements){double cap=0;const char* code="ELEMENT_SIZE_CAP";
-        switch(extent.role){case RideRole::Loop:cap=81.8388;break;case RideRole::Immelmann:cap=99.6696;break;case RideRole::CliffDrop:cap=247.5;break;
-            case RideRole::Camelback:cap=247.5;code="CAMELBACK_BENCHMARK_SIZE";break;case RideRole::Wave:cap=70;code="TURNAROUND_BENCHMARK_SIZE";break;default:break;}
-        if(cap>0&&extent.high-extent.low>cap+1e-6)report.fail(code,id+": actual canonical vertical extent exceeds the 1.5-times category benchmark",extent.start,extent.high-extent.low,cap);
-    }
-    if(highest-lowest>292.5+1e-6)report.fail("RIDE_HEIGHT_SCREEN","Actual canonical rail envelope exceeds the project height screen",0,highest-lowest,292.5);
-    double footingBottom=INFINITY;for(const auto& support:d.supports)for(const auto& member:support.members)if(member.kind==SupportMemberKind::Footing)footingBottom=std::min(footingBottom,member.base.z);
-    if(std::isfinite(footingBottom)&&highest-footingBottom>292.5+1e-6)report.fail("RIDE_FOUNDATION_HEIGHT_CAP","Highest rail above the lowest embedded footing exceeds the conservative overall-height cap",0,highest-footingBottom,292.5);
-    return report;
-}
 static std::vector<InversionDimensions> measureDimensions(const Track& track,const std::vector<RideSection>* sections,Cancel cancel){
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
     size_t n=track.spans.size();

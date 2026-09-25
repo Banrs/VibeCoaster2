@@ -52,20 +52,6 @@ struct FvdHillRequest {
     double rollingAcceleration{},dragAccelerationCoefficient{};
 };
 struct FvdHillResult { FvdRequest authoring;FvdResult section; };
-// A real negative actuator channel manages speed while the upright pitch
-// changes smoothly; the finite train must receive matching Brake hardware.
-struct FvdGradeTransitionRequest {
-    FvdEntry entry;
-    double exitPitch{32*pi/180},normalG{2.4};
-    double rollingAcceleration{},dragAccelerationCoefficient{};
-};
-FvdHillResult designFvdGradeTransition(const FvdGradeTransitionRequest&,Cancel cancel={});
-struct FvdBrakedPitchRequest {
-    FvdEntry entry;
-    double targetSpeed{48},heightChange{20},exitPitch{.18},exitNormalG{1.9};
-    double rollingAcceleration{},dragAccelerationCoefficient{};
-};
-FvdHillResult designFvdBrakedPitch(const FvdBrakedPitchRequest&,Cancel cancel={});
 // Three phase durations solve crest height, exit height and live exit pitch.
 // The end remains positively loaded; adjoining motion inherits its full jet.
 FvdHillResult designFvdHill(const FvdHillRequest&,Cancel cancel={});
@@ -99,12 +85,9 @@ struct FvdWaveRequest {
 // Loaded rise, banked elevated reversal and descending recovery share a live
 // force timeline. The exit is level and positively curved, ready for a loop.
 FvdHillResult designFvdWave(const FvdWaveRequest&,Cancel cancel={});
-// Immediate loaded bank-in, compact coherent half-turn and upright rising exit.
-FvdHillResult designFvdCompactWave(const FvdEntry&,double rolling,double drag,Cancel cancel={});
 struct FvdLoopRequest {
     std::optional<FvdEntry> entry; // Actual world-space port; absent retains the legacy isolated fixture.
     double entrySpeed{65},height{145},normalG{3.8},crestG{.9},yawAngle{15*pi/180};
-    double rampSeconds{1.2}; // Initial normal-force buildup before the loaded ascent.
     double ascentReleaseSeconds{}; // Optional prescribed unload followed by a solved crown hold.
     double exitPositiveG{}; // Zero inherits normalG; otherwise prescribe the descending recovery load.
     double exitPitch{},exitNormalG{1.5},rollingAcceleration{},dragAccelerationCoefficient{};
@@ -113,47 +96,15 @@ struct FvdLoopRequest {
 // Upright entry, explicit unloaded inverted crest and real lateral/yaw motion.
 // Apex height and the final frame are solved; final XYZ placement remains free.
 FvdHillResult designFvdLoop(const FvdLoopRequest&,Cancel cancel={});
-// A short upright connection retains the turning force of the compact
-// inversion link without an unnecessary bank pulse.
-FvdHillResult designFvdInversionLink(const FvdEntry&,double rolling,double drag,Cancel cancel={});
-struct FvdClimbSetupRequest {
-    FvdEntry entry;
-    double headingChange{-35.064985*pi/180};
-    double rollingAcceleration{},dragAccelerationCoefficient{};
-};
-FvdHillResult designFvdClimbSetup(const FvdClimbSetupRequest&,Cancel cancel={});
-struct FvdSignatureRequest {
-    FvdEntry entry;
-    double exitHeight{7},exitPitch{.05},exitNormalG{1.1},headingChange{-13.66085*pi/180},bank{45*pi/180},durationScale{1};
-    double rollingAcceleration{},dragAccelerationCoefficient{};
-};
-FvdHillResult designFvdSignature(const FvdSignatureRequest&,Cancel cancel={});
-struct FvdPlateauArrivalRequest {
-    FvdEntry entry;
-    double rise{55},exitPitch{.025};
-    double rollingAcceleration{},dragAccelerationCoefficient{};
-};
-FvdHillResult designFvdPlateauArrival(const FvdPlateauArrivalRequest&,Cancel cancel={});
-struct FvdWindingCliffRequest {
-    FvdEntry entry;
-    double heightChange{-6},headingChange{100*pi/180},outwardBank{50*pi/180},durationScale{1};
-    double rollingAcceleration{},dragAccelerationCoefficient{};
-};
-// Prescribes gentle upright-world support/turning forces and resolves both
-// rider axes through the independent bank. Outward bank need not make a hill.
-FvdHillResult designFvdWindingCliff(const FvdWindingCliffRequest&,Cancel cancel={});
 enum class TerrainAct {Clifftop,RavineRoll};
 struct FvdTerrainActRequest {
     TerrainAct kind{TerrainAct::Clifftop};
     double entrySpeed{40},entryPitch{},pitchRateS{},pitchSecondS{},pitchThirdS{};
     double heightChange{-10},headingChange{130*pi/180},airtimeG{-1.25},outwardBank{30*pi/180},durationScale{4./3},exitPitch{};
     double rollingAcceleration{},dragAccelerationCoefficient{};
-    std::optional<FvdEntry> entry;
-    double positiveG{},recoveryG{},inwardBank{55*pi/180}; // Zero loads retain the legacy act's peaks.
-    double exitNormalG{},exitBank{}; // Zero exit load retains cos(exitPitch); a live bank/load may continue into the next act.
 };
-// Carries the inherited physical port through coordinated force and bank acts.
-// Exit load, pitch and bank are authored; only hardware handoffs need alignment.
+// Inherits a planar entry's complete pitch jet, then coordinates rider force
+// and bank through the inbank/outbank act. The exit is upright and level.
 FvdHillResult designFvdTerrainAct(const FvdTerrainActRequest&,Cancel cancel={});
 struct FvdApproachRequest {
     FvdEntry entry;

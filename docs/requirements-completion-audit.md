@@ -1,4 +1,4 @@
-The default.4 redesign is implemented, packaged, reviewed and activated. See [checkpoint11](checkpoints/11-riftwake-fvd-redesign.md) for current per-requirement measurements, final front/rear runtime proof and retained reference limitations. Both Play shortcuts now load candidate11 in `UserData-Riftwake-V4`. Earlier completion checkboxes below remain historical.
+Default.3 has been restored to the native source and both Play shortcuts at the user's request. Default.4 was rejected for section 1 roll/LSM placement and clifftop geometry; its measurements in [checkpoint11](checkpoints/11-riftwake-fvd-redesign.md) are historical, not acceptance. Further redesign is paused. Current restoration details are in `HANDOFF.md`.
 
 # Requirements completion audit
 

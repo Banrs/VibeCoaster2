@@ -1,5 +1,7 @@
 # Riftwake force-authored redesign — default.4
 
+> **Rejected and rolled back on 25 September 2026.** The user reported unnecessary constant roll and late LSM placement in section 1 and an incorrect clifftop, then requested default.3. Source and both Play shortcuts now use default.3. The measurements below document the rejected default.4 implementation; they are not user acceptance or the current active version. See `HANDOFF.md` and `out/default3-restoration.json`.
+
 The user rejected completion-07's clifftop, inversion geometry, return flats, terrain fit, conservative LSM placement and trim-before-boost hardware. Candidate11 replaces those parts with connected force-authored sources. **Native acceptance, exact-save reload, final-package front/rear traversal, agent visual review and playable activation are complete.** Both Play shortcuts now load the exact candidate11 save in `UserData-Riftwake-V4`. Completion-07 is preserved for rollback. Work continued solo after every subagent reached its stopping point.
 
 ## Measured replacement

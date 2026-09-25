@@ -10,7 +10,7 @@ class MotionBuilder {
 public:
     using Range = std::pair<size_t,size_t>;
     struct Module {size_t begin,end;std::string name;int reversals{};bool planar{};};
-    struct Motor {size_t begin,end;DriveKind kind;double speed,acceleration;double rampSeconds{},exitFadeMeters{};};
+    struct Motor {size_t begin,end;DriveKind kind;double speed,acceleration;};
     Design& d;
     const GenerationRequest& req;
     Cancel cancel;
@@ -32,7 +32,7 @@ public:
     Range pitchToHeight(double height,detail::AngleJet endPitch,Element,const char* name);
     Range line(double length,Element,const char* name);
     void drive(double length,DriveKind,double speed,double acceleration,const char* name);
-    void driveGraded(double endHeight,double endGrade,double speed,double acceleration,const char* name,double blendEntrySpeed=0);
+    void driveGraded(double endHeight,double endGrade,double speed,double acceleration,const char* name);
     double crestCurvature(double rise,double length,double targetG);
 };
 }

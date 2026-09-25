@@ -2,14 +2,6 @@
 #include "coaster/coaster.hpp"
 
 namespace coaster {
-// Reserve one local car half-length, one stator half-module and half a
-// geometry sample. Cars outside the powered interval need no motor alignment.
-inline constexpr double poweredAlignmentMargin(){return trainHalfLength+.6+.125;}
-inline bool propulsionGeometry(const Track& track,double s){
-    const auto k=sampleKinematics(track,s);const auto& p=k.sample;
-    const Vec3 upright=unit(Vec3{0,0,1}-p.tangent*p.tangent.z);
-    return std::hypot(p.tangent.x,p.tangent.y)>1e-3&&norm(p.curvature)<1e-5&&dot(p.up,upright)>.9998&&std::abs(dot(k.upS,p.right))<.001;
-}
 struct OperationHardware {size_t operation;double distance;bool powered;StationBox box;bool movingFin{};};
 // Segmented assemblies follow the canonical frame, including graded motors.
 // Cross-sections stay inside the already reserved track/train corridor.

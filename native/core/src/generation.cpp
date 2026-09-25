@@ -1,6 +1,5 @@
 #include "coaster/coaster.hpp"
 #include "coaster/clearance.hpp"
-#include "coaster/operation_hardware.hpp"
 #include "recipe_compiler.hpp"
 #include "authoring.hpp"
 #include "banking.hpp"
@@ -15,33 +14,37 @@
 #include <iomanip>
 
 namespace coaster {
+static double motorAlignmentMargin(const TrainConfig& train){return (train.cars-1)*train.spacing+1.5;}
+static bool propulsionGeometry(const Track& track,double s){
+    const auto k=sampleKinematics(track,s);const auto& p=k.sample;
+    const Vec3 upright=unit(Vec3{0,0,1}-p.tangent*p.tangent.z);
+    return std::hypot(p.tangent.x,p.tangent.y)>1e-3&&std::abs(cross(p.tangent,p.curvature).z)<1e-5&&dot(p.up,upright)>.9998&&std::abs(dot(k.upS,p.right))<.001;
+}
 // Recompose upstream bearings toward a short physical station approach.
 // This approximation only chooses the next recipe trial; the real FVD source,
 // complete train replay and every acceptance check still run independently.
 static bool improveReturnLayout(const Design& d,RecipeFeedback& feedback,const std::optional<RecipePort>& pending,Cancel cancel){
-    std::string cliffId,approachId;
+    std::string cliffId,signatureId,approachId;
     for(const auto& e:d.request.recipe.elements){
         if(e.role==RideRole::CliffApproach)cliffId=e.id;
+        if(e.role==RideRole::Signature)signatureId=e.id;
         if(e.role==RideRole::Return&&e.anchor==TerrainAnchor::Approach&&std::holds_alternative<SweepParameters>(e.parameters))approachId=e.id;
     }
-    if(cliffId.empty()||approachId.empty())return false;
+    if(cliffId.empty()||signatureId.empty()||approachId.empty())return false;
     auto findSource=[&](const std::string& id){return std::find_if(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const auto& p){return p.name==id;});};
     const auto approach=findSource(approachId);
-    const auto winding=findSource(cliffId+"-clifftop"),setup=findSource(cliffId+"-recovery");
-    if(setup==d.forcePrograms.end()||winding==d.forcePrograms.end())return false;
+    const auto signature=std::find_if(d.splinePrograms.begin(),d.splinePrograms.end(),[&](const auto& p){return p.name==signatureId+"-approach";});
+    const auto setup=std::find_if(d.splinePrograms.begin(),d.splinePrograms.end(),[&](const auto& p){return p.name==cliffId+"-recovery";});
+    if(setup==d.splinePrograms.end()||signature==d.splinePrograms.end())return false;
     double distance=0,speed=0;
     if(pending&&pending->id==approachId){distance=pending->distance;speed=pending->speed;}
     else if(approach!=d.forcePrograms.end()){distance=d.track.spans.at(approach->firstKnot).start;speed=approach->program.speed;}
     else return false;
     const auto q=sampleKinematics(d.track,distance);
     if(std::abs(q.sample.tangent.z)>1e-6||norm(q.sample.up-Vec3{0,0,1})>1e-6||norm(q.sample.curvature)>1e-6)return false;
-    const double hand=winding->hand;
+    const double hand=signature->hand;
     auto unmirror=[&](Vec3 p){p.y*=hand;return p;};
-    // The winding family's departure bearing is changed in its last turn.
-    // Use that turn's centre as the local planning pivot; the signature's
-    // force-authored heading is retained because it has limited authority.
-    const size_t departurePivot=winding->firstKnot+size_t(.82*(winding->sourceDistances.size()-1));
-    const Vec3 point=unmirror(q.sample.position),cp=unmirror(d.track.knots[setup->firstKnot].position),sp=unmirror(d.track.knots[departurePivot].position);
+    const Vec3 point=unmirror(q.sample.position),cp=unmirror(d.track.knots[setup->firstKnot].position),sp=unmirror(d.track.knots[signature->firstKnot].position);
     const auto tangent=unmirror(q.sample.tangent);const double heading=std::atan2(tangent.y,tangent.x);
     if(std::abs(heading)<.35||std::abs(heading)>2.5||speed<15||speed>80)return false;
     const auto& train=d.request.train;
@@ -76,9 +79,9 @@ static bool improveReturnLayout(const Design& d,RecipeFeedback& feedback,const s
     if(std::abs(determinant)<1)return false;
     const double dc=std::clamp((-error.x*js.y+error.y*js.x)/determinant,-.1,.1),ds=std::clamp((-error.y*jc.x+error.x*jc.y)/determinant,-.1,.1);
     const double prior=feedback.compactReturn?feedback.cliffHeadingCorrection:d.candidate==1?-4*pi/180:d.candidate==2?4*pi/180:0;
-    const double nextCliff=std::clamp(prior+dc,std::max(-.45,-1.5-recipeClimbSetupHeading),std::min(.45,.5-recipeClimbSetupHeading)),nextDeparture=std::clamp(feedback.cliffDepartureHeadingCorrection+ds,-.45,.45);
-    if(feedback.compactReturn&&std::abs(nextCliff-feedback.cliffHeadingCorrection)+std::abs(nextDeparture-feedback.cliffDepartureHeadingCorrection)<1e-7)return false;
-    feedback.cliffHeadingCorrection=nextCliff;feedback.cliffDepartureHeadingCorrection=nextDeparture;feedback.compactReturn=true;
+    const double nextCliff=std::clamp(prior+dc,-.45,.45),nextSignature=std::clamp(feedback.approachHeadingCorrection+ds,-.45,.45);
+    if(feedback.compactReturn&&std::abs(nextCliff-feedback.cliffHeadingCorrection)+std::abs(nextSignature-feedback.approachHeadingCorrection)<1e-7)return false;
+    feedback.cliffHeadingCorrection=nextCliff;feedback.approachHeadingCorrection=nextSignature;feedback.compactReturn=true;
     return true;
 }
 
@@ -99,7 +102,13 @@ static bool improveForceIntent(const Design& d,RecipeFeedback& feedback){
             const double next=std::min({.2,.99-cut,feedback.camelbackTailCutSeconds+.1});
             if(next>feedback.camelbackTailCutSeconds){feedback.camelbackTailCutSeconds=next;changed=true;}
         }
-
+        if(section.role==RideRole::Signature&&d.simulation.metrics.minVerticalG<d.request.limits.minVerticalG*Limits::allowanceFactor){
+            const bool low=std::any_of(d.simulation.frames.begin(),d.simulation.frames.end(),[&](const Frame& f){
+                return f.distance>=section.start&&f.distance<=section.end&&std::any_of(f.seats.begin(),f.seats.end(),[&](const SeatForces& seat){return seat.vertical<d.request.limits.minVerticalG*Limits::allowanceFactor;});
+            });
+            if(low){const double next=std::max(.8,feedback.signatureAirtimeScale*.95);
+                if(next<feedback.signatureAirtimeScale){feedback.signatureAirtimeScale=next;changed=true;}}
+        }
     }
     return changed;
 }
@@ -250,13 +259,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
                     // Do not re-author unchanged upstream elements for
                     // sub-centimetre-per-second replay roundoff. Full final
                     // train/force acceptance remains independent of this fit.
-                    const auto loop=std::find_if(d.request.recipe.elements.begin(),d.request.recipe.elements.end(),[&](const RecipeElement& element){return element.role==RideRole::Loop&&element.id==port.id;});
-                    if(loop!=d.request.recipe.elements.end()){
-                        const std::string brakeId=port.id+"-energy-brake";double brakeBegin=INFINITY,brakeEnd=-INFINITY;
-                        for(const auto& section:d.sections)if(section.recipeId==brakeId){brakeBegin=std::min(brakeBegin,section.start);brakeEnd=std::max(brakeEnd,section.end);}
-                        if(std::abs(actual-recipeLoopEntrySpeed)>=.01&&brakeEnd>brakeBegin)
-                            feedback.brakeAccelerationCorrection[brakeId]+=(actual*actual-recipeLoopEntrySpeed*recipeLoopEntrySpeed)/std::max(20.,brakeEnd-brakeBegin);
-                    }else if(std::abs(actual-port.speed)>=.01)feedback.energyCorrection[port.id]+=actual*actual-port.speed*port.speed;
+                    if(std::abs(actual-port.speed)>=.01)feedback.energyCorrection[port.id]+=actual*actual-port.speed*port.speed;
                     maximumCorrection=std::max(maximumCorrection,std::abs(actual-port.speed));
                 }
                 if(maximumCorrection<.20)break;
@@ -295,7 +298,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
                 remember(&d,i);last=std::move(d);continue;
             }
             authorBanking(d,motion.frames);planTrimBrakes(d,motion.frames);
-            const double alignmentMargin=poweredAlignmentMargin();
+            const double alignmentMargin=motorAlignmentMargin(req.train);
             for(const auto& operation:d.operations)if(operation.kind==DriveKind::Launch||operation.kind==DriveKind::Boost){
                 const auto first=d.track.sample(operation.start-alignmentMargin);
                 const double heading=std::atan2(first.tangent.y,first.tangent.x);
@@ -338,53 +341,6 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
             evaluateTargets(d,&sweep);
             work.enter(WorkPhase::Authorship,i,"Checking editable geometry and continuous motion");
             assessAuthorship(d,cancel);assessMotion(d,cancel);
-            // Actual canonical rail extrema enforce the category ceilings. The
-            // separately labeled brake/link remain visible connector context.
-            struct RailBounds {double low{INFINITY},high{-INFINITY},start{};RideRole role{};};
-            std::unordered_map<std::string,RailBounds> roleBounds;double lowest=INFINITY,highest=-INFINITY;size_t sectionIndex=0;
-            for(size_t spanIndex=0;spanIndex<d.track.spans.size();++spanIndex){
-                if((spanIndex&127)==0&&cancel&&cancel())throw std::runtime_error("CANCELLED");
-                const auto& span=d.track.spans[spanIndex];std::array<double,10> z;for(size_t n=0;n<z.size();++n)z[n]=span.c[n].z;
-                const auto [low,high]=canonicalPolynomialBounds(z);lowest=std::min(lowest,low);highest=std::max(highest,high);
-                while(sectionIndex+1<d.sections.size()&&span.start>=d.sections[sectionIndex].end-1e-8)++sectionIndex;
-                const auto& section=d.sections[sectionIndex];auto [at,inserted]=roleBounds.try_emplace(section.recipeId);
-                auto& bounds=at->second;if(inserted){bounds.start=section.start;bounds.role=section.role;}
-                bounds.low=std::min(bounds.low,low);bounds.high=std::max(bounds.high,high);
-            }
-            const auto dimensions=validateReferenceDimensions(d,cancel);
-            d.report.errors.insert(d.report.errors.end(),dimensions.errors.begin(),dimensions.errors.end());
-            const auto reference=validateInversionReferenceForces(d,d.simulation);
-            d.report.errors.insert(d.report.errors.end(),reference.errors.begin(),reference.errors.end());
-
-            std::ostringstream measured;measured<<std::setprecision(17)<<",\"canonicalSizeScreens\":{\"railVerticalEnvelopeMeters\":"<<highest-lowest<<",\"railEnvelopeProjectLimitMeters\":292.5";
-            double footingGround=INFINITY,footingBottom=INFINITY;
-            for(const auto& support:d.supports)for(const auto& member:support.members)if(member.kind==SupportMemberKind::Footing){
-                footingGround=std::min(footingGround,d.request.terrain.height(member.base.x,member.base.y));footingBottom=std::min(footingBottom,member.base.z);}
-            if(std::isfinite(footingGround))measured<<",\"maxRailAboveLowestFootingGroundMeters\":"<<highest-footingGround<<",\"maxRailAboveLowestFootingBottomMeters\":"<<highest-footingBottom;
-            measured<<",\"datumConvention\":\"Footing ground is terrain at each footing axis; footing bottom includes its actual authored embedment. Rail envelope is a separate project screen.\",\"elements\":[";
-            std::vector<std::string> sizeIds;for(const auto& [id,bounds]:roleBounds)sizeIds.push_back(id);std::sort(sizeIds.begin(),sizeIds.end());bool comma=false;
-            for(const auto& id:sizeIds){const auto& bounds=roleBounds.at(id);if(comma)measured<<',';comma=true;
-                measured<<"{\"id\":"<<std::quoted(id)<<",\"role\":"<<std::quoted(roleName(bounds.role))<<",\"minimumRailZ\":"<<bounds.low<<",\"maximumRailZ\":"<<bounds.high<<",\"verticalExtentMeters\":"<<bounds.high-bounds.low<<'}';}
-            measured<<"]},\"loopBrakeEnergy\":[";comma=false;
-            auto brakeWorkAt=[&](double distance){const auto& frames=d.simulation.frames;auto right=std::lower_bound(frames.begin(),frames.end(),distance,[](const Frame& frame,double at){return frame.distance<at;});
-                if(right==frames.begin())return right->brakeWorkPerMass;if(right==frames.end())return frames.back().brakeWorkPerMass;
-                const auto& left=*(right-1);return std::lerp(left.brakeWorkPerMass,right->brakeWorkPerMass,(distance-left.distance)/(right->distance-left.distance));};
-            for(const auto& body:d.inversionDimensions)if(body.role==RideRole::Loop&&!d.simulation.frames.empty()&&d.simulation.frames.back().distance>=body.startDistance){
-                const std::string brakeId=body.recipeId+"-energy-brake";const auto retained=std::find_if(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const ForceAuthoring& item){return item.name==brakeId;});
-                if(retained==d.forcePrograms.end())continue;const auto authored=designFvdSection(retained->program,cancel);
-                if(!authored.assessment.passed){d.report.fail("BRAKE_SOURCE_REPLAY","Energy-management source failed its independent work replay");continue;}
-                double begin=INFINITY,end=-INFINITY;for(const auto& section:d.sections)if(section.recipeId==brakeId){begin=std::min(begin,section.start);end=std::max(end,section.end);}
-                const auto hardware=std::find_if(d.operations.begin(),d.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Brake&&op.start>=begin&&op.end<=end;});
-                if(hardware==d.operations.end()){d.report.fail("BRAKE_HARDWARE","Energy-management source has no real per-car Brake operation");continue;}
-                const double actual=replayValueAt(d.simulation.frames,body.startDistance),front=hardware->start-seatDistanceOffset(req.train,0),rear=hardware->end-seatDistanceOffset(req.train,2);
-                const auto loopSource=std::find_if(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const ForceAuthoring& item){return item.name==body.recipeId;});
-                if(comma)measured<<',';comma=true;measured<<"{\"id\":"<<std::quoted(brakeId)<<",\"fixedTargetMps\":"<<recipeLoopEntrySpeed<<",\"actualLoopEntryMps\":"<<actual<<",\"loopSourceEntryMps\":"<<(loopSource==d.forcePrograms.end()?0:loopSource->program.speed)
-                    <<",\"brakeSourceTerminalMps\":"<<authored.samples.back().speed<<",\"sourceRemovedWorkJkg\":"<<-authored.samples.back().drivenWorkPerMass
-                    <<",\"actualBrakeWorkFrontEntryToRearExitJkg\":"<<brakeWorkAt(rear)-brakeWorkAt(front)<<",\"hardwarePeakDecelerationMps2\":"<<hardware->maxForce/req.train.carMass<<",\"hardwareRampSeconds\":"<<hardware->rampSeconds<<",\"hardwareExitFadeMeters\":"<<hardware->exitFadeMeters<<'}';
-                if(std::abs(actual-recipeLoopEntrySpeed)>.20)d.report.fail("LOOP_ENTRY_ENERGY","Actual finite-train loop entry missed the fixed brake energy target; source speed fitting cannot satisfy this check",body.startDistance,actual,recipeLoopEntrySpeed);
-            }
-            measured<<']';if(d.planningDiagnostics.empty())d.planningDiagnostics="{}";d.planningDiagnostics.pop_back();d.planningDiagnostics+=measured.str()+"}";
-
             if(d.report.valid()&&d.simulation.completed&&d.simulation.report.valid()&&!d.simulation.cancelled){
                 work.enter(WorkPhase::Refinement,i,"Checking independent half-step simulation");
                 if(fine.valid())verifyConvergenceWith(d,[&]{return fine.get();},cancel);

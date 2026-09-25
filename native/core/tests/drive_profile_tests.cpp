@@ -31,59 +31,6 @@ int main(){try{
     auto wrap=op(300,20),after=op(20,100);x={wrap,after};coalesceDriveProfiles(x);check(x.size()==2&&equal(x[0],wrap)&&equal(x[1],after),"Wrapped regions are left explicit");
     x={b,a};coalesceDriveProfiles(x);check(x.size()==2&&equal(x[0],b)&&equal(x[1],a),"Authored operations are never reordered");
     std::vector<AuthoredPoint> points;for(int i=0;i<=350;++i)points.push_back({{double(i),0,20},0,Element::Launch,{0,0,1}});auto track=compile(points,false);TrainConfig train;train.cars=1;train.carMass=1500;train.dragCdA=0;train.rollingResistance=0;train.seatHeight=0;
-    TrainConfig sevenCar=train;sevenCar.cars=7;
-    std::vector<AuthoredPoint> bendPoints;
-    for(int i=0;i<=350;++i){const double x=i;double y=0;if(i<=30){const double u=x/30,v=1-u;y=64*u*u*u*v*v*v;}bendPoints.push_back({{x,y,20-.05*x},0,Element::Turn,{0,0,1}});}
-    const auto bend=compile(bendPoints,false);const double bendEnd=bend.spans[30].start;
-    check(std::abs(poweredAlignmentMargin()-2.)<1e-12,"Powered envelope is one 1.275 m car half-length, 0.6 m stator half-module and one 0.125 m geometry sample");
-    check(!propulsionGeometry(bend,bend.spans[15].start),"A local horizontal bend is an invalid powered site");
-    auto constantGradeWindowStart=[&](const Track& candidate,double start){for(;start+84<candidate.length;start+=.125){bool valid=true;for(double s=start;s<=start+84;s+=.125)if(!propulsionGeometry(candidate,s)){valid=false;break;}if(valid)return start;}return -1.;};
-    const double bendAlignedStart=constantGradeWindowStart(bend,bendEnd);
-    check(bendAlignedStart>=bendEnd&&bendAlignedStart<bendEnd+20,"The compiled bend-to-grade transition reaches a valid straight powered boundary");
-    Operation alignedBoost=op(bendAlignedStart+poweredAlignmentMargin(),bendAlignedStart+82);alignedBoost.rampSeconds=.05;alignedBoost.exitFadeMeters=.2;
-    for(double s=alignedBoost.start-poweredAlignmentMargin();s<=alignedBoost.end+poweredAlignmentMargin();s+=.125)check(propulsionGeometry(bend,s),"The full two-metre guard lies on constant-grade straight track");
-    Operation clippedBoost=alignedBoost;clippedBoost.start=bend.spans[15].start+poweredAlignmentMargin();
-    check(!propulsionGeometry(bend,clippedBoost.start-poweredAlignmentMargin()),"The local guard rejects a motor site that intrudes into the bend");
-    std::vector<AuthoredPoint> pitchPoints;
-    for(int i=0;i<=250;++i){const double x=i;double z=22-.05*x;if(i<=40){const double u=x/40;z=20-.05*x+2*(10*u*u*u-15*u*u*u*u+6*u*u*u*u*u);}pitchPoints.push_back({{x,0,z},0,Element::Hill,{0,0,1}});}
-    const auto pitchTransition=compile(pitchPoints,false);const double pitchEnd=pitchTransition.spans[40].start;
-    check(!propulsionGeometry(pitchTransition,pitchTransition.spans[12].start),"A changing-grade pitch transition is not a constant-grade powered site");
-    const double pitchAlignedStart=constantGradeWindowStart(pitchTransition,pitchEnd);
-    check(pitchAlignedStart>=pitchEnd&&pitchAlignedStart<pitchEnd+20,"The compiled pitch transition reaches a valid constant-grade powered boundary");
-    Operation pitchBoost=op(pitchAlignedStart+poweredAlignmentMargin(),pitchAlignedStart+82);
-    for(double s=pitchBoost.start-poweredAlignmentMargin();s<=pitchBoost.end+poweredAlignmentMargin();s+=.125)check(propulsionGeometry(pitchTransition,s),"The pitch-transition motor guard stays within the constant-grade section");
-    const std::vector<Operation> localBoostOps{alignedBoost};
-    const auto straddlingBoost=simulate(bend,localBoostOps,sevenCar,1./960);
-    check(straddlingBoost.completed&&straddlingBoost.metrics.maxEnergyResidual<1e-6,"A local aligned Boost physically completes with closed full-train energy");
-    const double trainHalf=(sevenCar.cars-1)*sevenCar.spacing*.5,firstEntryCenter=alignedBoost.start-trainHalf;
-    const Frame *soloFirst=nullptr,*soloLast=nullptr;
-    for(const auto& frame:straddlingBoost.frames)if(frame.distance-firstEntryCenter>=2.4&&frame.distance-firstEntryCenter<=3.1){
-        int poweredCars=0;for(int car=0;car<sevenCar.cars;++car){const double carDistance=frame.distance+trainHalf-car*sevenCar.spacing;if(carDistance>=alignedBoost.start&&carDistance<alignedBoost.end)++poweredCars;}
-        if(poweredCars==1){if(!soloFirst)soloFirst=&frame;soloLast=&frame;}
-    }
-    check(soloFirst&&soloLast&&soloLast->distance>soloFirst->distance,"The motor applies while only the leading car occupies the powered section");
-    check(!propulsionGeometry(bend,soloFirst->distance-trainHalf),"Unpowered rear cars may remain on the bend while the lead car is aligned");
-    const double oneCarDriveWorkSlope=(soloLast->driveWorkPerMass-soloFirst->driveWorkPerMass)/(soloLast->distance-soloFirst->distance);
-    check(std::abs(oneCarDriveWorkSlope-alignedBoost.maxForce/(sevenCar.carMass*sevenCar.cars))<.005,"Straddling Boost work uses one car's rated force divided by full train mass");
-    const auto localHardware=buildOperationHardware(bend,localBoostOps);bool alignedHardware=false;
-    for(const auto& piece:localHardware)if(piece.operation==0&&piece.powered){check(propulsionGeometry(bend,piece.distance),"Every physical powered clip is installed on constant-grade aligned track");alignedHardware=true;}
-    check(alignedHardware,"The straddling Boost has physical stator hardware");
-    Operation launchDrive=op(0,78);launchDrive.kind=DriveKind::Launch;
-    Operation physicalBrake=op(110,150);physicalBrake.kind=DriveKind::Brake;physicalBrake.targetSpeed=0;physicalBrake.maxForce=2100;physicalBrake.maxPower=210000;physicalBrake.rampSeconds=.02;
-    const std::vector<Operation> brakeOps{launchDrive,physicalBrake};const auto brakeRun=simulate(track,brakeOps,sevenCar,1./960);
-    check(brakeRun.completed&&brakeRun.metrics.brakeWorkPerMass>0&&brakeRun.metrics.maxEnergyResidual<1e-6,"A real rated Brake operation does negative work with closed energy balance");
-    const double firstBrakeCenter=physicalBrake.start-trainHalf,oneCarBrakeAcceleration=-physicalBrake.maxForce/(sevenCar.carMass*sevenCar.cars);bool oneCarBrake=false;
-    for(const auto& frame:brakeRun.frames)if(frame.distance-firstBrakeCenter>=1&&frame.distance-firstBrakeCenter<=3){
-        int brakingCars=0;for(int car=0;car<sevenCar.cars;++car){const double carDistance=frame.distance+trainHalf-car*sevenCar.spacing;if(carDistance>=physicalBrake.start&&carDistance<physicalBrake.end)++brakingCars;}
-        if(brakingCars==1&&std::abs(frame.acceleration-oneCarBrakeAcceleration)<.01)oneCarBrake=true;
-    }
-    check(oneCarBrake,"A single straddling car receives the rated Brake force divided by full train mass");
-    const auto brakeHardware=buildOperationHardware(track,brakeOps);bool physicalBrakeJaws=false;
-    for(const auto& piece:brakeHardware)if(piece.operation==1){
-        check(!piece.powered,"Brake hardware is a physical friction assembly");const auto pose=track.sample(piece.distance);const auto delta=piece.box.center-pose.position;
-        if(std::abs(std::abs(dot(delta,pose.right))-.1)<1e-12&&std::abs(dot(delta,pose.up)+.045)<1e-12&&std::abs(piece.box.half.y-.05)<1e-12&&std::abs(piece.box.half.z-.105)<1e-12)physicalBrakeJaws=true;
-    }
-    check(physicalBrakeJaws,"The rated Brake has paired physical friction jaws on the track");
     std::vector<Operation> separate{op(0,100),op(100,300)},merged=separate;coalesceDriveProfiles(merged);const double expected=3.5/gravity;
     for(double step:{1./480,1./960}){
         auto before=simulate(track,separate,train,step),afterRun=simulate(track,merged,train,step);check(before.completed&&afterRun.completed,"Both explicit-drive control runs physically complete");
@@ -152,55 +99,6 @@ int main(){try{
     check(std::abs(protectedRun.frames.back().speed-nominal.frames.back().speed)<1e-12,"Retracted trims leave the actual energy trajectory unchanged");
     const auto inclinedHardware=buildOperationHardware(graded.track,graded.operations);
     for(const auto& h:inclinedHardware)check(std::abs(h.box.forward.z-1/std::sqrt(401.))<1e-9,"LSM and brake hardware follow the real graded track");
-    auto makeTrimPolicyDesign=[&](double recoveryEnd,double boostStart,bool forceBetween){
-        Design candidate;candidate.request.train=train;candidate.track=graded.track;candidate.operations={op(0,180)};
-        if(forceBetween){auto brake=op(recoveryEnd,recoveryEnd+10);brake.kind=DriveKind::Brake;brake.targetSpeed=50;brake.maxForce=2100;brake.maxPower=210000;candidate.operations.push_back(brake);}
-        candidate.operations.push_back(op(boostStart,780));
-        candidate.sections={{"cliff-approach-recovery",recoveryEnd-150,recoveryEnd,0,true,RideRole::CliffApproach,"cliff-approach"},
-            {"cliff-approach-ascent",recoveryEnd,800,0,true,RideRole::CliffApproach,"cliff-approach"}};
-        return candidate;
-    };
-    auto plannedTrimEnd=[&](const Design& candidate,const std::vector<Frame>& frames){
-        const auto& section=candidate.sections.front();const auto middle=candidate.track.sample((section.start+section.end)*.5);
-        const bool loopExit=section.role==RideRole::Loop&&middle.tangent.z<0;
-        const bool inversionApproach=(middle.element==Element::Turn||loopExit)&&candidate.track.sample(std::min(candidate.track.length,section.end+1)).element==Element::Inversion;
-        const double centre=section.start+(section.end-section.start)*(loopExit?.70:inversionApproach?.48:.62),speed=replayValueAt(frames,centre);
-        const double length=std::clamp(speed*(inversionApproach?1.2:.8),18.,inversionApproach?80.:55.);return centre+length*.5;
-    };
-    auto nearBoost=makeTrimPolicyDesign(700,723.4,false);const auto nearBoostMotion=simulate(nearBoost.track,nearBoost.operations,train,1./960);
-    const double nearTrimEnd=plannedTrimEnd(nearBoost,nearBoostMotion.frames),nearBoostGap=723.4-nearTrimEnd,nearBoostSpeed=replayValueAt(nearBoostMotion.frames,nearTrimEnd);
-    check(nearBoostMotion.completed&&nearBoostSpeed>20&&nearBoostGap/nearBoostSpeed<4,"The candidate trim end is within four seconds of the adjacent Boost");
-    planTrimBrakes(nearBoost,nearBoostMotion.frames);
-    check(nearBoost.operations.size()==2,"A redundant recovery trim directly before an adjacent same-element Boost is omitted");
-    auto renamedBoost=makeTrimPolicyDesign(700,723.4,false);renamedBoost.sections[0].name="settle-window";renamedBoost.sections[1].name="motor-runup";
-    const auto renamedBoostMotion=simulate(renamedBoost.track,renamedBoost.operations,train,1./960);planTrimBrakes(renamedBoost,renamedBoostMotion.frames);
-    check(renamedBoost.operations.size()==2,"Trim suppression follows typed adjacent sections after their display names change");
-    auto farBoost=makeTrimPolicyDesign(400,723.4,false);const auto farBoostMotion=simulate(farBoost.track,farBoost.operations,train,1./960);
-    const double farTrimEnd=plannedTrimEnd(farBoost,farBoostMotion.frames),farBoostGap=723.4-farTrimEnd,farBoostSpeed=replayValueAt(farBoostMotion.frames,farTrimEnd);
-    check(farBoostMotion.completed&&farBoostSpeed>20&&farBoostGap/farBoostSpeed>4,"An upstream recovery remains outside the four-second Boost redundancy window");
-    planTrimBrakes(farBoost,farBoostMotion.frames);
-    check(farBoost.operations.size()==3&&farBoost.operations.back().kind==DriveKind::Trim,"A useful far-upstream trim remains available");
-    auto forceBetweenBoost=makeTrimPolicyDesign(700,723.4,true);const auto forceBetweenMotion=simulate(forceBetweenBoost.track,forceBetweenBoost.operations,train,1./960);
-    check(forceBetweenMotion.completed,"The force-critical boundary fixture completes before trim planning");
-    planTrimBrakes(forceBetweenBoost,forceBetweenMotion.frames);
-    check(forceBetweenBoost.operations.size()==4&&forceBetweenBoost.operations.back().kind==DriveKind::Trim,"A real rated Brake between recovery and Boost preserves the trim candidate");
-    auto checkChangingSpeedTrimPolicy=[&](double grade,bool descent,double boostStart){
-        std::vector<AuthoredPoint> points;for(int i=0;i<=1200;++i){const Element element=descent?(i<700?Element::Turn:Element::Inversion):Element::Hill;
-            points.push_back({{double(i),0,20+grade*i},0,element,{0,0,1}});}
-        Design candidate;candidate.request.train=sevenCar;candidate.track=compile(points,false);candidate.operations={op(0,420),op(boostStart,1200)};
-        candidate.sections={{"cliff-approach-recovery",550,700,0,true,RideRole::CliffApproach,"cliff-approach"},
-            {"cliff-approach-ascent",700,1200,0,true,RideRole::CliffApproach,"cliff-approach"}};
-        const auto motion=simulate(candidate.track,candidate.operations,sevenCar,1./960);check(motion.completed,"The multi-car speed-change timing fixture completes");
-        const double trimEnd=plannedTrimEnd(candidate,motion.frames),approachSpeed=replayValueAt(motion.frames,trimEnd);
-        const double estimate=(boostStart-trimEnd)/approachSpeed,elapsed=replayValueAt(motion.frames,boostStart,true)-replayValueAt(motion.frames,trimEnd,true);
-        check(descent?(estimate>6&&elapsed<6):(estimate<6&&elapsed>6),"Replay elapsed time corrects the end-speed estimate across a changing-grade approach");
-        planTrimBrakes(candidate,motion.frames);
-        check(candidate.operations.size()==(descent?2u:3u),descent?
-            "An accelerating multi-car approach suppresses a trim within six replay seconds":
-            "An uphill multi-car approach keeps a trim when replay time exceeds six seconds");
-    };
-    checkChangingSpeedTrimPolicy(.05,false,940.);
-    checkChangingSpeedTrimPolicy(-.05,true,1020.);
     auto late=trim;late.trimSensorLead=1;const auto rejectedTrim=simulate(track,{op(0,120),late},train,1./960);
     check(!rejectedTrim.report.valid()&&rejectedTrim.report.errors.front().code=="TRIM_ARMING","Late brake actuation fails explicitly instead of teleporting the actuator into place");
     std::cout<<"PASS "<<checks<<" exact-drive coalescing and force continuity checks\n";return 0;

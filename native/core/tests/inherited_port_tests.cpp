@@ -29,87 +29,6 @@ Knot located(Knot k,Vec3 origin,double yaw){
     k.third=yawed(k.third,yaw);k.fourth=yawed(k.fourth,yaw);k.up=yawed(k.up,yaw);k.upFirst=yawed(k.upFirst,yaw);
     k.upSecond=yawed(k.upSecond,yaw);k.upThird=yawed(k.upThird,yaw);return k;
 }
-void compactConnectedSources(){
-    const double rolling=gravity*.004,drag=.5*1.225*3/(7*1500.);
-    Knot grade;grade.tangent={std::cos(20*pi/180),0,std::sin(20*pi/180)};grade.up={-grade.tangent.z,0,grade.tangent.x};
-    FvdGradeTransitionRequest graded;graded.entry=makeFvdEntry(grade,50,rolling,drag);graded.rollingAcceleration=rolling;graded.dragAccelerationCoefficient=drag;
-    const auto link=designFvdGradeTransition(graded);good(link.section);samePort(link.section.track.knots.front(),grade);
-    const auto& aligned=link.section.track.knots.back();near(aligned.tangent.z,std::sin(32*pi/180),1e-8,"Unpowered source reaches the next hardware grade");
-    near(norm(aligned.curvature)+norm(aligned.third)+norm(aligned.fourth)+norm(aligned.upFirst)+norm(aligned.upSecond)+norm(aligned.upThird),0,1e-7,"Powered handoff has actual zero curvature and frame derivatives");
-    check(link.section.samples.back().drivenWorkPerMass==0,"The changing-grade source contains no hidden motor work");
-    FvdRequest inlet;inlet.position={100,-20,30};inlet.forward={std::cos(.02),0,std::sin(.02)};inlet.up={-inlet.forward.z,0,inlet.forward.x};
-    inlet.speed=76.53664;inlet.rollingAcceleration=rolling;inlet.dragAccelerationCoefficient=drag;inlet.controls={{0,1.9,0,0},{.05,1.9,0,0}};
-    const auto inletSource=designFvdSection(inlet);good(inletSource);
-    const auto port=makeFvdEntry(inletSource.track.knots.front(),inlet.speed,rolling,drag);
-    const auto wave=designFvdCompactWave(port,rolling,drag);good(wave.section);samePort(wave.section.track.knots.front(),port.jet);
-    double low=1e9,high=-1e9,yaw=0;
-    for(const auto& q:wave.section.samples){low=std::min(low,q.position.z);high=std::max(high,q.position.z);const double step=std::remainder(std::atan2(q.forward.y,q.forward.x)-yaw,2*pi);check(step>=-1e-7,"Compact wave keeps one turn direction");yaw+=step;}
-    check(high-low<70&&wave.section.samples.back().time<10,"Compact wave remains below its actual extent ceiling and avoids the old entry coast");near(yaw,pi,1e-6,"Compact wave makes its physical half-turn");
-    FvdBrakedPitchRequest braking;braking.entry=makeFvdEntry(wave.section.track.knots.back(),wave.section.samples.back().speed,rolling,drag);braking.heightChange=20;braking.targetSpeed=48;braking.rollingAcceleration=rolling;braking.dragAccelerationCoefficient=drag;
-    const auto brake=designFvdBrakedPitch(braking);good(brake.section);samePort(brake.section.track.knots.front(),braking.entry.jet);
-    near(brake.section.samples.back().speed,48,1e-6,"Real negative actuator reaches the smaller loop energy");
-    check(brake.section.samples.back().drivenWorkPerMass< -500&&brake.section.assessment.maxEnergyDrift<1e-5,"Braking source accounts for actual removed mechanical energy");
-    double previous=braking.entry.speed;for(const auto& q:brake.section.samples){check(q.speed<=previous+1e-7&&q.forward.z>=-1e-7&&q.curvature.z>=-3e-5,"Braked approach continuously loses speed without a pitch shoulder");previous=q.speed;}
-    FvdLoopRequest loopIntent;loopIntent.entry=makeFvdEntry(brake.section.track.knots.back(),48,rolling,drag);loopIntent.height=74;loopIntent.rampSeconds=.8;loopIntent.normalG=4.75;loopIntent.exitPositiveG=4.65;loopIntent.crestG=1.2;loopIntent.yawAngle=0;loopIntent.crossingOffset=8;loopIntent.exitNormalG=2;loopIntent.rollingAcceleration=rolling;loopIntent.dragAccelerationCoefficient=drag;
-    const auto loop=designFvdLoop(loopIntent);good(loop.section);samePort(loop.section.track.knots.front(),loopIntent.entry->jet);
-    const auto bankEntry=makeFvdEntry(loop.section.track.knots.back(),loop.section.samples.back().speed,rolling,drag);
-    const auto connection=designFvdInversionLink(bankEntry,rolling,drag);good(connection.section);samePort(connection.section.track.knots.front(),bankEntry.jet);
-    for(const auto& q:connection.section.samples){const auto c=sampleFvdControl(connection.authoring.controls,q.time);
-        check(q.forward.z>=-1e-7&&c.normalG>1.1,"Necessary connection contains no filler crest or negative-load phase");
-        near(norm(q.up-unit(Vec3{0,0,1}-q.forward*q.forward.z)),0,1e-6,"Force-axis link stays upright without a roll pulse");
-        const double a=c.drive-gravity*q.forward.z-rolling-drag*q.speed*q.speed,j=c.first[3]-gravity*q.curvature.z*q.speed-2*drag*q.speed*a;
-        check(norm(measureSeatDynamics(connection.section.track,q.distance,q.speed,a,j,1.2).angularJerk)<20,"Compact connection avoids the prior concentrated roll jerk");}
-    FvdImmelmannRequest half;half.entry=makeFvdEntry(connection.section.track.knots.back(),connection.section.samples.back().speed,rolling,drag);half.height=66;half.exitHeight=20;half.exitPitch=-5*pi/180;half.normalG=4.9;half.exitPositiveG=3;half.crestG=1;half.rollExitG=.6;half.rollOverlapFraction=.35;half.planarRoll=true;half.rampSeconds=.8;half.exitRampSeconds=1.2;half.exitNormalG=1;half.hand=-1;half.rollingAcceleration=rolling;half.dragAccelerationCoefficient=drag;
-    const auto immel=designFvdImmelmann(half);good(immel.section);samePort(immel.section.track.knots.front(),half.entry->jet);
-    auto apexTime=[](const FvdResult& source){return std::max_element(source.samples.begin(),source.samples.end(),[](const FvdSample& a,const FvdSample& b){return a.position.z<b.position.z;})->time;};
-    const double gap=loop.section.samples.back().time-apexTime(loop.section)+connection.section.samples.back().time+apexTime(immel.section);
-    check(gap>6.5&&gap<8.1,"Taller inversion apices allow modest extra duration beyond the reference pair");
-    const Vec3 forward=unit(Vec3{half.entry->jet.tangent.x,half.entry->jet.tangent.y,0}),left{-forward.y,forward.x,0};for(const auto& q:immel.section.samples)near(dot(q.position-half.entry->jet.position,left),0,1e-5,"Smaller connected Immelmann retains its entry plane throughout rollout");
-    Design chain;chain.track.closed=false;MotionBuilder builder(chain);chain.track.knots={wave.section.track.knots.front()};builder.cursor=detail::jet(sampleKinematics(wave.section.track,0));
-    for(const auto* part:std::array<const FvdHillResult*,4>{&wave,&brake,&loop,&connection})builder.force(part->section,part->authoring,Element::Turn,"connected",{});
-    builder.force(immel.section,immel.authoring,Element::Inversion,"immel",{});
-    FvdSignatureRequest wings;wings.entry=makeFvdEntry(immel.section.track.knots.back(),immel.section.samples.back().speed,rolling,drag);
-    wings.exitHeight=immel.section.samples.back().position.z-49;wings.exitPitch=.05;wings.headingChange=-.8;wings.durationScale=1;
-    wings.rollingAcceleration=rolling;wings.dragAccelerationCoefficient=drag;
-    const auto signature=designFvdSignature(wings);good(signature.section);samePort(signature.section.track.knots.front(),wings.entry.jet);
-    for(const auto& q:signature.section.samples)check(q.position.z>wings.exitHeight-3,"Connected signature retains a clear low valley instead of diving below the return datum");
-    builder.force(signature.section,signature.authoring,Element::Airtime,"signature",{});chain.track.rebuild();
-    check(validateSelfClearance(chain.track,TrainConfig{}).valid(),"Complete wave, brake, inversions and signature clear the train envelope");
-    check(designFvdCompactWave(port,rolling,drag,[]{return true;}).section.cancelled&&designFvdBrakedPitch(braking,[]{return true;}).section.cancelled,"New force-source solves preserve cancellation");
-}
-void approachRetainsTinyGrade(){
-    const double rolling=gravity*.004,drag=.5*1.225*3/(7*1500.);
-    for(double pitch:{-2e-9,2e-9}){
-        Knot k;k.position={-440.75,-90.95,4.5};k.tangent=unit(Vec3{std::cos(.88),std::sin(.88),pitch});k.up=unit(Vec3{0,0,1}-k.tangent*k.tangent.z);
-        FvdApproachRequest request;request.entry=makeFvdEntry(k,43.7,rolling,drag);request.endPosition={-273.4,0,4.5};
-        request.normalG=2.4;request.bankRampSeconds=1.8;request.rollingAcceleration=rolling;request.dragAccelerationCoefficient=drag;
-        const auto approach=designFvdApproach(request);good(approach.section);samePort(approach.section.track.knots.front(),k);
-        const auto& end=approach.section.samples.back();near(norm(end.position-request.endPosition),0,1e-7,"Approach closes its real height and plan position");
-        near(norm(end.forward-Vec3{1,0,0}),0,1e-8,"Approach force controls close the actual terminal pitch and heading");
-        const auto replay=designFvdSection(approach.authoring);good(replay);near(norm(replay.samples.back().position-end.position),0,1e-10,"Ordinary saved approach controls reproduce the closure");
-    }
-}
-void slowWindingCliff(){
-    const double rolling=gravity*.004,drag=.5*1.225*3/(7*1500.);
-    Knot grade;grade.position={100,-100,200};grade.tangent={std::cos(32*pi/180),0,std::sin(32*pi/180)};grade.up={-grade.tangent.z,0,grade.tangent.x};
-    FvdPlateauArrivalRequest arrival;arrival.entry=makeFvdEntry(grade,42,rolling,drag);arrival.rollingAcceleration=rolling;arrival.dragAccelerationCoefficient=drag;
-    const auto rising=designFvdPlateauArrival(arrival);good(rising.section);samePort(rising.section.track.knots.front(),grade);
-    FvdWindingCliffRequest winding;winding.entry=makeFvdEntry(rising.section.track.knots.back(),rising.section.samples.back().speed,rolling,drag);winding.rollingAcceleration=rolling;winding.dragAccelerationCoefficient=drag;
-    const auto cliff=designFvdWindingCliff(winding);good(cliff.section);samePort(cliff.section.track.knots.front(),winding.entry.jet);
-    double low=INFINITY,high=-INFINITY,outward=0;
-    for(const auto& q:cliff.section.samples){const auto c=sampleFvdControl(cliff.authoring.controls,q.time);low=std::min(low,q.position.z);high=std::max(high,q.position.z);
-        check(std::abs(std::asin(q.forward.z))<3*pi/180,"Slow cliff winds on shallow live grade without an airtime-hill cadence");
-        const double a=c.drive-gravity*q.forward.z-rolling-drag*q.speed*q.speed,j=c.first[3]-gravity*q.curvature.z*q.speed-2*drag*q.speed*a;
-        const auto dynamics=measureSeatDynamics(cliff.section.track,q.distance,q.speed,a,j,1.2);
-        check(dynamics.force.vertical>.2&&dynamics.force.vertical<2.3&&std::abs(dynamics.force.lateral)<1.5,"Winding cliff resolves real low-speed rider loads through the outward bank");
-        if(q.time>=7&&q.time<=9)outward=std::max(outward,std::abs(c.lateralG));}
-    check(high-low<10&&outward>.9,"Outward bank retains real lateral force without creating another hill");
-    near(cliff.section.samples.back().time,26,1e-8,"Meaningful winding programme lasts twenty-six seconds");
-    check(validateSelfClearance(cliff.section.track,TrainConfig{}).valid(),"Nested low-speed cliff clears its full train envelope");
-    Design saved;ForceAuthoring source;source.name="slow-winding-cliff";source.program=cliff.authoring;source.sourceDistances={0,cliff.section.track.length};saved.forcePrograms.push_back(source);
-    Design restored;std::string error;check(parseAuthorshipPayload(authorshipPayload(saved),restored,error),"Winding force axes and bank phases use ordinary persisted controls");
-    const auto replay=designFvdSection(restored.forcePrograms.front().program);good(replay);near(norm(replay.samples.back().position-cliff.section.samples.back().position),0,1e-8,"Saved slow winding source reproduces the complete physical path");
-}
 void planarImmelmann(const FvdEntry& entry,double rolling,double drag){
     FvdImmelmannRequest request;request.entry=entry;request.height=95*std::pow(entry.speed/53,2);
     request.exitHeight=10;request.exitPitch=-5*pi/180;request.exitNormalG=std::cos(request.exitPitch);
@@ -447,8 +366,5 @@ int main(int argc,char** argv){try{
     Frame beginFrame,endFrame;beginFrame.speed=endFrame.speed=40;endFrame.time=phases.track.length/40;endFrame.distance=phases.track.length;
     const auto agreement=assessFvdAngularAgreement(phases.track,phases.forcePrograms.front(),phaseSource,{beginFrame,endFrame},{1e-5,1e-4,.01},8);
     check(agreement.report.valid(),"Eight interior subdivisions preserve physical source angular velocity, acceleration and jerk");
-    compactConnectedSources();
-    slowWindingCliff();
-    approachRetainsTinyGrade();
     std::cout<<"PASS "<<checks<<" inherited FVD port checks\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

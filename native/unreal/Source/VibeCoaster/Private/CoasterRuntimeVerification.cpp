@@ -20,10 +20,7 @@
 #include "Misc/SecureHash.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "UnrealClient.h"
-#include <algorithm>
-#include <cmath>
 #include <iomanip>
-#include <limits>
 #include <locale>
 #include <sstream>
 
@@ -73,26 +70,15 @@ FString GeometryIdentity(const coaster::Design& D)
 
 struct FCoasterRuntimeVerification::FState
 {
-    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, StationQueueView, StationQueueCaptured, StationExitView, StationExitCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, ReviewView, ReviewCaptured, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, AwaitGenerationPhase, CancelGeneration, AwaitGenerationCancel, AwaitMeshPhase, AwaitMeshCancel, AwaitScenePhase, AwaitSceneCancel, Finish, Done } Stage = Init;
+    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, StationQueueView, StationQueueCaptured, StationExitView, StationExitCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, AwaitGenerationPhase, CancelGeneration, AwaitGenerationCancel, AwaitMeshPhase, AwaitMeshCancel, AwaitScenePhase, AwaitSceneCancel, Finish, Done } Stage = Init;
     FString Output, Profile, SavePath, Error, Identity, SaveHash, PendingShot, FrameRows = TEXT("wall_seconds,ride_seconds,distance_m,speed_ms,wall_frame_ms,engine_delta_ms\n");
     FString Seed = TEXT("42"), Terrain = TEXT("highlands");
     uint64 CommittedRevision = 0;
     int32 PoseProbeIndex = 0;
     int32 Seat = 0, ShotIndex = 0, NextShot = 0, ObservedWidth = 0, ObservedHeight = 0;
-    bool LoadOnly = false, Screenshots = true, ReviewCameras = false, RefusalChecked = false, Traversed = false, SaveChecked = false, LoadChecked = false, PauseChecked = false, RestartChecked = false;
+    bool LoadOnly = false, Screenshots = true, RefusalChecked = false, Traversed = false, SaveChecked = false, LoadChecked = false, PauseChecked = false, RestartChecked = false;
     double Started = FPlatformTime::Seconds(), StageStarted = Started, TraversalStarted = 0, PreviousTick = 0, PauseTime = 0, LastRideTime = 0, LastDistance = 0, ShotRequested = 0, Duration = 0, FinalDistance = 0;
     TArray<double> ShotTimes;
-    struct FReviewShot
-    {
-        FString Label, Source, Style;
-        double Distance = 0, Time = 0, Begin = 0, End = 0;
-        int32 Side = 1; // 0 chooses the lower-terrain side at the target.
-    };
-    TArray<FReviewShot> ReviewShots;
-    int32 NextReview = 0, ReviewCaptures = 0, ReviewExpected = 0;
-    double ReviewPauseStarted = 0, ReviewPauseSeconds = 0;
-    TWeakObjectPtr<AActor> ReviewTarget;
-    FTransform ReviewRiderPose;
     TWeakObjectPtr<AActor> StationReviewTarget;
     FTransform RiderCameraPose;
     FVector QueueReviewEye, QueueReviewTarget, ExitReviewEye, ExitReviewTarget;
@@ -192,9 +178,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI")) || FApp::UseFixedTimeStep()) { S.Fail(TEXT("Real rendering and normal wall-time playback are required")); return; }
         S.Benchmark = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyBenchmark"));
         S.Screenshots = !S.Benchmark && !FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyNoScreenshots"));
-        S.ReviewCameras = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyReviewCameras"));
-        if (S.ReviewCameras && !S.Screenshots)
-        { S.Fail(TEXT("Review cameras require real screenshots and full traversal")); return; }
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeed="), S.Seed);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifyTerrain="), S.Terrain);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeat="), S.Seat);
@@ -213,12 +196,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.StationReviewTarget->SetActorTransform(S.RiderCameraPose);
             S.StationReviewTarget.Reset();
         }
-        if (S.ReviewTarget.IsValid())
-        {
-            S.ReviewTarget->SetActorTransform(S.ReviewRiderPose);
-            S.ReviewTarget.Reset();
-            if (PC.Ride->IsPaused()) PC.Ride->TogglePause();
-        }
 #if CSV_PROFILER
         if (S.CsvStarted) { S.CsvFinished = FCsvProfiler::Get()->EndCapture(); S.CsvStarted = false; }
         if (S.CsvFinished.IsValid() && !S.CsvFinished.IsReady()) { if (Now - S.StageStarted < 30) return; S.Error += TEXT(" CSV flush timeout."); }
@@ -229,12 +206,9 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             else S.Event(TEXT("csv-written"), TEXT(",\"file\":") + Q(CsvPath));
         }
 #endif
-        const bool Passed = S.Error.IsEmpty() && (!S.ReviewCameras ||
-            (S.ReviewShots.Num() == S.ReviewExpected &&
-             S.ReviewCaptures == S.ReviewExpected)) &&
-            S.Traversed && S.PauseChecked && S.RestartChecked && S.PoseChecked && S.SaveCancelChecked && S.GenerationCancelChecked && S.MeshCancelChecked && S.SceneCancelChecked && S.LoadChecked && (S.LoadOnly || S.SaveChecked);
+        const bool Passed = S.Error.IsEmpty() && S.Traversed && S.PauseChecked && S.RestartChecked && S.PoseChecked && S.SaveCancelChecked && S.GenerationCancelChecked && S.MeshCancelChecked && S.SceneCancelChecked && S.LoadChecked && (S.LoadOnly || S.SaveChecked);
         if (!S.Write(TEXT("wall-frames.csv"), S.FrameRows)) S.Error += TEXT(" Frame output write failed.");
-        const FString Report = TEXT("{\"status\":") + Q(Passed && S.Error.IsEmpty() ? TEXT("automated-smoke-passed") : TEXT("failed")) + TEXT(",\"error\":") + Q(S.Error) + TEXT(",\"mode\":\"PHYSICS-PROOF; intensity untested\",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"save_sha1\":") + Q(S.SaveHash) + TEXT(",\"full_traversal\":") + (S.Traversed ? TEXT("true") : TEXT("false")) + TEXT(",\"ride_duration_s\":") + N(S.Duration) + TEXT(",\"final_distance_m\":") + N(S.FinalDistance) + TEXT(",\"seat\":") + FString::FromInt(S.Seat) + TEXT(",\"pause_checked\":") + (S.PauseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"restart_checked\":") + (S.RestartChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_checked\":") + (S.SaveChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"load_checked\":") + (S.LoadChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"missing_reference_refusal_checked\":") + (S.RefusalChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"viewport_width\":") + FString::FromInt(S.ObservedWidth) + TEXT(",\"viewport_height\":") + FString::FromInt(S.ObservedHeight) + TEXT(",\"paused_pose_checked\":") + (S.PoseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_cancel_checked\":") + (S.SaveCancelChecked ? TEXT("true") : TEXT("false")) + S.CancellationFields() + TEXT(",\"review_camera_expected\":") + FString::FromInt(S.ReviewExpected) + TEXT(",\"review_camera_captures\":") + FString::FromInt(S.ReviewCaptures) + TEXT(",\"review_camera_pause_seconds\":") + N(S.ReviewPauseSeconds) + TEXT(",\"human_visual_review\":\"pending\",\"keyboard_input\":\"untested\",\"cancellation_phases\":\"generation, mesh preparation, scene commit and save\",\"performance\":\"raw wall-frame samples; no FPS or GPU acceptance claim\"}\n");
+        const FString Report = TEXT("{\"status\":") + Q(Passed && S.Error.IsEmpty() ? TEXT("automated-smoke-passed") : TEXT("failed")) + TEXT(",\"error\":") + Q(S.Error) + TEXT(",\"mode\":\"PHYSICS-PROOF; intensity untested\",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"save_sha1\":") + Q(S.SaveHash) + TEXT(",\"full_traversal\":") + (S.Traversed ? TEXT("true") : TEXT("false")) + TEXT(",\"ride_duration_s\":") + N(S.Duration) + TEXT(",\"final_distance_m\":") + N(S.FinalDistance) + TEXT(",\"seat\":") + FString::FromInt(S.Seat) + TEXT(",\"pause_checked\":") + (S.PauseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"restart_checked\":") + (S.RestartChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_checked\":") + (S.SaveChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"load_checked\":") + (S.LoadChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"missing_reference_refusal_checked\":") + (S.RefusalChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"viewport_width\":") + FString::FromInt(S.ObservedWidth) + TEXT(",\"viewport_height\":") + FString::FromInt(S.ObservedHeight) + TEXT(",\"paused_pose_checked\":") + (S.PoseChecked ? TEXT("true") : TEXT("false")) + TEXT(",\"save_cancel_checked\":") + (S.SaveCancelChecked ? TEXT("true") : TEXT("false")) + S.CancellationFields() + TEXT(",\"human_visual_review\":\"pending\",\"keyboard_input\":\"untested\",\"cancellation_phases\":\"generation, mesh preparation, scene commit and save\",\"performance\":\"raw wall-frame samples; no FPS or GPU acceptance claim\"}\n");
         const bool Written = S.Write(TEXT("result.json"), Report);
         UE_LOG(LogTemp, Display, TEXT("CoasterVerify result: %s"), *Report); S.Stage = FState::Done;
         FPlatformMisc::RequestExitWithStatus(false, Passed && S.Error.IsEmpty() && Written ? 0 : 1); return;
@@ -368,155 +342,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             }
             S.ShotTimes.Sort();
             for (int32 I = S.ShotTimes.Num() - 1; I > 0; --I) if (S.ShotTimes[I] - S.ShotTimes[I - 1] < .25) S.ShotTimes.RemoveAt(I);
-            if (S.ReviewCameras)
-            {
-                const auto RoleSpan = [&](coaster::RideRole Role, double& Begin, double& End)
-                {
-                    Begin = D.track.length; End = 0;
-                    for (const auto& Section : D.sections) if (Section.role == Role)
-                    { Begin = std::min(Begin, Section.start); End = std::max(End, Section.end); }
-                    return End > Begin;
-                };
-                const double FrontOffset = coaster::seatDistanceOffset(D.request.train, 0);
-                const auto AddReview = [&](const TCHAR* Label, const TCHAR* Source, const TCHAR* Style,
-                    double Distance, double Begin, double End, int32 Side)
-                {
-                    Distance = FMath::Clamp(Distance, 0., D.track.length);
-                    Begin = FMath::Clamp(Begin, 0., D.track.length);
-                    End = FMath::Clamp(End, Begin, D.track.length);
-                    if (End - Begin < 1.) return false;
-                    const double CentreDistance = FMath::Max(0., Distance - FrontOffset);
-                    const auto Frame = std::lower_bound(D.simulation.frames.begin(), D.simulation.frames.end(),
-                        CentreDistance, [](const coaster::Frame& F, double At) { return F.distance < At; });
-                    if (Frame == D.simulation.frames.end() || Frame->time >= S.Duration) return false;
-                    S.ReviewShots.Add({Label, Source, Style, Distance, Frame->time, Begin, End, Side});
-                    return true;
-                };
-                double CliffBegin = 0, CliffEnd = 0, LoopBegin = 0, LoopEnd = 0;
-                double ImmelBegin = 0, ImmelEnd = 0, SignatureBegin = 0, SignatureEnd = 0;
-                double ReturnBegin = 0, ReturnEnd = 0, ReviewWaveBegin = 0, ReviewWaveEnd = 0;
-                if (!RoleSpan(coaster::RideRole::CliffApproach, CliffBegin, CliffEnd) ||
-                    !RoleSpan(coaster::RideRole::Wave, ReviewWaveBegin, ReviewWaveEnd) ||
-                    !RoleSpan(coaster::RideRole::Loop, LoopBegin, LoopEnd) ||
-                    !RoleSpan(coaster::RideRole::Immelmann, ImmelBegin, ImmelEnd) ||
-                    !RoleSpan(coaster::RideRole::Signature, SignatureBegin, SignatureEnd) ||
-                    !RoleSpan(coaster::RideRole::Return, ReturnBegin, ReturnEnd) ||
-                    !(LoopEnd <= ImmelBegin && ImmelEnd <= SignatureBegin && SignatureEnd <= ReturnEnd))
-                { S.Fail(TEXT("Review cameras need ordered clifftop, inversion, signature and return roles")); break; }
-                TArray<const coaster::Operation*> Boosts;
-                for (const auto& Operation : D.operations)
-                    if (Operation.kind == coaster::DriveKind::Boost) Boosts.Add(&Operation);
-                Boosts.Sort([](const coaster::Operation& A, const coaster::Operation& B) { return A.start < B.start; });
-                if (Boosts.Num() < 2)
-                { S.Fail(TEXT("Review cameras need both physical booster phases")); break; }
-                S.ReviewExpected = 7 + Boosts.Num();
-                double PlateauArrival = -1, CliffDeparture = -1;
-                for (const auto& Landmark : D.landmarks)
-                {
-                    if (Landmark.kind == coaster::LandmarkKind::PlateauArrival)
-                        PlateauArrival = Landmark.distance;
-                    if (Landmark.kind == coaster::LandmarkKind::CliffDeparture)
-                        CliffDeparture = Landmark.distance;
-                }
-                if (!(PlateauArrival >= CliffBegin && CliffDeparture > PlateauArrival &&
-                    CliffDeparture <= D.track.length))
-                { S.Fail(TEXT("Review cameras need the plateau arrival and cliff departure landmarks")); break; }
-                CliffBegin = PlateauArrival; CliffEnd = CliffDeparture;
-                const double CliffLength = CliffEnd - CliffBegin;
-                double PeakHorizontalBend = 0;
-                for (int32 I = 0; I <= 128; ++I)
-                {
-                    const auto K = D.track.sample(FMath::Lerp(CliffBegin, CliffEnd, double(I) / 128.));
-                    PeakHorizontalBend = std::max(PeakHorizontalBend,
-                        std::hypot(K.curvature.x, K.curvature.y));
-                }
-                if (PeakHorizontalBend <= 1e-9)
-                { S.Fail(TEXT("Review cameras found no horizontal curvature on the plateau")); break; }
-                double OutwardAt = -1, OutwardScore = 0, OutwardBend = 0;
-                for (int32 I = 0; I <= 128; ++I)
-                {
-                    const double At = FMath::Lerp(CliffBegin, CliffEnd, double(I) / 128.);
-                    const auto K = D.track.sample(At);
-                    const coaster::Vec3 HorizontalBend{K.curvature.x, K.curvature.y, 0};
-                    const coaster::Vec3 HorizontalUp{K.up.x, K.up.y, 0};
-                    const double Bend = coaster::norm(HorizontalBend);
-                    if (Bend < PeakHorizontalBend * .12 ||
-                        std::abs(K.tangent.z) > std::sin(15. * coaster::pi / 180.) ||
-                        coaster::norm(HorizontalUp) < std::sin(10. * coaster::pi / 180.))
-                        continue;
-                    // A bank tilted away from horizontal curvature is the
-                    // outward move, irrespective of the section's display name.
-                    const double Outward = -coaster::dot(HorizontalBend / Bend, HorizontalUp);
-                    const double Exposure = std::max(0., K.position.z - D.request.terrain.height(K.position.x, K.position.y));
-                    const double Score = Outward * (1. + std::min(100., Exposure) / 100.);
-                    if (Outward > .15 && Score > OutwardScore)
-                    { OutwardAt = At; OutwardScore = Score; OutwardBend = Bend; }
-                }
-                if (OutwardAt < 0)
-                { S.Fail(TEXT("Review cameras found no slow, curved outward bank on the plateau")); break; }
-                bool Planned = true;
-                Planned &= AddReview(TEXT("review-cliff-winding"), TEXT("whole-clifftop-shelf"), TEXT("overview"),
-                    CliffBegin + .50 * CliffLength, CliffBegin, CliffEnd, -1);
-                const double BankSpan = std::min(75., std::max(35., .5 / OutwardBend));
-                Planned &= AddReview(TEXT("review-cliff-outward-bank"), TEXT("outward-bank-on-plateau"), TEXT("near-rail"),
-                    OutwardAt, OutwardAt - BankSpan, OutwardAt + BankSpan, 0);
-                for (int32 I = 0; I < Boosts.Num(); ++I)
-                {
-                    const auto& Boost = *Boosts[I];
-                    const double Downstream = std::max(120., Boost.targetSpeed * 2.);
-                    const FString Label = FString::Printf(TEXT("review-boost-%d-exit"), I + 1);
-                    const FString Source = FString::Printf(TEXT("boost-operation-%d"), I + 1);
-                    Planned &= AddReview(*Label, *Source, TEXT("side"),
-                        Boost.end + .12 * Downstream,
-                        Boost.end - std::min(45., (Boost.end - Boost.start) * .5),
-                        Boost.end + Downstream, 0);
-                }
-                const auto& LastBoost = *Boosts.Last();
-                const double PullBegin = LastBoost.end + 10.;
-                const double PullEnd = FMath::Min(D.track.length, LastBoost.end +
-                    std::max(180., LastBoost.targetSpeed * 3.));
-                double Pullout = PullBegin, LowestPullout = std::numeric_limits<double>::infinity();
-                for (int32 I = 0; I <= 48; ++I)
-                {
-                    const double At = FMath::Lerp(PullBegin, PullEnd, double(I) / 48.);
-                    const auto K = D.track.sample(At);
-                    if (coaster::dot(K.curvature, K.up) > 0 && K.position.z < LowestPullout)
-                    { LowestPullout = K.position.z; Pullout = At; }
-                }
-                const double PullSpan = std::max(40., LastBoost.targetSpeed * .7);
-                Planned &= AddReview(TEXT("review-boost-pullout"), TEXT("downstream-low-pullout"), TEXT("near-rail"),
-                    Pullout, Pullout - PullSpan, Pullout + PullSpan, 0);
-                double ReviewWaveCrest = (ReviewWaveBegin + ReviewWaveEnd) * .5;
-                for (const auto& Landmark : D.landmarks)
-                    if (Landmark.kind == coaster::LandmarkKind::WaveCrest) ReviewWaveCrest = Landmark.distance;
-                Planned &= AddReview(TEXT("review-wave-turnaround"), TEXT("post-camelback-180-turn"), TEXT("side"),
-                    ReviewWaveCrest, ReviewWaveBegin, ReviewWaveEnd, 0);
-                Planned &= AddReview(TEXT("review-loop-immel-spacing"), TEXT("loop-to-immelmann"), TEXT("overview"),
-                    (LoopEnd + ImmelBegin) * .5, LoopBegin, ImmelEnd, 1);
-                const double SignatureLength = SignatureEnd - SignatureBegin;
-                Planned &= AddReview(TEXT("review-post-inversion-closure"), TEXT("signature-after-inversions"), TEXT("side"),
-                    SignatureBegin + .33 * SignatureLength, SignatureBegin + .08 * SignatureLength,
-                    SignatureBegin + .60 * SignatureLength, 1);
-                const double ReturnLength = ReturnEnd - ReturnBegin;
-                Planned &= AddReview(TEXT("review-final-return"), TEXT("return-before-brakes"), TEXT("near-rail"),
-                    ReturnBegin + .64 * ReturnLength, ReturnBegin + .42 * ReturnLength,
-                    ReturnBegin + .86 * ReturnLength, -1);
-                if (!Planned || S.ReviewShots.Num() != S.ReviewExpected)
-                { S.Fail(TEXT("Review camera targets fall outside the accepted replay")); break; }
-                S.ReviewShots.Sort([](const FState::FReviewShot& A, const FState::FReviewShot& B)
-                    { return A.Time < B.Time; });
-                FString Labels = TEXT("[");
-                for (int32 I = 0; I < S.ReviewShots.Num(); ++I)
-                {
-                    if (I) Labels += TEXT(",");
-                    Labels += Q(S.ReviewShots[I].Label);
-                }
-                Labels += TEXT("]");
-                S.Event(TEXT("review-camera-plan"),
-                    TEXT(",\"captures\":") + FString::FromInt(S.ReviewExpected) +
-                    TEXT(",\"labels\":") + Labels +
-                    TEXT(",\"front_offset_m\":") + N(FrontOffset));
-            }
             PC.Menu = false; PC.ShowComparison = false; PC.ShowTelemetry = true; PC.Ride->SetSeat(S.Seat);
             if (!PC.Ride->IsPaused()) PC.Ride->TogglePause(); PC.Ride->Restart();
             if (!PC.Ride->IsOverview()) PC.Ride->ToggleOverview();
@@ -659,103 +484,7 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (P.Time + 1e-8 < S.LastRideTime || P.Distance + 1e-6 < S.LastDistance) { S.Fail(TEXT("Playback regressed during uninterrupted traversal")); break; }
         S.LastRideTime = P.Time; S.LastDistance = P.Distance;
         if (S.NextShot < S.ShotTimes.Num() && P.Time >= S.ShotTimes[S.NextShot])
-        {
-            S.Event(TEXT("trace-capture-due"), TEXT(",\"target_time\":") + N(S.ShotTimes[S.NextShot]));
-            S.Capture(PC, FString::Printf(TEXT("pov-%d"), S.NextShot++));
-            break;
-        }
-        if (S.ReviewCameras && S.NextReview < S.ReviewShots.Num() &&
-            P.Time >= S.ReviewShots[S.NextReview].Time)
-        {
-            if (PC.Ride->IsPaused())
-            { S.Fail(TEXT("Review target was reached after playback stopped")); break; }
-            const auto& Shot = S.ReviewShots[S.NextReview];
-            const auto& D = *PC.Ride->ActiveDesign();
-            S.ReviewTarget = PC.GetViewTarget();
-            if (!S.ReviewTarget.IsValid()) { S.Fail(TEXT("Review camera target is unavailable")); break; }
-            S.ReviewRiderPose = S.ReviewTarget->GetActorTransform();
-            PC.Ride->TogglePause();
-            S.ReviewPauseStarted = Now;
-            coaster::Vec3 Centre{};
-            constexpr int32 Samples = 16;
-            for (int32 I = 0; I <= Samples; ++I)
-                Centre = Centre + D.track.sample(FMath::Lerp(Shot.Begin, Shot.End, double(I) / Samples)).position / (Samples + 1.);
-            double HorizontalRadius = 0, VerticalRadius = 0;
-            for (int32 I = 0; I <= Samples; ++I)
-            {
-                const auto Delta = D.track.sample(FMath::Lerp(Shot.Begin, Shot.End, double(I) / Samples)).position - Centre;
-                HorizontalRadius = std::max(HorizontalRadius, std::hypot(Delta.x, Delta.y));
-                VerticalRadius = std::max(VerticalRadius, std::abs(Delta.z));
-            }
-            const auto Feature = D.track.sample(Shot.Distance);
-            auto Horizontal = coaster::unit(coaster::Vec3{Feature.tangent.x, Feature.tangent.y, 0});
-            if (coaster::norm(Horizontal) < .1)
-            {
-                const auto Delta = D.track.sample(Shot.End).position - D.track.sample(Shot.Begin).position;
-                Horizontal = coaster::unit({Delta.x, Delta.y, 0});
-            }
-            if (coaster::norm(Horizontal) < .1) Horizontal = {1,0,0};
-            const auto Right = coaster::cross(Horizontal, coaster::Vec3{0,0,1});
-            int32 Side = Shot.Side;
-            if (Side == 0)
-            {
-                const auto Plus = Feature.position + Right * 80.;
-                const auto Minus = Feature.position - Right * 80.;
-                Side = D.request.terrain.height(Plus.x, Plus.y) <
-                    D.request.terrain.height(Minus.x, Minus.y) ? 1 : -1;
-            }
-            const bool Wide = Shot.Style == TEXT("overview");
-            const bool Near = Shot.Style == TEXT("near-rail");
-            const double Distance = std::max({Wide ? 90. : Near ? 35. : 55.,
-                HorizontalRadius * (Wide ? 2.5 : Near ? 1.35 : 1.8),
-                VerticalRadius * (Wide ? 2.5 : Near ? 1.7 : 2.1)});
-            const double CameraHeight = std::max(Wide ? 35. : Near ? 10. : 17.,
-                Distance * (Wide ? .65 : Near ? .18 : .30));
-            auto Eye = Centre + Right * (Side * Distance) - Horizontal * (Distance * .24) +
-                coaster::Vec3{0,0,CameraHeight};
-            Eye.z = std::max(Eye.z, D.request.terrain.height(Eye.x, Eye.y) + 12.);
-            const auto Look = Feature.position + coaster::Vec3{0,0,1.2};
-            // A steep bench can occlude a low side camera even when the camera
-            // itself is above terrain. Lift the eye until its sight line clears
-            // the same triangle surface used by the ride's clearance checks.
-            double TerrainCameraLift = 0;
-            for (int32 ReviewRayIndex = 1; ReviewRayIndex < 40; ++ReviewRayIndex)
-            {
-                const double ReviewRayFraction = double(ReviewRayIndex) / 40.;
-                const auto RayPoint = Eye * (1. - ReviewRayFraction) + Look * ReviewRayFraction;
-                const double RequiredRayLift = (D.request.terrain.height(RayPoint.x, RayPoint.y) + 1. - RayPoint.z) /
-                    (1. - ReviewRayFraction);
-                TerrainCameraLift = std::max(TerrainCameraLift, RequiredRayLift);
-            }
-            if (TerrainCameraLift > 0) Eye.z += TerrainCameraLift + 2.;
-            const auto E = VibeCoordinates::Position(Eye), L = VibeCoordinates::Position(Look);
-            const FVector EyeCm(E.X, E.Y, E.Z), LookCm(L.X, L.Y, L.Z);
-            S.ReviewTarget->SetActorLocationAndRotation(EyeCm, (LookCm - EyeCm).Rotation());
-            const double RailGround = Feature.position.z -
-                D.request.terrain.height(Feature.position.x, Feature.position.y);
-            const auto HorizontalUp = coaster::Vec3{0,0,1} -
-                Feature.tangent * Feature.tangent.z;
-            const auto LevelUp = coaster::unit(HorizontalUp);
-            const double BankDegrees = coaster::norm(HorizontalUp) > 1e-6
-                ? std::atan2(coaster::dot(Feature.up, coaster::cross(Feature.tangent, LevelUp)),
-                    coaster::dot(Feature.up, LevelUp)) * 180. / coaster::pi
-                : std::numeric_limits<double>::quiet_NaN();
-            S.Event(TEXT("review-camera-target"),
-                TEXT(",\"label\":") + Q(Shot.Label) + TEXT(",\"source\":") + Q(Shot.Source) +
-                TEXT(",\"target_distance_m\":") + N(Shot.Distance) +
-                TEXT(",\"target_time_s\":") + N(Shot.Time) +
-                TEXT(",\"observed_ride_time_s\":") + N(P.Time) +
-                TEXT(",\"observed_front_distance_m\":") +
-                    N(P.Distance + coaster::seatDistanceOffset(D.request.train, 0)) +
-                TEXT(",\"span_start_m\":") + N(Shot.Begin) +
-                TEXT(",\"span_end_m\":") + N(Shot.End) +
-                TEXT(",\"style\":") + Q(Shot.Style) +
-                TEXT(",\"bank_deg\":") + N(BankDegrees) +
-                TEXT(",\"rail_ground_m\":") + N(RailGround) +
-                TEXT(",\"camera_position_cm\":") + Q(EyeCm.ToString()) +
-                TEXT(",\"camera_rotation_deg\":") + Q((LookCm - EyeCm).Rotation().ToString()));
-            S.Advance(FState::ReviewView); break;
-        }
+        { S.Event(TEXT("trace-capture-due"), TEXT(",\"target_time\":") + N(S.ShotTimes[S.NextShot])); S.Capture(PC, FString::Printf(TEXT("pov-%d"), S.NextShot++)); }
         if (PC.Ride->IsPaused())
         {
             if (FMath::Abs(P.Time - S.Duration) > 1e-6 || FMath::Abs(P.Distance - S.FinalDistance) > 1e-4 || P.Speed > .01) { S.Fail(TEXT("Ride paused before its accepted terminal trace sample")); break; }
@@ -766,22 +495,6 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Advance(FState::EndView);
         }
         break;
-    case FState::ReviewView:
-        if (Now - S.StageStarted < .3) break;
-        S.Capture(PC, S.ReviewShots[S.NextReview].Label);
-        S.Advance(FState::ReviewCaptured); break;
-    case FState::ReviewCaptured:
-        if (!S.ReviewTarget.IsValid()) { S.Fail(TEXT("Review camera target was lost")); break; }
-        S.ReviewTarget->SetActorTransform(S.ReviewRiderPose);
-        S.ReviewTarget.Reset();
-        if (!PC.Ride->IsPaused()) { S.Fail(TEXT("Review capture changed paused playback")); break; }
-        PC.Ride->TogglePause();
-        S.ReviewPauseSeconds += Now - S.ReviewPauseStarted;
-        S.Event(TEXT("review-camera-resumed"),
-            TEXT(",\"label\":") + Q(S.ReviewShots[S.NextReview].Label) +
-            TEXT(",\"paused_seconds\":") + N(Now - S.ReviewPauseStarted));
-        ++S.NextReview; ++S.ReviewCaptures; S.PreviousTick = Now;
-        S.Advance(FState::Traverse); break;
     case FState::EndView:
         S.Capture(PC, TEXT("terminal"));
         if (S.LoadOnly)
