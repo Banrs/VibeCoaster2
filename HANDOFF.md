@@ -1,36 +1,56 @@
-# Riftwake default.4 — native accepted; standalone delivery pending
+# Riftwake default.4 — verified and activated
 
-Updated25 September2026. **Work solo. All subagents are finished; do not spawn or resume any.** The user's active request is the redesign described in [checkpoint11](docs/checkpoints/11-riftwake-fvd-redesign.md). Completion-07 is only rollback/current active delivery, not visual acceptance of the new task.
+Updated 25 September 2026. **Work solo. All subagents are finished; do not spawn or resume any.** The redesign requested in this conversation is implemented, packaged, reviewed and activated. Current evidence is in [checkpoint11](docs/checkpoints/11-riftwake-fvd-redesign.md). Completion-07 is retained as rollback, not as visual acceptance of the new work.
 
-## Current result
+## Current playable delivery
 
-Final native candidate: `out/riftwake-fvd-redesign-11.vcdesign`, SHA256 `a88318506bd4d4f8028770b724a40cec199a6c75d60677f8e79739f4b1e47f5a`. Seed42 accepts on candidate0 with176.207 s,7327.458 m,0–180 km/h in1.397 s,14 riders/80 station parts. Exact-save reload through the current library passes. Both native resolutions and independent spatial refinement pass; errors are empty.
+- Package source: `f110b1b2b62ec632f0a2366939d9c564312972f9`. Later delivery/docs/shortcut commits do not change that binary identity.
+- Standalone: `native/unreal/Packaged/run-20260925-124313-111/Windows/VibeCoaster/Binaries/Win64/VibeCoaster.exe`.
+- Executable SHA256: `198100288A1302A9D5EAA60F00F3BDD6097B3FDAAFB300F257AF19C601D70237`.
+- Manifest SHA256: `BAF6C9F4E02D92324E44F799DAAB8E287E8AB636DA2E3BE7C8B77B8C7F71E172`.
+- Accepted save: `out/riftwake-fvd-redesign-11.vcdesign`, SHA256 `A88318506BD4D4F8028770B724A40CEC199A6C75D60677F8E79739F4B1E47F5A`.
+- Runtime geometry SHA1: `FCEE7D0E4771B6965142FF2396A2FEE28C396322`.
+- `dist/current.json`, root Play shortcut and desktop VibeCoaster2 shortcut use this package and fresh `UserData-Riftwake-V4`, whose accepted save matches the above bytes. Targets/arguments were read back.
+- Activation proof: `out/riftwake-default4-activation.json`. Previous manifest, both shortcuts and default.3 save: `out/default4-activation-backup/`. Old V3 and original Development profiles remain unchanged. The user's old game was not closed; relaunch through Play to use default.4.
 
-Current final shape: twelve-second smooth loaded precliff setup; two real uphill constant-grade LSM strips separated by FVD;26-second shallow winding cliff with an outward bay and opposing/nested turns;34 m lip;88-degree dive; preserved camelback; compact84-degree180° Wave; real rising brake to48 m/s;74 m Loop with monotone8 m exit-side offset;1.1-second loaded upright link;66 m planar Immelmann;12.5-second opposing45-degree signature;35 m return hill; short FVD station approach. Eighteen FVD programmes, zero splines. Before cliff58.509 s vs47.877; after drop82.109 s vs96.643. Front apex gap8.046 s matches the user's allowance for somewhat more duration than Tormenta's~6.5 s.
+## Shape and native evidence
 
-All measured inversion seats meet the counterpart floors: Loop5.113/4.652/4.414 g vs4.344; Immel5.234/4.778/4.506 vs4.326. Native limits and existing5% project allowance were not relaxed. Category caps are actual canonical extents. Overall rail above lowest embedded footing292.261 m<292.5; source summit284.5 m. New size helper runs on generation and reload; previous default.3 saves retain their original contract.
+Seed42 accepts candidate0: 176.207 s, 7327.458 m, retained 0–180 km/h in 1.397 s, seven two-seat rows, 80 station parts. Eighteen FVD programmes cover curved geometry; zero splines. All native errors are empty. Exact-save reload, front/middle/rear F2291-25 histories, source reconstruction, train/terrain/track/support/station clearance, 960→1920 Hz refinement and independent half-spacing replay pass. Minimum swept-ground clearance is +0.470 m.
 
-All LSM setbacks independently read from saved canonical geometry are2 m. The remaining preboost trim nearest a motor is16.90 s away; the5.39-second redundant trim was removed with a six-second actual-replay guard. Last drive regression1234316 passes. Other focused passes:125528 inherited,66279 FVD,100124 dimensions,140 recipes,45 convergence. An optional dimensions-test assertion has been updated for the now-smaller valid inversions and should be built/run against candidate11 with the next metadata rebuild.
+Current shape: twelve-second smooth loaded precliff setup; 20/32-degree uphill LSM strips separated by FVD; 26-second shallow winding cliff with an outward bay, opposing counterturn and nested low traverse; 34 m lip; 88-degree dive; protected camelback; compact 84-degree 180-degree Wave; real rising brake to 48 m/s; 74 m Loop with monotone 8 m exit-side offset; 1.1-second loaded upright connector; 66 m planar Immelmann; 12.5-second opposing 45-degree signature; 35 m return hill and short FVD station approach. No standard airtime crests on the shelf and no filler hill between inversions.
 
-Outputs under `out/riftwake-fvd-redesign-11-*` include report/trace/plan/recipe, independent audit, native hardware/source audit, closure audit, terrain audit, consolidated evidence and views. Root inspected candidate09 true-scale cliff/inversion/return plots; candidate10 was byte-identical geometry/frames with the redundant trim removed. Candidate11 only lowers the summit0.5 m to satisfy the most conservative foundation datum and is fully revalidated; root inspected its final true-scale cliff, Wave, inversion and return views. Audit bank angles now derive from physical forward/up vectors, avoiding equivalent Euler-branch artifacts after inversions.
+Before cliff 58.509 s versus 47.877; after drop 82.109 s versus 96.643. Front Loop-to-Immel apex gap 8.046 s follows the user's allowance for modest extra duration over Tormenta's roughly 6.5 s. All measured seats stay above 1.12 g on the connector. Cliff lip traversal is 1.532 s; actual whole-train brake-work activity is about 2.30 s, a different measure. Longest native inactive flat coast is 1.30 s.
 
-## Next steps — no further redesign unless review finds a real defect
+All LSM entry/exit guards are independently measured at 2.000 m on the real constant-grade geometry. Actual boost-exit rail gaps are 2.250/2.219/2.250 m. The downhill terrain follows the real low pullout; the protected camelback's subsequent rise is intentional. Removed the redundant trim 5.39 s before a boost using actual replay-time spacing; the nearest retained preboost trim is 16.90 s away. All six retained trim controllers are inactive in the nominal ride.
 
-1. Commit the reviewed source plus checkpoint/docs with `[skip ci]`. Implementation is committed at `6e340061e79dcba5ca28220ea3c9cb69a9fa4ddd`. The first Unreal build found a local variable shadow in the new review camera, and the rollback test exposed the default.3 save taking the pre-default.3 total cliff pacing rule. Both are fixed in the following small compatibility commit; rebuild and recheck them before delivery. Branch `codex/legacy-authoring`, origin `https://github.com/Banrs/VibeCoaster2.git`; commit/push is already authorized by the earlier handoff.
-2. Package using `native/unreal/scripts/package.ps1 -UnrealRoot 'D:/Games/Epic Games/UE_5.8' -Configuration Development -SkipEditorPreparation`. The script requires a clean committed tree. Keep tracked files unchanged while packaging. Use existing verified V3 content; do not overwrite the old user's Editor DLL or rerun Blender work.
-3. Build/recheck native CLI after the commit so final reload reports carry the correct source identity. Run the optional saved-file dimensions test against candidate11.
-4. Run `scratch/redesign-audits/delivery/run-candidate-runtime.ps1` against the new package and **candidate11**, with fresh non-overlapping output/profile paths, front and rear. Front uses `-ReviewCameras`; expected seven fixed views plus every Boost exit (three), so ten review captures. The initial packaged front run passed nine captures, but two boost views were terrain-obscured and the pullout target was too far up the camelback. The following camera-only commit adds terrain line-of-sight clearance, a true low-pullout target, full-shelf overview, exposed sustained outward-bank target and dedicated Wave view. Repeat both final-package traversals. The first package at `native/unreal/Packaged/run-20260925-121833-356` passed the front proof with geometry SHA1 `FCEE7D0E4771B6965142FF2396A2FEE28C396322`; rear proof is running in root tool session41244. The new capture refinements need a fresh package and proof. Inspect actual2560×1440 front/rear and third-person images. Require14 riders,80 station parts and matching save/package/geometry identities.
-5. Only after actual runtime review passes, preserve rollback and promote a fresh default.4 profile, package manifest/current.json and root/desktop shortcuts. Update checkpoint/HANDOFF with package SHA/source commit and runtime evidence; commit/push final delivery docs. The old user game remains running and must not be killed.
+Actual front/middle/rear ascent peaks: Loop 5.113/4.652/4.414 g against the 4.344 g reference floor; Immel 5.234/4.778/4.506 g against 4.326. Existing project force allowance and F2291 curves are unchanged. Canonical category caps pass, including highest rail above the lowest embedded footing 292.261 m < 292.5 m. Wave and camelback benchmarks are explicitly provisional where no formal comparable record category was verified; consumer G traces do not prove pointwise force dominance at every location.
 
-## Tools and artifacts
+Focused passes: 125528 inherited-port, 66279 FVD, 1234316 drive, 100128 dimensions including the exact save, 140 recipe and 45 convergence. Exact default.3 rollback reload also passes after preserving its separate active-cliff/lip pacing contract. Native source at cc96565 is unchanged by the final f110b1b camera-only update.
 
-- Normal exec/apply_patch/view_image helpers can fail setup refresh. Use elevated `exec_command` with concise task justification. Windows PowerShell. Python: `C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`.
-- Build native: `scratch/fvd-redesign/build-integration-tests.cmd` (VS14.38, single worker). New cap helper is in `dimensions.cpp`/`acceptance_internal.hpp`; saved derived Loop brake/link ownership and per-seat reference floors are already integrated/tested.
-- Private probes and final evidence extractor live in `scratch/solo-layout/`; the old private compiler there uses frozen diagnostic inlet speeds and must NEVER replace production code. Production uses actual train energy calibration.
-- Read images using elevated Pillow thumbnail→JPEG base64, then `functions.image`; do not print base64. Plots use `out/plotting-deps`.
-- Graphify refreshed native/core successfully:2135 nodes/5424 edges/120 communities,81 code files,0 LLM extraction tokens. `graphify-out/.needs_update` was removed after validating fresh JSON. Two header parse warnings remain and are documented in checkpoint11. No subagents or extra semantic labeling are needed.
-- Reference evidence: `docs/references/2026-09-redesign-reference-audit.md`, `docs/references/fvd-redesign-contract.md`, `docs/reference-force-audit.md`. Root and completed agents inspected sequential digital FF flyover and real POV frames. No standard-crest cliff prototype is allowed. User says after-inversion closure is the airtime/flatness concern; no filler hill between inversions.
-- Exact save reload already passed via `scratch/solo-layout/native-audit.exe`, whose JSON records all hardware and per-seat ascent peaks. No new package or profile has been activated yet.
+Outputs under `out/riftwake-fvd-redesign-11-*`: report, trace, plan, recipe, exact reload, native hardware/source audit, independent audit, closure audit, terrain audit, consolidated evidence and true-scale cliff/Wave/inversion/return plots. Physical bank is derived from actual forward/up vectors; equivalent Euler branches after inversions are not extra rail rotations.
+
+## Final runtime review
+
+Both final-package verifier runs pass with the exact save/geometry/executable identities above:
+
+- `out/riftwake-default4-runtime-front-v2/result.json` and `out/riftwake-default4-runtime-front-v2.identity.json`: full traversal, 74 screenshots including all ten review cameras.
+- `out/riftwake-default4-runtime-rear-v2/result.json` and `out/riftwake-default4-runtime-rear-v2.identity.json`: full traversal, 70 screenshots.
+- Both retain 14 riders/80 station parts and pass load, pause, restart, paused-pose stability, and save/generation/mesh/scene cancellation. Both processes exited successfully.
+- Root inspected all ten final third-person images at larger size and all 64 rear POV images in six timestamped contact sheets, plus earlier front POV images from the identical geometry. `out/riftwake-default4-visual-review.json` records observations and image hashes. No new geometry defect was found in these views.
+- The sustained outward-bank target is -50 degrees over the exposed cliff bay. The real low-pullout target has a 2.262 m rail gap. Full-shelf, every boost exit, Wave, inversion spacing, closure and final-return images are retained.
+
+The first final-geometry package passed front/rear but had two terrain-obscured observer views and the wrong pullout target. The final package corrects the cameras and adds the Wave view; its ten-view evidence supersedes the older nine-view captures. Do not confuse old package `run-20260925-121833-356` with the active final package.
+
+This is agent visual inspection, not user styling approval or physical intensity testing. Direct keyboard testing, FPS/GPU acceptance and a new startup percentile claim are not made. The previous measured 3 s startup target remains unmet; see the historical record below. No further redesign or broad rerun is pending unless the user identifies a new issue.
+
+## Working tools and references
+
+- Branch `codex/legacy-authoring`, origin `https://github.com/Banrs/VibeCoaster2.git`. Commit/push is authorized. Use `[skip ci]` for these delivery checkpoints.
+- Normal exec/apply_patch/view_image helpers can fail Windows setup refresh. Elevated `exec_command` works. PowerShell; Python `C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`. Git uses `-c safe.directory=D:/Coding/Codex/Vibecoaster2`; do not alter global trust.
+- Graphify native/core is refreshed: 2135 nodes, 5424 edges, 120 communities, 81 code files, zero LLM extraction tokens. Two partially parsed headers are documented and were inspected/compiled directly. No stale update marker remains.
+- Native build: `scratch/fvd-redesign/build-integration-tests.cmd`. Runtime runner: `scratch/redesign-audits/delivery/run-candidate-runtime.ps1`. Saved probes in `scratch/solo-layout/` are diagnostic only; production uses actual train-energy calibration.
+- References: `docs/references/2026-09-redesign-reference-audit.md`, `docs/references/fvd-redesign-contract.md`, `docs/reference-force-audit.md`. Sequential digital Falcon's Flight flyover, real POV and official Tormenta POV frames were inspected. The correct Tormenta pair is the Loop and second Immelmann, not the earlier lift/drop.
+- Preserve V3 art, all old profiles/packages and the original user's running game. Do not rerun Blender or overwrite the old Editor DLL for this completed geometry task.
 
 ---
 
@@ -88,7 +108,7 @@ The final delivery checkpoint includes docs, the LF harness fix and the updated 
 
 ## Working rules and tooling
 
-The user authorizes parallel work; root integrates/reviews. Latest limits are one Astra, two Sol and ten Luna; agents use the required efficient-subagent-waiting skill and event-driven waits. No unnecessary broad suites/CI or repeated photo tuning. Meaningful commits/pushes use `[skip ci]`. Repository is public and the signed-in GitHub user has ADMIN; established origin is `https://github.com/Banrs/VibeCoaster2.git`, branch `codex/legacy-authoring`, pushed implementation checkpoint `9631e48`.
+The latest user instruction is to work solo after subagents reach their stopping points. All subagents are finished. Do not spawn or resume agents; the earlier concurrency limits are historical. No unnecessary broad suites/CI or repeated photo tuning. Meaningful commits/pushes use `[skip ci]`. Repository is public and the signed-in GitHub user has ADMIN; established origin is `https://github.com/Banrs/VibeCoaster2.git`, branch `codex/legacy-authoring`, pushed implementation checkpoint `9631e48`.
 
 Normal exec/apply_patch/view_image helpers fail setup refresh. Use `exec_command` with `sandbox_permissions=require_escalated` and a concise task justification. PowerShell; explicit UTF-8 Python I/O. Git: `git -c safe.directory=D:/Coding/Codex/Vibecoaster2`. Do not change global trust.
 

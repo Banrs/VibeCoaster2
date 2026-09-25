@@ -1,8 +1,8 @@
-The default.4 redesign now has a native-accepted replacement. See [checkpoint11](checkpoints/11-riftwake-fvd-redesign.md) for current per-requirement evidence and the remaining standalone delivery gate. Earlier completion checkboxes below remain historical.
+The default.4 redesign is implemented, packaged, reviewed and activated. See [checkpoint11](checkpoints/11-riftwake-fvd-redesign.md) for current per-requirement measurements, final front/rear runtime proof and retained reference limitations. Both Play shortcuts now load candidate11 in `UserData-Riftwake-V4`. Earlier completion checkboxes below remain historical.
 
 # Requirements completion audit
 
-> Superseded as visual acceptance on25 September2026: the user rejected completion-07 again. Its recorded native/runtime checks remain historical evidence, but the new clifftop, FVD, size-cap, force-floor, drive-placement and pacing requirements are open. Current work is tracked in `HANDOFF.md` and `docs/references/fvd-redesign-contract.md`.
+> Historical completion-07 record below, superseded by the default.4 delivery on 25 September 2026. Current clifftop, FVD, size-cap, force-floor, drive-placement, pacing and runtime evidence is in checkpoint11 and `HANDOFF.md`; the older measurements below are not the current geometry.
 
 
 Refreshed 2026-09-25 from current source and persisted reports/receipts. [x] means the implementation has direct artifact evidence. [~] means its final route or runtime proof remains open. [ ] means not delivered.
