@@ -1,6 +1,7 @@
 #include "coaster/coaster.hpp"
 #include "coaster/clearance.hpp"
 #include "simulation_internal.hpp"
+#include "acceptance_internal.hpp"
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -20,6 +21,33 @@ Frame frameAt(const std::vector<Frame>& frames,double distance){
 double cross2(Vec3 a,Vec3 b){return a.x*b.y-a.y*b.x;}
 void number(std::ostream& out,double x){if(std::isfinite(x))out<<x;else out<<"null";}
 }
+std::optional<size_t> recipeOwnerForSection(const Design& d,const RideSection& section){
+    for(size_t i=0;i<d.request.recipe.elements.size();++i){const auto& element=d.request.recipe.elements[i];
+        if(section.role!=RideRole::Unspecified){if(element.id==section.recipeId&&element.role==section.role)return i;continue;}
+        if(element.role!=RideRole::Loop)continue;
+        const bool brake=section.recipeId==element.id+"-energy-brake";
+        if(!brake&&section.recipeId!=element.id+"-bank-connection")continue;
+        const auto source=std::find_if(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const ForceAuthoring& f){return f.name==section.recipeId;});
+        if(source==d.forcePrograms.end()||std::count_if(d.forcePrograms.begin(),d.forcePrograms.end(),[&](const ForceAuthoring& f){return f.name==section.recipeId;})!=1)return {};
+        if(source->sourceDistances.size()<2||source->firstKnot>=d.track.knots.size()||source->sourceDistances.size()>d.track.knots.size()-source->firstKnot)return {};
+        const size_t last=source->firstKnot+source->sourceDistances.size()-1;
+        for(size_t k=source->firstKnot+1;k<=last;++k)if(d.track.knots[k].element!=(brake?Element::Brake:Element::Turn))return {};
+        // Parsing has the source knots; after rebuild its labeled sections must
+        // cover exactly that source, without absorbing any inversion body.
+        if(!d.track.spans.empty()){
+            const double begin=d.track.spans[source->firstKnot].start,end=last<d.track.spans.size()?d.track.spans[last].start:d.track.length;
+            double covered=begin;
+            for(const auto& part:d.sections)if(part.recipeId==section.recipeId){
+                if(part.role!=RideRole::Unspecified||!std::isfinite(part.start)||!std::isfinite(part.end)||std::abs(part.start-covered)>1e-5||part.end<=part.start||part.end>end+1e-5)return {};
+                covered=part.end;
+            }
+            if(std::abs(covered-end)>1e-5)return {};
+            if(brake&&!std::any_of(d.operations.begin(),d.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Brake&&op.start>=begin&&op.end<=end&&op.end>op.start;}))return {};
+        }
+        return i;
+    }
+    return {};
+}
 void assessMotion(Design& d,Cancel cancel){
     d.motion={};auto& audit=d.motion;
     if(d.track.spans.empty()||d.simulation.frames.empty()||!d.simulation.completed)return;
@@ -27,10 +55,9 @@ void assessMotion(Design& d,Cancel cancel){
     if(!d.request.recipe.elements.empty()){
         size_t current=0;std::vector<bool> seen(d.request.recipe.elements.size());
         for(const auto& section:d.sections){
-            const auto found=std::find_if(d.request.recipe.elements.begin(),d.request.recipe.elements.end(),[&](const RecipeElement& e){return e.id==section.recipeId;});
-            const size_t index=size_t(found-d.request.recipe.elements.begin());
-            if(found==d.request.recipe.elements.end()||found->role!=section.role||index<current||index>current+1){d.report.fail("MOTION_RECIPE_MAP","Compiled section roles/IDs disagree with the ordered recipe",section.start);return;}
-            seen[index]=true;current=index;
+            const auto owner=recipeOwnerForSection(d,section);
+            if(!owner||*owner<current||*owner>current+1){d.report.fail("MOTION_RECIPE_MAP","Compiled section roles/IDs disagree with the ordered recipe",section.start);return;}
+            if(section.role!=RideRole::Unspecified)seen[*owner]=true;current=*owner;
         }
         if(!std::all_of(seen.begin(),seen.end(),[](bool value){return value;})){d.report.fail("MOTION_RECIPE_MAP","Compiled sections omit an element from the saved recipe");return;}
     }
@@ -223,6 +250,10 @@ SpatialReplay replaySpatialRefinement(const Design& d,Cancel cancel){
         const auto clearance=validateGeometry(refined,d.request.terrain,d.request.limits,d.request.train,supports,refinedSweep,cancel);
         for(const auto& error:clearance.errors)work.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
         work.simulation=refinedSimulation.get();
+        if(work.simulation.completed&&work.simulation.report.valid()){
+            const auto reference=validateInversionReferenceForces(d,work.simulation,map);
+            for(const auto& error:reference.errors)work.report.fail("SPATIAL_"+error.code,error.message,error.distance,error.actual,error.limit);
+        }
     }catch(const std::exception& e){if(cancel&&cancel())work.simulation.cancelled=true;work.report.fail("SPATIAL_REFINEMENT",e.what());}
     return work;
 }

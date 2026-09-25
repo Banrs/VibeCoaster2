@@ -5,15 +5,18 @@
 #include <optional>
 
 namespace coaster {
+inline constexpr double recipeLoopEntrySpeed=48;
+inline constexpr double recipeClimbSetupHeading=0.233723406495529;
 inline constexpr double recipeApproachNormalG=2.4,recipeApproachBankRampSeconds=1.8;
 enum class RecipeCompileMode { ClosedCircuit, EnergyCalibrationPrefix };
 struct RecipePort {std::string id;double distance{},speed{};};
 struct RecipeFeedback {
     double peakSpeedCorrection{};
-    double camelbackTailCutSeconds{},signatureAirtimeScale{1};
+    double camelbackTailCutSeconds{};
     bool compactReturn{};
-    double cliffHeadingCorrection{},approachHeadingCorrection{};
+    double cliffHeadingCorrection{},cliffDepartureHeadingCorrection{};
     std::unordered_map<std::string,double> energyCorrection;
+    std::unordered_map<std::string,double> brakeAccelerationCorrection;
 };
 struct RecipeCompileFailure : std::runtime_error {
     Design partial;

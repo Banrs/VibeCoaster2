@@ -1,8 +1,30 @@
 #include "coaster/coaster.hpp"
 #include "simulation_internal.hpp"
+#include "acceptance_internal.hpp"
 #include <stdexcept>
 
 namespace coaster {
+ValidationReport validateInversionReferenceForces(const Design& design,const SimulationResult& simulation,const std::function<double(double)>& distanceMap){
+    ValidationReport report;
+    // Older accepted saves retain their historical contract and provenance.
+    if(design.generationVersion!=generatorVersion)return report;
+    for(const auto& body:design.inversionDimensions){
+        const bool loop=body.role==RideRole::Loop;if(!loop&&body.role!=RideRole::Immelmann)continue;
+        const auto kind=loop?LandmarkKind::LoopCrest:LandmarkKind::ImmelmannCrest;
+        const auto crest=std::find_if(design.landmarks.begin(),design.landmarks.end(),[&](const RideLandmark& at){return at.kind==kind&&at.distance>=body.startDistance&&at.distance<=body.endDistance;});
+        if(crest==design.landmarks.end()){report.fail("INVERSION_ASCENT_PHASE","Inversion body has no measured ascent endpoint",body.startDistance);continue;}
+        const double begin=distanceMap?distanceMap(body.startDistance):body.startDistance;
+        const double end=distanceMap?distanceMap(crest->distance):crest->distance,floor=loop?4.344:4.326;
+        for(int seat=0;seat<3;++seat){double peak=-INFINITY;const double offset=seatDistanceOffset(design.request.train,seat);
+            for(const auto& frame:simulation.frames){const double at=frame.distance+offset;
+                if(at>=begin&&at<end)peak=std::max(peak,frame.seats[seat].vertical);}
+            // Retained frame samples are conservative lower bounds on the phase peak.
+            if(peak<floor)report.fail("REFERENCE_ASCENT_PEAK",body.recipeId+": physical "+std::string(seat==0?"front":seat==1?"middle":"rear")+" ascent peak is below the retained counterpart observation",begin,peak,floor);
+        }
+    }
+    return report;
+}
+
 ValidationReport validateSimulationTargets(const SimulationResult& simulation,const Targets& targets,const Limits& limits){
     ValidationReport report;
     const auto& m=simulation.metrics;
@@ -135,6 +157,9 @@ void verifyConvergenceWith(Design& design,const std::function<SimulationResult()
             fine.metrics.maxGroundHeight=design.simulation.metrics.maxGroundHeight;
             auto targets=validateSimulationTargets(fine,design.request.targets,design.request.limits);
             for(const auto& error:targets.errors)
+                design.report.fail("CONVERGENCE_FINE_"+error.code,error.message,error.distance,error.actual,error.limit);
+            const auto reference=validateInversionReferenceForces(design,fine);
+            for(const auto& error:reference.errors)
                 design.report.fail("CONVERGENCE_FINE_"+error.code,error.message,error.distance,error.actual,error.limit);
         }
         design.convergence.passed=design.convergence.passed&&design.report.valid();

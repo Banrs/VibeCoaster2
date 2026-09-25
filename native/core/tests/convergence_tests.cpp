@@ -1,4 +1,6 @@
 #include "coaster/coaster.hpp"
+#include "../src/acceptance_internal.hpp"
+#include "../src/simulation_internal.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -88,6 +90,28 @@ int main(int argc,char** argv){try{
     verifyConvergence(design); // Empty canonical track cannot complete a finer replay.
     require(!design.accepted()&&!design.convergence.passed,"Invalid finer replay becomes accepted");
     require(design.simulation.frames.size()==2&&design.simulation.frames.back().distance==5000,"Failed verification replaces coarse presentation trace");
+    Design phase;phase.request.train.cars=7;phase.request.train.spacing=3.4;
+    InversionDimensions body;body.startDistance=100;body.endDistance=200;body.role=RideRole::Loop;body.recipeId="loop";
+    phase.inversionDimensions={body};phase.landmarks={{LandmarkKind::LoopCrest,150}};
+    auto phaseReplay=result();phaseReplay.frames.clear();
+    Frame ascending;ascending.distance=120;for(auto& seat:ascending.seats)seat.vertical=4.6;
+    Frame later;later.distance=140;for(auto& seat:later.seats)seat.vertical=4.8;
+    phaseReplay.frames={ascending,later};
+    require(validateInversionReferenceForces(phase,phaseReplay).valid(),"Each physical seat reaches its own inversion ascent floor");
+    auto missed=phaseReplay;missed.frames[0].seats[0].vertical=4.0;
+    const auto missedPhase=validateInversionReferenceForces(phase,missed);
+    require(missedPhase.errors.size()==1&&has(missedPhase,"REFERENCE_ASCENT_PEAK"),"A front-seat recovery peak must not replace its weaker ascent");
+    require(missedPhase.errors.front().message.find("front")!=std::string::npos&&missedPhase.errors.front().actual==4.0,"Phase comparison must use physical seat distance offsets");
+    auto remapped=missed;for(auto& frame:remapped.frames)frame.distance+=1000;
+    const auto mappedPhase=validateInversionReferenceForces(phase,remapped,[](double s){return s+1000;});
+    require(mappedPhase.errors.size()==1&&mappedPhase.errors.front().actual==4.0,"Spatial refinement must map the ascent endpoints before checking seat peaks");
+    phase.simulation=phaseReplay;phase.request.targets.speed=80;phase.request.targets.requireIntensity=false;
+    verifyConvergenceWith(phase,[&]{return missed;},{});
+    require(has(phase.report,"CONVERGENCE_FINE_REFERENCE_ASCENT_PEAK")&&!phase.convergence.passed,"Unchanged global extrema cannot conceal a refined inversion ascent below its floor");
+    phase.generationVersion="2.0.0-default.3";
+    require(validateInversionReferenceForces(phase,missed).valid(),"The retained default.3 rollback must keep its historical force contract");
+    phase.generationVersion=generatorVersion;phase.landmarks.clear();
+    require(has(validateInversionReferenceForces(phase,phaseReplay),"INVERSION_ASCENT_PHASE"),"A new inversion cannot bypass its floor by omitting its crest landmark");
     if(argc>1&&std::string(argv[1])=="--generation-cancel"){
     GenerationRequest request;request.targets.requireIntensity=false;request.maxCandidates=1;
     std::atomic<bool> replayStarted{false},overlap{false};std::atomic<int> polling{0};

@@ -92,7 +92,7 @@ bool parseAuthorshipPayload(const std::string& bytes,Design& d,std::string& erro
 void assessAuthorship(Design& d,Cancel cancel) {
     d.authorship={};auto& a=d.authorship;
     if(!d.simulation.completed)return;
-    if(d.forcePrograms.empty()||d.splinePrograms.empty()){d.report.fail("AUTHORING_MISSING","V2 requires retained force and spline source programmes");return;}
+    if(d.forcePrograms.empty()){d.report.fail("AUTHORING_MISSING","Retained FVD source programmes are required");return;}
     const auto errors=d.report.errors.size();a.performed=true;
     for(const auto& source:d.forcePrograms) {
         if(cancel&&cancel()){d.simulation.cancelled=true;return;}

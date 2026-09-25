@@ -26,6 +26,20 @@ inline void planTrimBrakes(Design& d,const std::vector<Frame>& frames) {
             fits=fits&&((q.sample.tangent.z>.04&&dot(q.sample.up,upright)>.7)||(inversionApproach&&std::abs(q.sample.tangent.z)>.04&&q.sample.up.z>0))&&norm(q.sample.curvature)<.02&&norm(q.upS)<.025;}
         for(const auto& op:d.operations){const double stop=op.end<op.start?d.track.length:op.end;
             if(begin<stop+2*half+5&&end>op.start-2*half-5)fits=false;}
+        // Keep the default section plan from stacking trim hardware immediately before a nearby motor.
+        const auto current=std::find_if(d.sections.begin(),d.sections.end(),[&](const RideSection& item){return &item==&section;});
+        if(current!=d.sections.end()&&current+1!=d.sections.end()) {
+            const auto& adjacent=*(current+1);
+            if(adjacent.role==section.role&&adjacent.recipeId==section.recipeId&&adjacent.start>=section.end-1e-6&&adjacent.start<=section.end+1e-6) {
+                for(const auto& motor:d.operations)if((motor.kind==DriveKind::Boost||motor.kind==DriveKind::Launch)&&motor.start>=section.end&&motor.start<=adjacent.end) {
+                    const double elapsed=replayValueAt(frames,motor.start,true)-replayValueAt(frames,end,true);
+                    const double approachSpeed=replayValueAt(frames,end);
+                    bool interveningForce=false;
+                    for(const auto& other:d.operations)if(&other!=&motor&&other.kind!=DriveKind::Trim&&other.start<motor.start&&other.end>end)interveningForce=true;
+                    if(!interveningForce&&elapsed>=0&&approachSpeed>20&&elapsed<=6)fits=false;
+                }
+            }
+        }
         if(!fits)continue;
         const double ramp=.35,lead=speed*(ramp+.35)+half;
         if(begin-lead-half<frames.front().distance)continue;

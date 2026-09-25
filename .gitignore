@@ -27,3 +27,7 @@ native/build-before-move/
 /unreal/
 # Retained local assets for the previous running editor-game; current kit is Art/V3.
 /native/unreal/Content/Art/V2/
+
+# Regenerable local code graph and structural extraction cache.
+/graphify-out/
+/native/core/graphify-out/

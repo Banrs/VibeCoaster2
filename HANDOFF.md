@@ -1,4 +1,40 @@
-# Riftwake delivered; startup target remains above3s
+# Riftwake default.4 — native accepted; standalone delivery pending
+
+Updated25 September2026. **Work solo. All subagents are finished; do not spawn or resume any.** The user's active request is the redesign described in [checkpoint11](docs/checkpoints/11-riftwake-fvd-redesign.md). Completion-07 is only rollback/current active delivery, not visual acceptance of the new task.
+
+## Current result
+
+Final native candidate: `out/riftwake-fvd-redesign-11.vcdesign`, SHA256 `a88318506bd4d4f8028770b724a40cec199a6c75d60677f8e79739f4b1e47f5a`. Seed42 accepts on candidate0 with176.207 s,7327.458 m,0–180 km/h in1.397 s,14 riders/80 station parts. Exact-save reload through the current library passes. Both native resolutions and independent spatial refinement pass; errors are empty.
+
+Current final shape: twelve-second smooth loaded precliff setup; two real uphill constant-grade LSM strips separated by FVD;26-second shallow winding cliff with an outward bay and opposing/nested turns;34 m lip;88-degree dive; preserved camelback; compact84-degree180° Wave; real rising brake to48 m/s;74 m Loop with monotone8 m exit-side offset;1.1-second loaded upright link;66 m planar Immelmann;12.5-second opposing45-degree signature;35 m return hill; short FVD station approach. Eighteen FVD programmes, zero splines. Before cliff58.509 s vs47.877; after drop82.109 s vs96.643. Front apex gap8.046 s matches the user's allowance for somewhat more duration than Tormenta's~6.5 s.
+
+All measured inversion seats meet the counterpart floors: Loop5.113/4.652/4.414 g vs4.344; Immel5.234/4.778/4.506 vs4.326. Native limits and existing5% project allowance were not relaxed. Category caps are actual canonical extents. Overall rail above lowest embedded footing292.261 m<292.5; source summit284.5 m. New size helper runs on generation and reload; previous default.3 saves retain their original contract.
+
+All LSM setbacks independently read from saved canonical geometry are2 m. The remaining preboost trim nearest a motor is16.90 s away; the5.39-second redundant trim was removed with a six-second actual-replay guard. Last drive regression1234316 passes. Other focused passes:125528 inherited,66279 FVD,100124 dimensions,140 recipes,45 convergence. An optional dimensions-test assertion has been updated for the now-smaller valid inversions and should be built/run against candidate11 with the next metadata rebuild.
+
+Outputs under `out/riftwake-fvd-redesign-11-*` include report/trace/plan/recipe, independent audit, native hardware/source audit, closure audit, terrain audit, consolidated evidence and views. Root inspected candidate09 true-scale cliff/inversion/return plots; candidate10 was byte-identical geometry/frames with the redundant trim removed. Candidate11 only lowers the summit0.5 m to satisfy the most conservative foundation datum and is fully revalidated; root inspected its final true-scale cliff, Wave, inversion and return views. Audit bank angles now derive from physical forward/up vectors, avoiding equivalent Euler-branch artifacts after inversions.
+
+## Next steps — no further redesign unless review finds a real defect
+
+1. Commit the reviewed source plus checkpoint/docs with `[skip ci]`. No implementation commit has been made in this redesign yet. Branch `codex/legacy-authoring`, origin `https://github.com/Banrs/VibeCoaster2.git`; commit/push is already authorized by the earlier handoff.
+2. Package using `native/unreal/scripts/package.ps1 -UnrealRoot 'D:/Games/Epic Games/UE_5.8' -Configuration Development -SkipEditorPreparation`. The script requires a clean committed tree. Keep tracked files unchanged while packaging. Use existing verified V3 content; do not overwrite the old user's Editor DLL or rerun Blender work.
+3. Build/recheck native CLI after the commit so final reload reports carry the correct source identity. Run the optional saved-file dimensions test against candidate11.
+4. Run `scratch/redesign-audits/delivery/run-candidate-runtime.ps1` against the new package and **candidate11**, with fresh non-overlapping output/profile paths, front and rear. Front uses `-ReviewCameras`; expected six fixed views plus every Boost exit (three), so nine review captures. This harness syntax was parsed, but the new runtime camera code has not yet been built/run. Inspect actual2560×1440 front/rear and third-person images. Require14 riders,80 station parts and matching save/package/geometry identities.
+5. Only after actual runtime review passes, preserve rollback and promote a fresh default.4 profile, package manifest/current.json and root/desktop shortcuts. Update checkpoint/HANDOFF with package SHA/source commit and runtime evidence; commit/push final delivery docs. The old user game remains running and must not be killed.
+
+## Tools and artifacts
+
+- Normal exec/apply_patch/view_image helpers can fail setup refresh. Use elevated `exec_command` with concise task justification. Windows PowerShell. Python: `C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`.
+- Build native: `scratch/fvd-redesign/build-integration-tests.cmd` (VS14.38, single worker). New cap helper is in `dimensions.cpp`/`acceptance_internal.hpp`; saved derived Loop brake/link ownership and per-seat reference floors are already integrated/tested.
+- Private probes and final evidence extractor live in `scratch/solo-layout/`; the old private compiler there uses frozen diagnostic inlet speeds and must NEVER replace production code. Production uses actual train energy calibration.
+- Read images using elevated Pillow thumbnail→JPEG base64, then `functions.image`; do not print base64. Plots use `out/plotting-deps`.
+- Graphify refreshed native/core successfully:2135 nodes/5424 edges/120 communities,81 code files,0 LLM extraction tokens. `graphify-out/.needs_update` was removed after validating fresh JSON. Two header parse warnings remain and are documented in checkpoint11. No subagents or extra semantic labeling are needed.
+- Reference evidence: `docs/references/2026-09-redesign-reference-audit.md`, `docs/references/fvd-redesign-contract.md`, `docs/reference-force-audit.md`. Root and completed agents inspected sequential digital FF flyover and real POV frames. No standard-crest cliff prototype is allowed. User says after-inversion closure is the airtime/flatness concern; no filler hill between inversions.
+- Exact save reload already passed via `scratch/solo-layout/native-audit.exe`, whose JSON records all hardware and per-seat ascent peaks. No new package or profile has been activated yet.
+
+---
+
+## Previous delivery record (superseded as visual acceptance)
 
 Updated 25 September 2026. The user rejected checkpoint `b39622c`: clifftop density/flow, unintended flat/upright resets, long cliff braking, inversion left/right modulation and wrong loop hand, and ordinary track standing too far above terrain. Those corrections are implemented and verified in the delivered revision. Do not reapply the paused patch. The implementation is committed/pushed at `9631e488f93e71a1fa2056550264b7d1a31967ed`. Its standalone is built, verified and promoted. Preserve it and the rollback files. The final startup percentile experiment is complete; its measured3s target remains unmet.
 
@@ -52,7 +88,7 @@ The final delivery checkpoint includes docs, the LF harness fix and the updated 
 
 ## Working rules and tooling
 
-The user authorizes bounded parallel geometry, modeling and optimization work; root integrates/reviews. Up to3 Astra and6 Sol, extensive Luna; agents use the required efficient-subagent-waiting skill and event-driven waits. No unnecessary broad suites/CI or repeated photo tuning. Meaningful commits/pushes use `[skip ci]`. Repository is public and the signed-in GitHub user has ADMIN; established origin is `https://github.com/Banrs/VibeCoaster2.git`, branch `codex/legacy-authoring`, pushed implementation checkpoint `9631e48`.
+The user authorizes parallel work; root integrates/reviews. Latest limits are one Astra, two Sol and ten Luna; agents use the required efficient-subagent-waiting skill and event-driven waits. No unnecessary broad suites/CI or repeated photo tuning. Meaningful commits/pushes use `[skip ci]`. Repository is public and the signed-in GitHub user has ADMIN; established origin is `https://github.com/Banrs/VibeCoaster2.git`, branch `codex/legacy-authoring`, pushed implementation checkpoint `9631e48`.
 
 Normal exec/apply_patch/view_image helpers fail setup refresh. Use `exec_command` with `sandbox_permissions=require_escalated` and a concise task justification. PowerShell; explicit UTF-8 Python I/O. Git: `git -c safe.directory=D:/Coding/Codex/Vibecoaster2`. Do not change global trust.
 
@@ -60,4 +96,4 @@ Python: `C:/Users/danie/.cache/codex-runtimes/codex-primary-runtime/dependencies
 
 Blender MCP wrapper: `native/art/run_blender_mcp.py`, Python `D:/Toolchains/BlenderMCP/venv/Scripts/python.exe`, server `D:/Toolchains/BlenderMCP/venv/Scripts/blender-mcp.exe`, loopback9876. Safe mode remains on; root serializes scene work. Use actual MCP for authoring. To inspect images, elevated Pillow thumbnail→JPEG base64 can be emitted through functions.image without printing the data. Distinguish Blender renders from runtime screenshots.
 
-Graphify skill was read; no graph/runtime exists, so direct source inspection is used. Original full task requirements were recovered into `scratch/original-handoff-requirements.md`. User requested Fast OFF: global config is `service_tier="default"`, but active per-task tier is not exposed; do not claim confirmed off.
+Graphify indexed native/core; use the graph first and confirm changing source directly. The current graph may lag ongoing edits. Original full task requirements were recovered into `scratch/original-handoff-requirements.md`. User requested Fast OFF: global config is `service_tier="default"`, but active per-task tier is not exposed; do not claim confirmed off.

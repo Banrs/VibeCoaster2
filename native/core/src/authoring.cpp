@@ -166,15 +166,18 @@ MotionBuilder::Range MotionBuilder::line(double length,Element element,const cha
 
 void MotionBuilder::drive(double length,DriveKind kind,double speed,double acceleration,const char* name){auto range=line(length,kind==DriveKind::Brake?Element::Brake:Element::Launch,name);motors.push_back({range.first,range.second,kind,speed,acceleration});nominalSpeed=speed-.3;}
 
-void MotionBuilder::driveGraded(double endHeight,double endGrade,double speed,double acceleration,const char* name) {
+void MotionBuilder::driveGraded(double endHeight,double endGrade,double speed,double acceleration,const char* name,double blendEntrySpeed) {
     const size_t begin=d.track.knots.size()-1,firstModule=modules.size();
-    line(std::max(40.,speed*1.8),Element::Launch,"powered-first-grade");
-    const auto angles=detail::directionAngles(cursor);const double blendLength=speed*1.5;
-    const auto pitch=detail::anglePolynomial(angles[0],{endGrade,0,0,0},blendLength);
-    programme(polynomialMotion(cursor,pitch,{angles[1].value,0,0,0,0,0,0,0},blendLength),Element::Launch,"powered-grade-blend");
-    line((endHeight-cursor.position.z)/std::sin(endGrade),Element::Launch,"powered-second-grade");
+    const auto firstGrade=line(std::max(40.,speed*1.8),Element::Launch,"powered-first-grade");
+    FvdGradeTransitionRequest intent;intent.entry=fvdEntry(blendEntrySpeed>0?blendEntrySpeed:speed-.3);
+    intent.exitPitch=endGrade;intent.rollingAcceleration=gravity*req.train.rollingResistance;intent.dragAccelerationCoefficient=drag;
+    const auto blend=designFvdGradeTransition(intent,cancel);const std::string blendName=std::string(name)+"-grade-blend";
+    force(blend.section,blend.authoring,Element::Hill,blendName.c_str(),{});
+    nominalSpeed=blend.section.samples.back().speed;
+    const auto secondGrade=line((endHeight-cursor.position.z)/std::sin(endGrade),Element::Launch,"powered-second-grade");
     modules.resize(firstModule);modules.push_back({begin,d.track.knots.size()-1,name,0,true});
-    motors.push_back({begin,d.track.knots.size()-1,DriveKind::Boost,speed,acceleration});nominalSpeed=speed-.3;
+    motors.push_back({firstGrade.first,firstGrade.second,DriveKind::Boost,speed,acceleration});
+    motors.push_back({secondGrade.first,secondGrade.second,DriveKind::Boost,speed,acceleration});nominalSpeed=speed-.3;
 }
 
 double MotionBuilder::crestCurvature(double rise,double length,double targetG){
