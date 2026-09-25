@@ -1,5 +1,7 @@
 # Riftwake redesign reference audit — 25 September 2026
 
+Scratch evidence paths in this historical study now refer to D:/Coding/Codex/vibecoasterlegacy/workspace-deflation-20260925/old-probes/scratch.
+
 This audit distinguishes published ride dimensions, a 2023 design animation, actual ride footage, consumer acceleration recordings, and the Riftwake source replay. It sets **design targets**, not a claim that a consumer-device trace is surveyed ride telemetry. Its comparison is the completed out/riftwake-completion-07 default.3 candidate. Default.3 is again the playable baseline; the specific criticisms that motivated this study remain historical context, and the later default.4 redesign was rejected.
 
 ## Source and footage provenance

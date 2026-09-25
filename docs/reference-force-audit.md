@@ -1,6 +1,6 @@
 # Force reference audit and FVD transitions
 
-Updated 24 September 2026. The generator targets approximately 1.33 times FF scale and 1.2 times its speed (300+ km/h). Approximate element/phase force baselines are **FF +15%, TRR inversions +8 1/3%, other comparable elements +10%**, with negative loads increased in magnitude. These replace the earlier 10%-for-everything trials. The user permits up to 5% above project limits, while independent F2291 checks remain strict. Lower-drag stress runs are no longer acceptance requirements.
+Historical study from 24 September 2026. It proposed approximately 1.33 times Falcon’s Flight scale and 1.2 times its speed, with percentage force uplifts by element. Those targets are not the latest user direction; [HANDOFF.md](../HANDOFF.md) calls for natural forces and warns against forced intensity. Use this document for reference provenance and uncertainty, not as a current numeric mandate.
 
 A source replay, photograph fit or higher global peak does not prove point-by-point reference dominance. The consumer recordings lack surveyed track positions, and their alignment uncertainty remains explicit below. Use physical front/middle/rear seat samples and meaningful phases, rather than fitting uncertain timestamp correspondences or repeatedly fine-tuning small photo differences.
 
@@ -60,7 +60,7 @@ Every seat clears those separate phase baselines. The recovered native trace and
 
 The loop uses a 4.85 g ascent, 2 g crown and 3.9 g recovery; the Immelmann uses 4.85 / 3.8 / 3 g with a release to 2 g through the descending roll. Both explicitly unload over 1.2 seconds into a solved crown hold. The actual loop ascent peaks are approximately 5.002 / 4.821 / 4.680 g, versus the TRR ascent baseline of about 4.706 g. The rear difference is small relative to the approximate comparison. Actual Immelmann ascent peaks are 4.949 / 4.808 / 4.686 g, against about 4.687 g for the first TRR Immelmann. Actual middle-of-roll loads are 3.153 / 3.394 / 3.766 g. Peak/crown/source controls are not substituted for measured seat loads.
 
-The fixed phase-alignment audit (`balanced-inversion.json`) still has nominal-position differences, particularly against the loop's uncertain late-ascent/crown window and TRR's second Immelmann. No core deficit persists across every fixed time shift, but that does not establish exact superiority. The code's calibrated-reference intensity status therefore remains separate and unavailable; approximate shape/phase goals are the current user direction.
+The fixed phase-alignment audit (`balanced-inversion.json`) still has nominal-position differences, particularly against the loop's uncertain late-ascent/crown window and TRR's second Immelmann. No core deficit persists across every fixed time shift, but that does not establish exact superiority. The code's calibrated-reference intensity status therefore remains separate and unavailable; approximate shape/phase goals were the direction at the time of this study.
 
 Other parts of this candidate remain active within the project envelope: the opening peaks at 3.49-3.57 g, the wave at 4.01-4.12 g, the signature at 3.56-3.58 g with -1.31 to -1.35 g airtime, and the return at 3.93-3.96 g. These are actual-seat ranges, not claims of exact 10% dominance over an unidentified reference record.
 
@@ -82,4 +82,4 @@ The official [Intamin dimensions](https://www.intamin.com/project/falcons-flight
 
 Earlier rejected profiles, obsolete drag tests and superseded fit tolerances remain in `out/reference-audit/research-history-through-20260924.md` and the original experiment files. They are historical evidence, not current acceptance requirements.
 
-Work stopped on user request after local verification. Windows/macOS component and baseline CI passed for18d3fb2; the full checkpoint passed on macOS and its remaining Windows run was cancelled. The current shortcuts launch the verified local Default2 game. Standalone packaging was stopped during cooking and no new package was promoted. See HANDOFF.md for the exact stopped state.
+Work stopped on user request after local verification. Windows/macOS component and baseline CI passed for18d3fb2; the full checkpoint passed on macOS and its remaining Windows run was cancelled. At that time the shortcuts launched a local Default2 game, and standalone packaging had stopped during cooking. The current default.3 package and shortcuts are documented in HANDOFF.md.

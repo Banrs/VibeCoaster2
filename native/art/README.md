@@ -18,6 +18,10 @@ containing the MCP client package:
 python native/art/run_blender_mcp.py --server <installed-blender-mcp-executable>
 ```
 
+For the optional station preview, also pass --script render_station.py and
+--station-context <canonical-station-boxes.json>. The default command authors
+the V3 asset kit.
+
 The modelling script replaces its authoring scene. Use a dedicated Blender
 instance/profile for the ride kit. Source assets are saved before review scripts
 move copies or set up lights. Preview scripts render the real meshes; they do

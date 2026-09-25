@@ -36,7 +36,7 @@ Eighteen retained FVD sources cover the curved ride; there are zero geometric sp
 
 Native acceptance includes source reconstruction, analytic rider dynamics, full-train/station/support/terrain clearance,960→1920 Hz replay, and independent half-spacing geometry/replay. Minimum swept-ground clearance is **0.470 m**. All accepted errors are empty. Focused regressions:125528 inherited-port checks,66279 FVD checks,1234316 drive checks,100128 dimension checks, including the exact saved candidate,140 recipe checks and45 convergence checks.
 
-Exact native hardware and source inventory: `out/riftwake-fvd-redesign-11-native-audit.json`. Consolidated metrics: `out/riftwake-fvd-redesign-11-evidence.json`. Ordinary terrain: `out/riftwake-fvd-redesign-11-terrain-audit/`. True-scale geometry: `out/riftwake-fvd-redesign-11-views/`. These are local artifacts retained under the repository's ignored output directory.
+Exact native hardware and source inventory: `out/riftwake-fvd-redesign-11-native-audit.json`. Consolidated metrics: `out/riftwake-fvd-redesign-11-evidence.json`. Ordinary terrain: `out/riftwake-fvd-redesign-11-terrain-audit/`. True-scale geometry: `out/riftwake-fvd-redesign-11-views/`. These original path names now refer to files under the adjacent rejected-default4-20260925/outputs archive.
 
 Graphify's native/core index is refreshed:2135 nodes,5424 edges,120 communities from81 code files, zero LLM extraction tokens. Two headers are partially parsed (`clearance.hpp`, `acceptance_internal.hpp`); their actual source was inspected and compiled independently. Existing graph inference warnings remain navigation caveats, not acceptance evidence.
 

@@ -48,10 +48,8 @@ struct Track {
     TrackLocation locate(double distance,size_t& spanHint) const;
     TrackSample sample(double distance) const;
     Vec3 position(double distance,size_t& spanHint) const;
-    Vec3 tangent(double distance) const;
     Vec3 tangent(double distance,size_t& spanHint) const;
     TrackSample sampleSpan(size_t span,double parameter) const;
-    std::array<double,8> bankPolynomial(size_t span) const;
     double distanceAtSpan(size_t span,double parameter) const;
 };
 void rebuildFramePolynomials(Track&);
@@ -348,7 +346,6 @@ void assessAuthorship(Design&,Cancel cancel={});
 std::string authorshipPayload(const Design&);
 bool parseAuthorshipPayload(const std::string&,Design&,std::string& error);
 void assessMotion(Design&,Cancel cancel={});
-void verifySpatialRefinement(Design&,Cancel cancel={});
 double minimumSweptGroundClearance(const Track&,const Terrain&,const TrainConfig&,Cancel cancel={});
 std::string motionReportJson(const Design&);
 SimulationResult simulate(const Track&,const std::vector<Operation>&,const TrainConfig&,double step=1./960,Cancel cancel={});

@@ -1,5 +1,7 @@
 # Riftwake path, terrain and V3 delivery
 
+Local scratch paths cited below now live under D:/Coding/Codex/vibecoasterlegacy/workspace-deflation-20260925/old-probes/scratch. The old activation backup is under that archive’s out-history folder; active default.3 evidence remains in out/.
+
 Source/package checkpoint: `9631e488f93e71a1fa2056550264b7d1a31967ed` (`[skip ci]`). This closes the geometry and V3 integration reopened after the user rejected checkpoint09. Startup results are recorded separately below; a numerical acceptance is not a claim of user design approval.
 
 ## Requested geometry
@@ -59,4 +61,4 @@ Final evidence is `out/startup-final-100-20260925/{summary.json,runs.jsonl,metad
 
 `dist/current.json` now points to `native/unreal/Packaged/run-20260924-231703-433/package-manifest.json` and the fresh `UserData-Riftwake-V3` profile. Both root and desktop shortcuts target that verified standalone and load the accepted ride. The already-running old editor-game is not replaced in place; relaunch through the updated shortcut to use this version.
 
-At the time of default.3 delivery, out/completion-activation.json recorded the launch identities, with earlier shortcuts and save copied to out/completion-activation-backup/. The active default.3 package and V3 profile remain in this workspace; older V2 assets and scratch probes were later moved into D:/Coding/Codex/vibecoasterlegacy/workspace-deflation-20260925. The historical statement that a user game was running is not a current process claim.
+At the time of default.3 delivery, out/completion-activation.json recorded the launch identities, with earlier shortcuts and save copied to a backup now archived under workspace-deflation-20260925/out-history/completion-activation-backup/. The active default.3 package and V3 profile remain in this workspace; older V2 assets and scratch probes were later moved into D:/Coding/Codex/vibecoasterlegacy/workspace-deflation-20260925. The historical statement that a user game was running is not a current process claim.

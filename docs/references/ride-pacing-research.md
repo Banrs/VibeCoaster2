@@ -1,5 +1,7 @@
 # Ride pacing and terrain reference for the 180-second redesign
 
+Footage observations below remain source material. Proposed element counts, durations and shapes are historical; the latest user direction in [HANDOFF.md](../../HANDOFF.md) supersedes them.
+
 24 September 2026. This is an authoring reference, not a survey of either ride. Timings below come from **video presentation time**, including editing and station footage. They are broad visual phase windows, not exact track ports. The Falcon's Flight telemetry overlay and the local RFDB export are different recordings of the same ride; do not synchronize their timestamps or treat displayed hundredths of a g as calibrated accuracy.
 
 ## What the primary references show

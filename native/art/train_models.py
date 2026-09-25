@@ -1,8 +1,7 @@
 """Riftwake Vector: a compact high-speed speedster train, authored in metres.
 
-The continuous bonnet/sidepod silhouette is original. Observed manufacturer
-references are recorded in scratch/train-completion/design-review.md. Each
-asset remains one two-seat row; runtime supplies seven 3.4 m-spaced rows.
+The continuous bonnet/sidepod silhouette is original. Each asset remains one
+two-seat row; runtime supplies seven 3.4 m-spaced rows.
 The rail pivot, +X direction, eye (0, 0, 1.2) and clearance remain unchanged.
 """
 import bpy

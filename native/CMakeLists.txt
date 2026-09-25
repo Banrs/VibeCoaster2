@@ -60,7 +60,7 @@ set_tests_properties(core_persistence persistence_cancel reference support
   PROPERTIES LABELS integration)
 set_tests_properties(organic_generation PROPERTIES LABELS "integration;representative" TIMEOUT 1800)
 
-add_executable(coaster_convergence core/src/convergence_main.cpp)
+add_executable(coaster_convergence EXCLUDE_FROM_ALL core/src/convergence_main.cpp)
 target_link_libraries(coaster_convergence PRIVATE coaster_core)
 
 # Manual numerical diagnostic; never a replacement for acceptance tests.

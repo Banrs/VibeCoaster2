@@ -6,6 +6,7 @@ native/unreal/Binaries/
 native/unreal/Intermediate/
 native/unreal/Saved/
 native/unreal/Packaged/
+native/unreal/Build/
 native/unreal/DerivedDataCache/
 native/unreal/Content/Maps/
 native/unreal/Content/Materials/
@@ -27,6 +28,7 @@ native/build-before-move/
 /unreal/
 # Legacy V2 art is outside the active V3 package.
 /native/unreal/Content/Art/V2/
+/native/unreal/Content/Art/V072/
 
 # Regenerable local code graph and structural extraction cache.
 /graphify-out/

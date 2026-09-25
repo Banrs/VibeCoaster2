@@ -1,5 +1,7 @@
 # Inversion path research and correction
 
+This is a prior geometry study and default.3 numerical checkpoint, not approval of the loop or Immelmann. Scratch paths below now refer to D:/Coding/Codex/vibecoasterlegacy/workspace-deflation-20260925/old-probes/scratch. The latest user reports both remain unfaithful, especially in yaw; see [HANDOFF.md](../../HANDOFF.md).
+
 The user clarified that the defect is unnecessary left/right centerline modulation and the wrong loop hand, not merely rotation rate. The new default must satisfy those path constraints as well as the existing physical checks.
 
 ## Real element reference

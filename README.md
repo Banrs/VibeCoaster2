@@ -6,7 +6,7 @@ The rollback followed feedback about constant roll, late LSM placement in sectio
 
 Start with [HANDOFF.md](HANDOFF.md) for status and evidence. Double-click Play VibeCoaster2.lnk in the repository or VibeCoaster2 on the desktop to launch the verified default.3 standalone and automatically load the accepted ride from UserData-Riftwake-V3; press Space to ride. Both shortcuts and dist/current.json select the same default.3 package.
 
-The original camelback image, trace, fit and clifftop reference remain in [docs/references](docs/references). Historical checkpoint reports document their original snapshots; their acceptance wording does not override the current design issues.
+Current ride-reference notes are in [docs/references](docs/references). Earlier checkpoint images and verification reports were moved beside the legacy checkpoints; their old acceptance wording does not override [HANDOFF.md](HANDOFF.md).
 
 Build the native core with `native/CMakeLists.txt`. Windows and macOS are the CI platforms. Package Unreal with `native/unreal/scripts/package.ps1`. Tests cover authored sources, frame and force derivatives, finite-train replay, persistence, clearance and numerical refinement; these checks do not establish manufacturer approval or whole-standard certification.
 

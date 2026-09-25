@@ -239,9 +239,6 @@ void verifySpatialRefinementWith(Design& d,const std::function<SpatialReplay()>&
         d.report.errors.insert(d.report.errors.end(),work.report.errors.begin(),work.report.errors.end());
     }catch(const std::exception& e){if(cancel&&cancel())d.simulation.cancelled=true;d.report.fail("SPATIAL_REFINEMENT",e.what());}
 }
-void verifySpatialRefinement(Design& d,Cancel cancel){
-    verifySpatialRefinementWith(d,[&]{return replaySpatialRefinement(d,cancel);},cancel);
-}
 std::string motionReportJson(const Design& d){
     std::ostringstream o;o<<std::setprecision(12);const auto& m=d.motion;
     o<<"{\"performed\":"<<(m.performed?"true":"false")<<",\"passed\":"<<(m.passed?"true":"false")<<",\"positionJoinErrors\":[";
