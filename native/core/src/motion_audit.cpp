@@ -116,6 +116,7 @@ void assessMotion(Design& d,Cancel cancel){
         audit.sections.push_back(result);
     }
     if(std::abs(previousEnd-d.track.length)>1e-5)d.report.fail("MOTION_INTENT","Section intent does not cover the final canonical circuit");
+    const bool separateCliffPacing=d.generationVersion==generatorVersion||d.generationVersion=="2.0.0-default.3";
     if(!d.request.recipe.elements.empty()){
         std::array<bool,size_t(LandmarkKind::BrakeEntry)+1> seen{};double plateauTime=NAN,dropTime=NAN;
         for(const auto& landmark:d.landmarks){const auto kind=size_t(landmark.kind);
@@ -126,7 +127,7 @@ void assessMotion(Design& d,Cancel cancel){
         if(!std::all_of(seen.begin(),seen.end(),[](bool value){return value;}))d.report.fail("LANDMARK_INTENT","Default recipe is missing a required verification landmark");
         // Legacy saves retain their former total-interval check. New rides
         // distinguish active clifftop track from the short brake/lip approach.
-        if(d.generationVersion!=generatorVersion){
+        if(!separateCliffPacing){
             constexpr double clifftopLimit=20.5;
             if(!std::isfinite(plateauTime)||!std::isfinite(dropTime)||dropTime<plateauTime||dropTime-plateauTime>clifftopLimit)
                 d.report.fail("CLIFFTOP_PACING","Legacy front-seat crest-to-cliff commitment exceeds its pacing cap",0,dropTime-plateauTime,clifftopLimit);
@@ -153,7 +154,7 @@ void assessMotion(Design& d,Cancel cancel){
         audit.clifftopActiveSeconds=frontTime(lipStart)-frontTime(plateau);
         audit.clifftopBrakingSeconds=frontTime(departure)-frontTime(lipStart);
     }
-    if(d.generationVersion==generatorVersion&&d.request.recipe.name=="Riftwake"){
+    if(separateCliffPacing&&d.request.recipe.name=="Riftwake"){
         // FF's retained overlay shows several summit turns at video84-106s,
         // then a separate brake approach. These are design pacing bounds,
         // not precision measurements or limits from an acceleration standard.

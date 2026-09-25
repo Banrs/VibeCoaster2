@@ -703,10 +703,10 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             const double Distance = std::max({Wide ? 90. : Near ? 35. : 55.,
                 HorizontalRadius * (Wide ? 2.5 : Near ? 1.35 : 1.8),
                 VerticalRadius * (Wide ? 2.5 : Near ? 1.7 : 2.1)});
-            const double Height = std::max(Wide ? 35. : Near ? 10. : 17.,
+            const double CameraHeight = std::max(Wide ? 35. : Near ? 10. : 17.,
                 Distance * (Wide ? .65 : Near ? .18 : .30));
             auto Eye = Centre + Right * (Side * Distance) - Horizontal * (Distance * .24) +
-                coaster::Vec3{0,0,Height};
+                coaster::Vec3{0,0,CameraHeight};
             Eye.z = std::max(Eye.z, D.request.terrain.height(Eye.x, Eye.y) + 12.);
             const auto Look = Centre * .35 + Feature.position * .65;
             const auto E = VibeCoordinates::Position(Eye), L = VibeCoordinates::Position(Look);
