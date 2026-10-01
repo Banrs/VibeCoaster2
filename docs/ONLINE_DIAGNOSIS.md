@@ -1,6 +1,8 @@
 # Current local snapshot for online diagnosis
 
-1 October 2026. Branch: `codex/legacy-authoring`.
+1 October 2026. Published on `main` at `66000ec`, from the former
+`codex/legacy-authoring` branch. See [branch consolidation](BRANCH_CONSOLIDATION.md)
+for the ancestry and the separately preserved rewrite.
 
 The user says the current local version is buggy and requested this push so the
 online version can understand the flagged issues. This snapshot preserves the

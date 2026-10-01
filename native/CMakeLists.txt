@@ -48,7 +48,9 @@ if(coaster_commit MATCHES "^[0-9a-f]+$")
   endforeach()
 endif()
 if(MSVC)
-  target_compile_options(coaster_core PRIVATE /W4 PUBLIC /fp:strict)
+  # Cancellation and failure paths rely on RAII rollback. Keep unwinding enabled
+  # even when a caller overrides CMake's default CMAKE_CXX_FLAGS.
+  target_compile_options(coaster_core PRIVATE /W4 PUBLIC /EHsc /we4530 /fp:strict)
 else()
   target_compile_options(coaster_core PRIVATE -Wall -Wextra -Wpedantic PUBLIC -ffp-contract=off)
 endif()
