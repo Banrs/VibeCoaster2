@@ -7,6 +7,21 @@ namespace {
 int checks;
 void check(bool ok,const char* why){++checks;if(!ok)throw std::runtime_error(why);}
 size_t feet(const Design& d){size_t n=0;for(const auto& s:d.supports)for(const auto& m:s.members)n+=m.kind==SupportMemberKind::Footing;return n;}
+bool sameGraph(const std::vector<Support>& a,const std::vector<Support>& b){
+    const auto same=[](Vec3 x,Vec3 y){return x.x==y.x&&x.y==y.y&&x.z==y.z;};
+    if(a.size()!=b.size())return false;
+    for(size_t i=0;i<a.size();++i){
+        const auto& x=a[i];const auto& y=b[i];
+        if(!same(x.base,y.base)||!same(x.top,y.top)||!same(x.attachment,y.attachment)||
+            x.hasAttachment!=y.hasAttachment||x.trackDistance!=y.trackDistance||x.members.size()!=y.members.size())return false;
+        for(size_t j=0;j<x.members.size();++j){
+            const auto& m=x.members[j];const auto& n=y.members[j];
+            if(!same(m.base,n.base)||!same(m.top,n.top)||m.radiusBase!=n.radiusBase||m.radiusTop!=n.radiusTop||
+                m.kind!=n.kind||m.spineContact!=n.spineContact)return false;
+        }
+    }
+    return true;
+}
 }
 int main(){try{
     for(auto kind:{SupportStructureKind::Camelback,SupportStructureKind::Loop,SupportStructureKind::Immelmann})for(unsigned seed:{0u,1u,3u}){
@@ -37,9 +52,25 @@ int main(){try{
     check(changed,"Changing only ground clearance changes the generated foundation graph");
     int calls=0;auto cancelled=validateSupportLayout(slope.supports,slope.request.terrain,[&]{return ++calls>20;});
     check(!cancelled.valid()&&cancelled.errors.front().code=="CANCELLED","Shared-member validation remains cancellable");
-    const auto beforeCancel=slope.supports;calls=0;bool cancelledBuild=false;
-    try{buildSupportLayout(slope,[&]{return ++calls>100;});}catch(const std::exception& e){cancelledBuild=std::string(e.what())=="CANCELLED";}
-    check(cancelledBuild&&slope.supports.size()==beforeCancel.size(),"Cancelled regeneration retains the previous complete graph");
-    for(size_t i=0;i<beforeCancel.size();++i)check(slope.supports[i].members.size()==beforeCancel[i].members.size()&&norm(slope.supports[i].base-beforeCancel[i].base)==0,"Cancellation does not replace existing supports");
+    const auto beforeCancel=slope.supports;
+    const auto cancelBuild=[&](Cancel request){
+        bool requested=false,cancelledBuild=false;
+        try{buildSupportLayout(slope,[&]{requested=requested||request();return requested;});}
+        catch(const std::exception& e){if(std::string(e.what())!="CANCELLED")throw;cancelledBuild=true;}
+        check(requested,"Regeneration reaches the requested cancellation point");
+        check(cancelledBuild,"Regeneration reports cancellation explicitly");
+        check(slope.supports.size()==beforeCancel.size(),"Cancelled regeneration retains the previous complete graph");
+        check(sameGraph(slope.supports,beforeCancel),"Cancellation restores every support field and canonical member exactly");
+    };
+    // Cover unwind both before construction and after a partial replacement
+    // exists. The latter follows actual progress rather than wall-clock timing.
+    cancelBuild([]{return true;});
+    calls=0;cancelBuild([&]{return ++calls>100;});
+    bool partialGraph=false;
+    cancelBuild([&]{
+        if(slope.supports.empty())return false;
+        partialGraph=slope.supports.size()<beforeCancel.size();return true;
+    });
+    check(partialGraph,"Mid-build cancellation interrupts a partially generated graph");
     std::cout<<"PASS "<<checks<<" adaptive support system checks\n";
 }catch(const std::exception& e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<'\n';return 1;}}

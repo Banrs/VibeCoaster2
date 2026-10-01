@@ -1,6 +1,8 @@
 # VibeCoaster2
 
-C++20 hybrid FVD/spline coaster authoring and Unreal 5.8 viewer. **Riftwake default.3** is the current source and playable baseline on codex/legacy-authoring. The rejected default.4 package and generated history were moved beside the legacy checkpoints at D:/Coding/Codex/vibecoasterlegacy.
+C++20 hybrid FVD/spline coaster authoring and Unreal 5.8 viewer. **Riftwake default.3** is the current source and playable baseline on `main`, including the latest source/evidence sync from the former `codex/legacy-authoring` branch. The rejected default.4 package and generated history were moved beside the legacy checkpoints at D:/Coding/Codex/vibecoasterlegacy.
+
+See [the branch consolidation record](docs/BRANCH_CONSOLIDATION.md) before integrating older branch work. `codex/fresh-rewrite` is a preserved alternative implementation, not a drop-in update to this baseline.
 
 The current local state is still buggy. For online diagnosis, start with [the portable saves, review evidence and issue guide](docs/ONLINE_DIAGNOSIS.md), then read the open requirements in HANDOFF.md. Passing numerical checks do not mean the design issues are resolved.
 
