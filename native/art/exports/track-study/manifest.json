@@ -1,0 +1,299 @@
+{
+  "createdThrough": "Blender MCP execute_blender_code",
+  "blender": "5.2.1 LTS",
+  "profile": {
+    "id": "exa-track-study-01",
+    "units": "metres",
+    "status": "proportions study; not an accepted ride or structural design",
+    "datum": "rail-centre midpoint; X forward, Y transverse, Z up",
+    "gauge": 1.4,
+    "train_width": 2.35,
+    "maximum_train_width": 2.4,
+    "rail_radius": 0.105,
+    "rail_wall": 0.02,
+    "spine_depth": 0.8,
+    "spine_radius": 0.34,
+    "spine_wall": 0.024,
+    "tie_spacing": 1.4,
+    "tie_plate_thickness": 0.024,
+    "support_connection": "full-width flanged column with stiffened longitudinal spine saddle",
+    "support_saddle_length": 1.22,
+    "support_cheek_thickness": 0.055,
+    "support_web_thickness": 0.05,
+    "support_load_plate_thickness": 0.06,
+    "support_mount_drop": 0.6,
+    "support_flange_size": [
+      1.05,
+      1.05,
+      0.065
+    ],
+    "support_bolt_circle_radius": 0.44,
+    "support_bolt_count": 8,
+    "support_column_radius": 0.375,
+    "support_base_size": [
+      1.25,
+      1.25,
+      0.18
+    ],
+    "running_wheel_radius": 0.26,
+    "running_wheel_width": 0.16,
+    "upstop_wheel_radius": 0.15,
+    "upstop_wheel_width": 0.11,
+    "guide_wheel_radius": 0.14,
+    "guide_wheel_width": 0.11,
+    "wheel_rail_gap": 0.002,
+    "sweep_step": 0.2,
+    "ring_sides": 48,
+    "palette": {
+      "TS_Paint": {
+        "colour": [
+          0.69,
+          0.69,
+          0.6
+        ],
+        "metallic": 0.2,
+        "roughness": 0.34
+      },
+      "TS_RunningSteel": {
+        "colour": [
+          0.48,
+          0.54,
+          0.57
+        ],
+        "metallic": 0.8,
+        "roughness": 0.28
+      },
+      "TS_Support": {
+        "colour": [
+          0.26,
+          0.31,
+          0.32
+        ],
+        "metallic": 0.4,
+        "roughness": 0.4
+      },
+      "TS_Fastener": {
+        "colour": [
+          0.25,
+          0.28,
+          0.29
+        ],
+        "metallic": 0.78,
+        "roughness": 0.3
+      },
+      "TS_Wheel": {
+        "colour": [
+          0.025,
+          0.23,
+          0.25
+        ],
+        "metallic": 0.05,
+        "roughness": 0.47
+      },
+      "TS_Floor": {
+        "colour": [
+          0.26,
+          0.29,
+          0.31
+        ],
+        "metallic": 0,
+        "roughness": 0.82
+      },
+      "TS_Annotation": {
+        "colour": [
+          0.67,
+          0.76,
+          0.78
+        ],
+        "metallic": 0,
+        "roughness": 0.65
+      }
+    },
+    "reference_family": "Falcons Flight / Intamin Exa Coaster; built photograph and 2023 animation",
+    "crosshead_radius": 0.065,
+    "crosshead_wall": 0.012,
+    "crosshead_height": 0,
+    "crosshead_end_inset": 0.08,
+    "gusset_side": 0.18,
+    "gusset_half_length": 0.34,
+    "gusset_top_half_length": 0.055
+  },
+  "checks": {
+    "gaugeMetres": 1.4,
+    "minimumTieWheelSweepGapMetres": 0.04199999999999998,
+    "crossheadAxisHeightMetres": 0,
+    "supportColumnDiameterMetres": 0.75,
+    "supportMountLocalMetres": [
+      0,
+      0,
+      -1.7400000000000002
+    ],
+    "scope": "local cross-section and provisional wheel barrels; excludes a bogie or occupied-train sweep"
+  },
+  "assets": [
+    {
+      "name": "SM_ExaCrosshead",
+      "boundsMetres": [
+        [
+          -0.3400000035762787,
+          -0.6200000047683716,
+          -0.5235558748245239
+        ],
+        [
+          0.3400000035762787,
+          0.6200000047683716,
+          0.06500004231929779
+        ]
+      ],
+      "vertices": 96,
+      "triangles": 180,
+      "materials": [
+        "TS_Paint"
+      ],
+      "purpose": "track study only"
+    },
+    {
+      "name": "SM_ExaSupportHead",
+      "boundsMetres": [
+        [
+          -0.6100000143051147,
+          -0.5249999761581421,
+          -1.784999966621399
+        ],
+        [
+          0.6100000143051147,
+          0.5249999761581421,
+          -0.965499997138977
+        ]
+      ],
+      "vertices": 1136,
+      "triangles": 2176,
+      "materials": [
+        "TS_Support",
+        "TS_Fastener"
+      ],
+      "purpose": "track study only"
+    },
+    {
+      "name": "SM_ExaWheelFit",
+      "boundsMetres": [
+        [
+          -0.25999999046325684,
+          -1.0870000123977661,
+          -0.40700003504753113
+        ],
+        [
+          0.25999999046325684,
+          1.0870001316070557,
+          0.6270000338554382
+        ]
+      ],
+      "vertices": 1920,
+      "triangles": 3768,
+      "materials": [
+        "TS_Wheel",
+        "TS_RunningSteel"
+      ],
+      "purpose": "track study only"
+    },
+    {
+      "name": "SM_ExaTrackStraight",
+      "boundsMetres": [
+        [
+          0,
+          -0.8050000071525574,
+          -1.2050000429153442
+        ],
+        [
+          11.199999809265137,
+          0.8050000071525574,
+          0.10499999672174454
+        ]
+      ],
+      "vertices": 17936,
+      "triangles": 35696,
+      "materials": [
+        "TS_Paint",
+        "TS_RunningSteel",
+        "TS_Fastener"
+      ],
+      "purpose": "track study only"
+    },
+    {
+      "name": "SM_ExaTrackBanked",
+      "boundsMetres": [
+        [
+          0,
+          -0.8050000071525574,
+          -1.1399999856948853
+        ],
+        [
+          21.776063919067383,
+          6.083373069763184,
+          0.7393155097961426
+        ]
+      ],
+      "vertices": 34080,
+      "triangles": 67968,
+      "materials": [
+        "TS_Paint",
+        "TS_RunningSteel"
+      ],
+      "purpose": "track study only"
+    },
+    {
+      "name": "SM_ExaTrackInverted",
+      "boundsMetres": [
+        [
+          0,
+          -0.8050000071525574,
+          -1.1399999856948853
+        ],
+        [
+          33.599998474121094,
+          1.1399999856948853,
+          1.1399999856948853
+        ]
+      ],
+      "vertices": 50976,
+      "triangles": 101664,
+      "materials": [
+        "TS_Paint",
+        "TS_RunningSteel"
+      ],
+      "purpose": "track study only"
+    }
+  ],
+  "studies": [
+    {
+      "kind": "straight",
+      "lengthMetres": 11.2,
+      "offsetMetres": [
+        -5.6,
+        -10,
+        2.8
+      ],
+      "asset": "SM_ExaTrackStraight"
+    },
+    {
+      "kind": "banked",
+      "lengthMetres": 22.4,
+      "offsetMetres": [
+        -11.2,
+        -2,
+        3.2
+      ],
+      "asset": "SM_ExaTrackBanked"
+    },
+    {
+      "kind": "inverted",
+      "lengthMetres": 33.6,
+      "offsetMetres": [
+        -16.8,
+        10,
+        3.6
+      ],
+      "asset": "SM_ExaTrackInverted"
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "coaster/coaster.hpp"
+#include "CoasterCamera.h"
 #include <memory>
 #include "VibeCoasterWorld.generated.h"
 
@@ -31,7 +32,6 @@ public:
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Supports;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> LSMHardware;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> BrakeHardware;
-    UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> LeadCars;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Cars;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationSteel;
     UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> StationConcrete;
@@ -72,6 +72,11 @@ public:
     void TogglePause();
     void SetSeat(int32 InSeat);
     void ToggleOverview();
+    void ToggleView(ECoasterView View);
+    void ResetInspectionCamera();
+    void CameraInput(FVector2D Mouse, bool Panning, double Wheel, FVector Move, bool Fast, double Seconds);
+    ECoasterView View() const;
+    FString CameraControls() const;
     FString Status() const;
     FCoasterLoadingObservation Loading() const;
     FString Telemetry() const;

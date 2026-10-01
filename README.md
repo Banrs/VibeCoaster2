@@ -2,9 +2,13 @@
 
 C++20 hybrid FVD/spline coaster authoring and Unreal 5.8 viewer. **Riftwake default.3** is the current source and playable baseline on codex/legacy-authoring. The rejected default.4 package and generated history were moved beside the legacy checkpoints at D:/Coding/Codex/vibecoasterlegacy.
 
+The current local state is still buggy. For online diagnosis, start with [the portable saves, review evidence and issue guide](docs/ONLINE_DIAGNOSIS.md), then read the open requirements in HANDOFF.md. Passing numerical checks do not mean the design issues are resolved.
+
 The rollback followed feedback about constant roll, late LSM placement in section 1, and the clifftop. The next design task is specified in [HANDOFF.md](HANDOFF.md); use the [code map](docs/CODE_MAP.md) to find the relevant implementation paths.
 
-Start with [HANDOFF.md](HANDOFF.md) for status and evidence. Double-click Play VibeCoaster2.lnk in the repository or VibeCoaster2 on the desktop to launch the verified default.3 standalone and automatically load the accepted ride from UserData-Riftwake-V3; press Space to ride. Both shortcuts and dist/current.json select the same default.3 package.
+Start with [HANDOFF.md](HANDOFF.md) for status and evidence. Play VibeCoaster2.lnk launches the current Unreal development game and loads the default.3 baseline from the separate UserData-GeometryReview profile; press Space to ride. The desktop VibeCoaster2 shortcut uses the same review build. dist/current.json retains the frozen standalone package.
+
+Development source now includes [third-person and free-view controls](docs/camera-controls.md). Rejected train art has been removed; the new [editable train proposal](native/art/TRAIN_DESIGN.md) follows the retained [1.40 m gauge and maximum 2.40 m width](native/art/DIMENSIONS.md). Development still uses car-position markers. The updated Play shortcuts use the camera changes; the retained standalone package does not.
 
 Current ride-reference notes are in [docs/references](docs/references). Earlier checkpoint images and verification reports were moved beside the legacy checkpoints; their old acceptance wording does not override [HANDOFF.md](HANDOFF.md).
 

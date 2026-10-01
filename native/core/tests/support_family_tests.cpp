@@ -15,8 +15,9 @@ Design circle(double height,double bank=0){
 }
 void validate(const Design& d){
     auto sweep=buildClearanceSweep(d.track,d.request.train);
+    const auto regions=planSupportRegions(d.track,d.request.terrain);
+    check(validateSupportLayout(d.supports,d.request.terrain).valid(),"Family members share a connected terrain-anchored graph");
     for(const auto& s:d.supports){
-        check(validateSupportMembers(s,d.request.terrain).valid(),"Family member shape, terrain and endpoint connectivity");
         check(supportCollision(s,sweep)<0,"Every family clears the actual continuous train/hardware sweep");
         auto q=d.track.sample(s.trackDistance);
         check(norm(s.attachment-(q.position-q.up*(spineDepth+spineRadius)))<1e-8,"Exact canonical spine attachment");
@@ -24,7 +25,13 @@ void validate(const Design& d){
         bool bounded=standoff>=.18-1e-8&&standoff<=2+1e-8&&norm(delta+q.up*standoff)<1e-8;
         for(double offset:{2.,6.,10.}){const auto outreach=delta+q.up*offset;
             bounded|=norm(outreach)<=48+1e-8&&(std::abs(outreach.z)<1e-8||(std::abs(dot(outreach,q.up))+std::abs(dot(outreach,q.tangent))<1e-8));}
-        check(bounded,"Cap has a bounded stand-off with either bank-normal or level cliff outreach");
+        // A shared element header is not an ordinary bent cap. Its stand-off
+        // is selected against the complete sweep; the graph and collision
+        // checks above apply to both families without an exemption.
+        const bool elementRegion=std::any_of(regions.begin(),regions.end(),[&](const SupportRegion& r){
+            return s.trackDistance>=r.begin-1e-8&&s.trackDistance<=r.end+1e-8;
+        });
+        check(elementRegion||bounded,"Ordinary bent cap retains bounded bank-normal or level cliff outreach");
         for(const auto& m:s.members){auto mesh=supportMemberMesh(m);check(mesh.positions.size()==66&&mesh.indices.size()==192,"Every compact member uses the canonical closed solid mesh");}
     }
 }

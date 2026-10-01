@@ -11,6 +11,7 @@ static Vec3 der(const Span& sp,double u){Vec3 v=sp.c.back()*double(sp.c.size()-1
 static double arc(const Span& sp,double u){return detail::cachedArcLength(sp,u);}
 static double binomial(int n,int k){double result=1;for(int i=1;i<=k;++i)result=result*(n-i+1)/i;return result;}
 void Track::rebuild(){
+    (void)trackSection(profile);
     if(knots.size()<4||knots.size()>200000)throw std::runtime_error("Invalid knot count");
     for(const auto& k:knots)if(!finite(k.position)||!finite(k.tangent)||!finite(k.curvature)||!finite(k.up)||int(k.element)<0||int(k.element)>7||!std::isfinite(k.bank)||std::abs(k.bank)>64*pi||norm(k.position)>1000000||std::abs(norm(k.tangent)-1)>1e-5||std::abs(norm(k.up)-1)>1e-5||std::abs(dot(k.tangent,k.up))>1e-5||std::abs(dot(k.tangent,k.curvature))>1e-5||norm(k.curvature)>2)throw std::runtime_error("Invalid canonical frame or curvature");
     const size_t count=knots.size(),unique=count-(closed?1:0);
@@ -209,15 +210,19 @@ double boxLowerBound(const StationBox& box,const Terrain& terrain,double motionP
     }
     return bound-1e-9;
 }
-double lowerBound(const TrackSample& q,const Terrain& terrain,double trainTop,double motionPadding){
-    const double middle=(trainEnvelopeBottom+trainTop)*.5;
-    const StationBox box{q.position+q.up*middle,q.tangent,q.right,q.up,{trainHalfLength,patronHalfWidth,(trainTop-trainEnvelopeBottom)*.5},StationRole::Post};
+double lowerBound(const TrackSample& q,const Terrain& terrain,double trainTop,double motionPadding,double bottom){
+    const double envelopeBottom=bottom;
+    const double middle=(envelopeBottom+trainTop)*.5;
+    const StationBox box{q.position+q.up*middle,q.tangent,q.right,q.up,{trainHalfLength,patronHalfWidth,(trainTop-envelopeBottom)*.5},StationRole::Post};
     return boxLowerBound(box,terrain,motionPadding);
+}
+double lowerBound(const TrackSample& q,const Terrain& terrain,double trainTop,double motionPadding){
+    return lowerBound(q,terrain,trainTop,motionPadding,trainEnvelopeBottom);
 }
 }
 void ClearanceSweep::prepareGround(const Terrain& terrain,Cancel cancel){
     std::vector<double> values;values.reserve(samples.size());
-    for(const auto& cell:samples){if(cancel&&cancel())throw std::runtime_error("CANCELLED");values.push_back(terrain_validation::lowerBound(cell.sample,terrain,top,pad));}
+    for(const auto& cell:samples){if(cancel&&cancel())throw std::runtime_error("CANCELLED");values.push_back(terrain_validation::lowerBound(cell.sample,terrain,top,pad,trainBottom()));}
     groundLowerBounds=std::move(values);sampledTerrain=terrain;
 }
 double minimumSweptGroundClearance(const Track& track,const Terrain& terrain,const TrainConfig& train,Cancel cancel){
@@ -229,7 +234,7 @@ double minimumSweptGroundClearance(const ClearanceSweep& sweep,const Terrain& te
     double minimum=INFINITY;
     for(const auto& cell:sweep.frames()){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
-        minimum=std::min(minimum,terrain_validation::lowerBound(cell.sample,terrain,sweep.trainTop(),sweep.padding()));
+        minimum=std::min(minimum,terrain_validation::lowerBound(cell.sample,terrain,sweep.trainTop(),sweep.padding(),sweep.trainBottom()));
     }
     return minimum;
 }
@@ -279,7 +284,7 @@ static ValidationReport selfClearanceImpl(const Track& t,const ClearanceSweep& s
     // A full rider-body bounding radius plus neighbouring hardware, both
     // chord deviations and the requested free clearance. The sweep enforces
     // the 4.2 m body-radius domain; support contacts use their separate model.
-    const double branchClearance=sweep.bodyRadius()+.9+2*(.2*2.1*2.1/8)+minClearance;
+    const double branchClearance=sweep.bodyRadius()+trackSection(t.profile).hardwareRadius+2*(.2*2.1*2.1/8)+minClearance;
     p.reserve(count+1);ds.reserve(count+1);size_t chordHint=t.spans.size();
     for(int i=0;i<=count;++i){if((i&255)==0&&cancel&&cancel()){r.fail("CANCELLED","Geometry validation cancelled");return r;}double s=t.length*i/count;auto q=sampleSequential(s,chordHint);p.push_back(q.position);ds.push_back(s);
     }
@@ -318,6 +323,7 @@ static ValidationReport validateGeometryImpl(const Track& t,const Terrain& terra
     }
     std::optional<ClearanceSweep> ownedSweep;
     const ClearanceSweep* sweep=prepared;
+    if(sweep&&sweep->trackProfile()!=t.profile){r.fail("SWEEP_PROFILE","Prepared clearance uses a different track profile");return r;}
     if(!sweep){
         try{ownedSweep.emplace(buildClearanceSweep(t,train,cancel));sweep=&*ownedSweep;}
         catch(const std::exception& e){r.fail((std::string(e.what())=="CANCELLED"||(cancel&&cancel()))?"CANCELLED":"SWEEP_DOMAIN",e.what());return r;}
@@ -342,26 +348,30 @@ static ValidationReport validateGeometryImpl(const Track& t,const Terrain& terra
     const auto* groundBounds=sweep->groundBounds(terrain);
     for(const auto& f:sweep->frames()){
         if((terrainFrame++&127)==0&&cancel&&cancel()){r.fail("CANCELLED","Swept terrain validation cancelled");return r;}
-        double lower=groundBounds?(*groundBounds)[terrainFrame-1]:terrain_validation::lowerBound(f.sample,terrain,sweep->trainTop(),sweep->padding());
+        double lower=groundBounds?(*groundBounds)[terrainFrame-1]:terrain_validation::lowerBound(f.sample,terrain,sweep->trainTop(),sweep->padding(),sweep->trainBottom());
         if(!std::isfinite(lower)||lower<limits.minClearance){
             r.fail("TERRAIN_SWEEP_CLEARANCE","Cannot certify configured terrain clearance for the complete swept train body",f.distance,lower,limits.minClearance);
             if(r.errors.size()>=10)return r;
         }
     }
+    auto supportReport=validateSupportLayout(supports,terrain,cancel);
+    if(!supportReport.valid()){r.errors.insert(r.errors.end(),supportReport.errors.begin(),supportReport.errors.end());return r;}
     size_t totalMembers=0;
     for(const auto& support:supports){
         if(cancel&&cancel()){r.fail("CANCELLED","Support validation cancelled");return r;}
-        if(!finite(support.base)||!finite(support.top)||norm(support.base)>1000000||norm(support.top)>1000000||norm(support.top-support.base)>1000||support.top.z<=support.base.z||std::abs(support.base.z-terrain.height(support.base.x,support.base.y))>.1){r.fail("SUPPORT_CONFIG","Support endpoints are invalid or its base is not on the terrain");continue;}
+        // A wall bracket's compatibility datum is its validated embedded socket.
+        // Member validation above proves the real bearing/rock connection.
+        const bool rockDatum=std::any_of(support.members.begin(),support.members.end(),[&](const SupportMember& m){return m.kind==SupportMemberKind::RockAnchor&&norm(m.base-support.base)<1e-5;});
+        if(!finite(support.base)||!finite(support.top)||norm(support.base)>1000000||norm(support.top)>1000000||norm(support.top-support.base)>1000||
+           (!rockDatum&&(support.top.z<=support.base.z||std::abs(support.base.z-terrain.height(support.base.x,support.base.y))>.1))){r.fail("SUPPORT_CONFIG","Support endpoints are invalid or its base has no matching terrain datum");continue;}
         if(!support.hasAttachment)r.fail("SUPPORT_ATTACHMENT","Support lacks its canonical spine attachment");
         if(support.hasAttachment){
             if(!finite(support.attachment)||!std::isfinite(support.trackDistance)||support.trackDistance<0||support.trackDistance>=t.length||norm(support.attachment-support.top)>100){r.fail("SUPPORT_CONFIG","Invalid support attachment");continue;}
             auto q=t.sample(support.trackDistance);
-            if(norm(support.attachment-(q.position-q.up*(spineDepth+spineRadius)))>1e-4){r.fail("SUPPORT_ATTACHMENT","Support arm does not meet its canonical spine contact",support.trackDistance);continue;}
+            if(norm(support.attachment-(q.position+q.up*trackSection(t.profile).bottom()))>1e-4){r.fail("SUPPORT_ATTACHMENT","Support arm does not meet its canonical spine contact",support.trackDistance);continue;}
         }
         if(support.members.size()>maxTotalSupportMembers-totalMembers){r.fail("SUPPORT_MEMBER_BUDGET","Total canonical support member budget exceeded");return r;}
         totalMembers+=support.members.size();
-        auto memberReport=validateSupportMembers(support,terrain,cancel);
-        if(!memberReport.valid()){r.errors.insert(r.errors.end(),memberReport.errors.begin(),memberReport.errors.end());return r;}
         int hit=supportCollision(support,*sweep,cancel);
         if(hit==-2){r.fail("CANCELLED","Member collision validation cancelled");return r;}
         if(hit>=0&&r.errors.size()<10)r.fail("SUPPORT_CLEARANCE","Cannot certify support clearance from train or track hardware",sweep->frames()[hit].distance);

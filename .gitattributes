@@ -6,3 +6,7 @@
 *.umap binary
 *.fbx binary
 *.blend binary
+*.gz binary
+*.glb binary
+# Preserve exact evidence bytes for manifest hashes across platforms.
+docs/diagnostics/current/** -text whitespace=cr-at-eol

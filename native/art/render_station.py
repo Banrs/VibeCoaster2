@@ -145,17 +145,6 @@ for y, z, radius in ((-.65, 0, .085), (.65, 0, .085), (0, -.55, .16)):
 for x in range(math.floor(station_min/3)*3, math.ceil(station_max/3)*3+1, 3):
     instance("SM_TrackTieWeb", (x, 0, -.19), role="track")
 
-def row_x(box):
-    return box["center"][0]
-
-
-rows = sorted((b for b in boxes if b["role"] == "HoldingLane"), key=row_x)
-for i, row in enumerate(rows):
-    name = "SM_LeadCar" if i == len(rows)-1 else "SM_TrainCar"
-    instance(name, (row["center"][0], 0, 0), role="train")
-assert all(abs(rows[i]["center"][0]-(30+i*context["spacing"])) < 1e-7
-           for i in range(context["cars"]))
-
 stamp = bpy.data.curves.new("Blender preview stamp", "FONT")
 stamp.body = "BLENDER PREVIEW / FUNCTIONAL STATION"
 stamp.size = 1.18

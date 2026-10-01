@@ -1,3 +1,15 @@
 exports/*.png
 exports/*.blend1
 exports/*.blend2
+exports/track-study/*.blend1
+exports/track-study/*.blend2
+exports/support-system/*.blend1
+exports/support-system/*.blend2
+__pycache__/
+
+# Local generated review scenes and renders; portable diagnosis is in docs/diagnostics/current.
+exports/support-system/
+exports/track-study/*.blend
+exports/**/*.png
+*.blend1
+*.blend2

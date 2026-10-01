@@ -117,7 +117,6 @@ struct FCoasterRuntime
     coaster::ComparisonHistory Comparisons;
     TArray<FString> ComparisonLines;
     TArray<FTransform> CarTransforms;
-    TArray<FTransform> PassengerCarTransforms;
     TArray<VibeMesh::FTrimFin> TrimFins;
     bool TrainPoseDirty = true, CameraPoseDirty = true;
     double PresentedDistance = -1;
@@ -126,7 +125,9 @@ struct FCoasterRuntime
     double RequestStarted = 0, CommitStarted = 0;
     size_t TraceIndex = 0;
     int32 Seat = 0;
-    bool Paused = true, Overview = false;
+    bool Paused = true;
+    FCoasterCameraRig CameraRig;
+    FIntPoint CameraViewport = FIntPoint::ZeroValue;
     FBox Bounds{ForceInit};
     FString Message = TEXT("Configure a seed, then Generate in the selected landscape.");
 };
@@ -140,7 +141,6 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     Supports = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Supports"));
     LSMHardware = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LSMHardware"));
     BrakeHardware = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("BrakeHardware"));
-    LeadCars = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("LeadCar"));
     Cars = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Train"));
     StationSteel = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationSteel"));
     StationConcrete = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationConcrete"));
@@ -160,8 +160,6 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     StationStairs = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationStairs"));
     StationUnderpasses = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationUnderpasses"));
     StationQueueRails = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StationQueueRails"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> LeadCar(TEXT("/Game/Art/V3/SM_LeadCar.SM_LeadCar"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> TrainCar(TEXT("/Game/Art/V3/SM_TrainCar.SM_TrainCar"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> TrackTie(TEXT("/Game/Art/V3/SM_TrackTieWeb.SM_TrackTieWeb"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Platform(TEXT("/Game/Art/V3/SM_StationPlatformPanel.SM_StationPlatformPanel"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformEnd(TEXT("/Game/Art/V3/SM_StationPlatformEndPanel.SM_StationPlatformEndPanel"));
@@ -183,7 +181,9 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> LSMStator(TEXT("/Game/Art/V3/SM_LSMStator.SM_LSMStator"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> BrakeFin(TEXT("/Game/Art/V3/SM_BrakeFin.SM_BrakeFin"));
-    Ties->SetStaticMesh(TrackTie.Object); Supports->SetStaticMesh(Cylinder.Object); LeadCars->SetStaticMesh(LeadCar.Object); Cars->SetStaticMesh(TrainCar.Object);
+    Ties->SetStaticMesh(TrackTie.Object); Supports->SetStaticMesh(Cylinder.Object);
+    // Small position markers for layout inspection while train art is absent.
+    Cars->SetStaticMesh(Cube.Object);
     PlatformPanels->SetStaticMesh(Platform.Object); PlatformEnds->SetStaticMesh(PlatformEnd.Object);
     RoofPanels->SetStaticMesh(Roof.Object); StationPosts->SetStaticMesh(Post.Object);
     StationQueueDecks->SetStaticMesh(QueueDeck.Object);
@@ -200,7 +200,7 @@ AVibeCoasterAssembly::AVibeCoasterAssembly()
     StationQueueRails->SetStaticMesh(QueueRail.Object);
     StationSteel->SetStaticMesh(Cube.Object); StationConcrete->SetStaticMesh(Cube.Object);
     LSMHardware->SetStaticMesh(LSMStator.Object); BrakeHardware->SetStaticMesh(BrakeFin.Object);
-    for (auto* Component : {Ties.Get(), Supports.Get(), LSMHardware.Get(), BrakeHardware.Get(), LeadCars.Get(), Cars.Get(), StationSteel.Get(), StationConcrete.Get(), PlatformPanels.Get(), PlatformEnds.Get(), RoofPanels.Get(), StationPosts.Get(), StationQueueDecks.Get(), StationRouteRoofs.Get(), StationMergeDecks.Get(), StationHoldingLanes.Get(), StationBoardingGates.Get(), StationDispatchCabins.Get(), StationUnloadDecks.Get(), StationExitWalkways.Get(), StationLifts.Get(), StationStairs.Get(), StationUnderpasses.Get(), StationQueueRails.Get()})
+    for (auto* Component : {Ties.Get(), Supports.Get(), LSMHardware.Get(), BrakeHardware.Get(), Cars.Get(), StationSteel.Get(), StationConcrete.Get(), PlatformPanels.Get(), PlatformEnds.Get(), RoofPanels.Get(), StationPosts.Get(), StationQueueDecks.Get(), StationRouteRoofs.Get(), StationMergeDecks.Get(), StationHoldingLanes.Get(), StationBoardingGates.Get(), StationDispatchCabins.Get(), StationUnloadDecks.Get(), StationExitWalkways.Get(), StationLifts.Get(), StationStairs.Get(), StationUnderpasses.Get(), StationQueueRails.Get()})
     {
         Component->SetupAttachment(RootComponent);
         Component->SetMobility(EComponentMobility::Movable);
@@ -411,7 +411,7 @@ void AVibeCoasterWorld::PollJob()
             Runtime->NextChunk = Runtime->NextTie = Runtime->NextSupport = Runtime->NextStation = Runtime->NextLSM = Runtime->NextBrake = 0;
             Staging = GetWorld()->SpawnActor<AVibeCoasterAssembly>();
             Staging->SetActorHiddenInGame(true);
-            if (!Staging->Ties->GetStaticMesh() || !Staging->LeadCars->GetStaticMesh() || !Staging->Cars->GetStaticMesh() ||
+            if (!Staging->Ties->GetStaticMesh() || !Staging->Cars->GetStaticMesh() ||
                 !Staging->LSMHardware->GetStaticMesh() || !Staging->BrakeHardware->GetStaticMesh() ||
                 !Staging->PlatformPanels->GetStaticMesh() || !Staging->PlatformEnds->GetStaticMesh() ||
                 !Staging->RoofPanels->GetStaticMesh() || !Staging->StationPosts->GetStaticMesh() ||
@@ -436,10 +436,9 @@ void AVibeCoasterWorld::PollJob()
             Staging->Supports->PreAllocateInstancesMemory(Runtime->Prepared->Supports.Num());
             Staging->LSMHardware->PreAllocateInstancesMemory(Runtime->Prepared->LSMHardware.Num());
             Staging->BrakeHardware->PreAllocateInstancesMemory(Runtime->Prepared->BrakeHardware.Num());
-            Staging->LeadCars->PreAllocateInstancesMemory(1);
-            Staging->Cars->PreAllocateInstancesMemory(FMath::Max(0, Runtime->Prepared->Design->request.train.cars - 1));
-            // Authored car/tie/station material slots remain intact; canonical
-            // support solids and fallback station boxes use the existing palette.
+            Staging->Cars->PreAllocateInstancesMemory(Runtime->Prepared->Design->request.train.cars);
+            Staging->Cars->SetMaterial(0, RailMaterial);
+            // Canonical supports and station boxes use the existing palette.
             Staging->Supports->SetMaterial(0, StructureMaterial);
             Staging->StationSteel->SetMaterial(0, StructureMaterial); Staging->StationConcrete->SetMaterial(0, FootingMaterial);
             Runtime->Message = TEXT("Validated. Preparing hidden render chunks...");
@@ -536,8 +535,7 @@ void AVibeCoasterWorld::CommitChunks()
     Runtime->ComparisonLines.Reset();
     for (const auto& Line : coaster::comparisonLines(*Runtime->Design, &Runtime->Comparisons.previous))
         Runtime->ComparisonLines.Add(FString(UTF8_TO_TCHAR(Line.c_str())));
-    Active->LeadCars->AddInstance(FTransform::Identity);
-    for (int32 I = 1; I < Runtime->Design->request.train.cars; ++I) Active->Cars->AddInstance(FTransform::Identity);
+    for (int32 I = 0; I < Runtime->Design->request.train.cars; ++I) Active->Cars->AddInstance(FTransform::Identity);
     Active->SetActorHiddenInGame(false);
     const double ReadySeconds = FPlatformTime::Seconds();
     UE_LOG(LogCoasterGeneration, Display, TEXT("CoasterTiming request=%llu stage=scene-commit elapsedSeconds=%.6f totalSeconds=%.6f"),
@@ -547,7 +545,7 @@ void AVibeCoasterWorld::CommitChunks()
     Runtime->Message = TEXT("Accepted ride ready. Space to ride.");
     Runtime->Message += FString::Printf(TEXT("\n%.0f s to final braking | %.0f s to a complete stop"),
         coaster::movingRideSeconds(*Runtime->Design), Runtime->Design->simulation.metrics.duration);
-    Runtime->Prepared.Reset(); Runtime->Overview = false; Restart(); Runtime->Paused = true;
+    Runtime->Prepared.Reset(); Runtime->CameraRig = {}; Restart(); Runtime->Paused = true;
 }
 void AVibeCoasterWorld::Tick(float DeltaSeconds)
 {
@@ -564,9 +562,42 @@ void AVibeCoasterWorld::TogglePause() { if (HasRide()) Runtime->Paused = !Runtim
 void AVibeCoasterWorld::SetSeat(int32 InSeat)
 {
     const int32 NewSeat = FMath::Clamp(InSeat, 0, 2);
-    Runtime->CameraPoseDirty |= NewSeat != Runtime->Seat; Runtime->Seat = NewSeat;
+    Runtime->CameraPoseDirty |= NewSeat != Runtime->Seat || View() != ECoasterView::Rider;
+    Runtime->Seat = NewSeat; Runtime->CameraRig.View = ECoasterView::Rider;
 }
-void AVibeCoasterWorld::ToggleOverview() { Runtime->Overview = !Runtime->Overview; Runtime->CameraPoseDirty = true; }
+void AVibeCoasterWorld::ToggleOverview() { ToggleView(ECoasterView::Overview); }
+ECoasterView AVibeCoasterWorld::View() const { return Runtime->CameraRig.View; }
+void AVibeCoasterWorld::ToggleView(ECoasterView Next)
+{
+    if (!HasRide() || !Camera) return;
+    UpdateRide(0);
+    const auto P = Runtime->Design->track.sample(Runtime->Distance);
+    Runtime->CameraRig.SetView(View() == Next ? ECoasterView::Rider : Next,
+        Camera->GetActorTransform(), VibeMesh::Rotation(P).Rotator().Yaw);
+    Runtime->CameraPoseDirty = true;
+}
+void AVibeCoasterWorld::ResetInspectionCamera()
+{
+    if (!HasRide() || View() == ECoasterView::Overview) return;
+    const auto P = Runtime->Design->track.sample(Runtime->Distance);
+    Runtime->CameraRig.Reset(VibeMesh::Rotation(P).Rotator().Yaw);
+    Runtime->CameraRig.FreePosition = VibeMesh::Position(P.position) + FVector(0, 0, 150) - Runtime->CameraRig.Look.Vector() * Runtime->CameraRig.OrbitDistance;
+    Runtime->CameraPoseDirty = true;
+}
+void AVibeCoasterWorld::CameraInput(FVector2D Mouse, bool Panning, double Wheel, FVector Move, bool Fast, double Seconds)
+{
+    if (!HasRide() || View() == ECoasterView::Overview) return;
+    if (Mouse.IsNearlyZero() && Wheel == 0 && Move.IsNearlyZero()) return;
+    Runtime->CameraRig.Input(Mouse, Panning, Wheel, Move, Fast, Seconds);
+    Runtime->CameraPoseDirty = true;
+}
+FString AVibeCoasterWorld::CameraControls() const
+{
+    if (View() == ECoasterView::ThirdPerson) return TEXT("RMB drag orbit | MMB drag pan | Wheel zoom | H recenter");
+    if (View() == ECoasterView::Free) return TEXT("RMB drag look | WASD move | Q/E down/up | Wheel zoom | Shift faster | H train");
+    if (View() == ECoasterView::Rider) return FString::Printf(TEXT("Wheel FOV (%.0f deg) | H reset | 1/2/3 seats | V third person | F free view | M overview"), Runtime->CameraRig.RiderFieldOfView);
+    return TEXT("1/2/3 front/middle/rear POV | V third person | F free view | M overview");
+}
 void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
 {
     if (!Runtime->Design || !Active || !Camera) return;
@@ -596,33 +627,30 @@ void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
     {
         const double Half = (D.request.train.cars - 1) * D.request.train.spacing * .5;
         Runtime->CarTransforms.Reset(D.request.train.cars);
-        Runtime->PassengerCarTransforms.Reset(FMath::Max(0, D.request.train.cars - 1));
         for (int32 Car = 0; Car < D.request.train.cars; ++Car)
         {
             const auto P = D.track.sample(Runtime->Distance + Half - Car * D.request.train.spacing);
             // Car 0 is the physical front; passengers follow it in the same canonical train spacing.
-            const FTransform Transform(VibeMesh::Rotation(P), VibeMesh::Position(P.position), FVector::OneVector);
+            const FTransform Transform(VibeMesh::Rotation(P), VibeMesh::Position(P.position + P.up * .35), FVector(1.2, .8, .2));
             Runtime->CarTransforms.Add(Transform);
-            if (Car > 0) Runtime->PassengerCarTransforms.Add(Transform);
         }
         if (Runtime->CarTransforms.Num() > 0)
         {
-            // Update the lead and passenger components from the same full pose array.
-            Active->LeadCars->UpdateInstanceTransform(0, Runtime->CarTransforms[0], false, false, true);
-            if (Runtime->PassengerCarTransforms.Num() > 0)
-                Active->Cars->BatchUpdateInstancesTransforms(0, Runtime->PassengerCarTransforms, false, false, true);
+            Active->Cars->BatchUpdateInstancesTransforms(0, Runtime->CarTransforms, false, false, true);
         }
         Runtime->TrainPoseDirty = false;
     }
-    if (Runtime->CameraPoseDirty || Moved || Runtime->Overview)
+    FIntPoint Viewport = FIntPoint::ZeroValue;
+    if (IsOverview()) if (auto* PC = GetWorld()->GetFirstPlayerController()) PC->GetViewportSize(Viewport.X, Viewport.Y);
+    const bool FollowsTrain = View() == ECoasterView::Rider || View() == ECoasterView::ThirdPerson;
+    if (Runtime->CameraPoseDirty || (Moved && FollowsTrain) || (IsOverview() && Viewport != Runtime->CameraViewport))
     {
-        if (Runtime->Overview)
+        Camera->GetCameraComponent()->SetFieldOfView(View() == ECoasterView::Rider ? Runtime->CameraRig.RiderFieldOfView : 82.);
+        if (IsOverview())
         {
             const FVector Centre = Runtime->Bounds.GetCenter(); const double Radius = Runtime->Bounds.GetExtent().Size();
-            int32 Width = 0, Height = 0;
-            if (auto* PC = GetWorld()->GetFirstPlayerController()) PC->GetViewportSize(Width, Height);
             const auto* Lens = Camera->GetCameraComponent();
-            const double Aspect = Width > 0 && Height > 0 ? double(Width) / Height : Lens->AspectRatio;
+            const double Aspect = Viewport.X > 0 && Viewport.Y > 0 ? double(Viewport.X) / Viewport.Y : Lens->AspectRatio;
             const double HalfHorizontal = FMath::DegreesToRadians(Lens->FieldOfView * .5);
             const double HalfVertical = std::atan(std::tan(HalfHorizontal) / Aspect);
             // Fit the bounding sphere in both viewport dimensions.
@@ -630,12 +658,18 @@ void AVibeCoasterWorld::UpdateRide(double DeltaSeconds)
             const FVector Location = Centre + FVector(-.8, .6, .9).GetSafeNormal() * Distance;
             Camera->SetActorLocationAndRotation(Location, (Centre - Location).Rotation());
         }
-        else
+        else if (View() == ECoasterView::Rider)
         {
             const double Offset = coaster::seatDistanceOffset(D.request.train, Runtime->Seat);
             const auto P = D.track.sample(Runtime->Distance + Offset);
             Camera->SetActorLocationAndRotation(VibeMesh::Position(P.position + P.up * D.request.train.seatHeight), VibeMesh::Rotation(P));
         }
+        else
+        {
+            const auto P = D.track.sample(Runtime->Distance);
+            Camera->SetActorTransform(Runtime->CameraRig.Pose(VibeMesh::Position(P.position) + FVector(0, 0, 150)));
+        }
+        Runtime->CameraViewport = Viewport;
         Runtime->CameraPoseDirty = false;
     }
     Runtime->PresentedDistance = Runtime->Distance;
@@ -706,7 +740,7 @@ FString AVibeCoasterWorld::Telemetry() const
 bool AVibeCoasterWorld::IsBusy() const { return Runtime->Running || Runtime->Queued.IsSet() || Runtime->Prepared.IsValid(); }
 bool AVibeCoasterWorld::HasRide() const { return bool(Runtime->Design); }
 bool AVibeCoasterWorld::IsPaused() const { return Runtime->Paused; }
-bool AVibeCoasterWorld::IsOverview() const { return Runtime->Overview; }
+bool AVibeCoasterWorld::IsOverview() const { return View() == ECoasterView::Overview; }
 int32 AVibeCoasterWorld::Seat() const { return Runtime->Seat; }
 const coaster::Design* AVibeCoasterWorld::ActiveDesign() const { return Runtime->Design.get(); }
 

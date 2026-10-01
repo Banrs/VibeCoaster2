@@ -5,10 +5,15 @@ namespace coaster {
 // Prototype track hardware contract: SI, rail-midpoint datum, X forward/Y right/Z up.
 // Two closed rectangular diagonal prisms, repeated at the existing 3 m tie stations.
 // Validation conservatively sweeps both prisms continuously along the canonical track.
-inline std::array<StationBox,2> trackWebsLocal() {
+inline std::array<StationBox,2> trackWebsLocal(TrackProfile profile=TrackProfile::Legacy) {
     std::array<StationBox,2> out{};
     for(int i=0;i<2;++i){
         const double side=i==0?-1.:1.;
+        if(profile==TrackProfile::Exa){
+            const double bottom=-.8+std::sqrt(.34*.34-.18*.18)-.012,top=-.065+.008;
+            out[i]={{0,side*.18,(bottom+top)*.5},{1,0,0},{0,1,0},{0,0,1},{.34,.012,(top-bottom)*.5},StationRole::Post};
+            continue;
+        }
         const Vec3 a{0,side*.09,-.43},b{0,side*.65,-.19};
         const Vec3 forward{1,0,0},right=unit(b-a),up=cross(forward,right);
         out[i]={(a+b)*.5,forward,right,up,{.06,norm(b-a)*.5,.04},StationRole::Post};
@@ -18,13 +23,27 @@ inline std::array<StationBox,2> trackWebsLocal() {
 // Rail saddles sit on the upper web sockets and meet the underside of each
 // running rail at its centreline. Keep them as separate solids in clearance
 // checks so the wider contact face cannot disappear into the diagonal web.
-inline std::array<StationBox,2> trackTieSaddlesLocal() {
+inline std::array<StationBox,2> trackTieSaddlesLocal(TrackProfile profile=TrackProfile::Legacy) {
     std::array<StationBox,2> out{};
     for(int i=0;i<2;++i){
         const double side=i==0?-1.:1.;
+        if(profile==TrackProfile::Exa){
+            out[i]={{0,side*.605,0},{1,0,0},{0,1,0},{0,0,1},{.065,.015,.065},StationRole::Post};
+            continue;
+        }
         out[i]={{0,side*.605,-.1415},{1,0,0},{0,1,0},{0,0,1},{.052,.060,.0565},StationRole::Post};
     }
     return out;
+}
+inline std::array<StationBox,8> trackHardwareLocal(TrackProfile profile=TrackProfile::Legacy){
+    const auto p=trackSection(profile);const auto webs=trackWebsLocal(profile),saddles=trackTieSaddlesLocal(profile);
+    return {{
+        {{0,0,-p.spineDepth},{1,0,0},{0,1,0},{0,0,1},{p.spineRadius,p.spineRadius,p.spineRadius},StationRole::Post},
+        {{0,-p.gauge*.5,0},{1,0,0},{0,1,0},{0,0,1},{p.railRadius,p.railRadius,p.railRadius},StationRole::Post},
+        {{0,p.gauge*.5,0},{1,0,0},{0,1,0},{0,0,1},{p.railRadius,p.railRadius,p.railRadius},StationRole::Post},
+        {{0,0,p.tieHeight},{1,0,0},{0,1,0},{0,0,1},{profile==TrackProfile::Legacy?.07:p.tieRadius,p.tieHalfWidth,p.tieRadius},StationRole::Post},
+        webs[0],webs[1],saddles[0],saddles[1]
+    }};
 }
 inline StationBox trackWebWorld(const StationBox& local,const TrackSample& q) {
     const auto v=[&](Vec3 x){return q.tangent*x.x+q.right*x.y+q.up*x.z;};

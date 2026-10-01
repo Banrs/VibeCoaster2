@@ -1,0 +1,77 @@
+{
+  "status": "Native and runtime verified; visual proposal awaiting user feedback",
+  "canonicalKnotsUnchanged": 27009,
+  "operationsUnchanged": 15,
+  "counts": {
+    "attachments": 261,
+    "sharedAttachments": 57,
+    "footings": 269,
+    "wallAnchors": 7,
+    "members": 2181
+  },
+  "regions": [
+    {
+      "name": "Twisted drop",
+      "attachments": 21,
+      "members": 435,
+      "footings": 10
+    },
+    {
+      "name": "Camelback",
+      "attachments": 29,
+      "members": 333,
+      "footings": 8
+    },
+    {
+      "name": "Loop",
+      "attachments": 13,
+      "members": 207,
+      "footings": 18
+    },
+    {
+      "name": "Immelmann",
+      "attachments": 12,
+      "members": 197,
+      "footings": 16
+    }
+  ],
+  "sourceSha256": {
+    "native/core/src/support_bridge.hpp": "eb46c178eaf51f1e089e6c54be5384c037aeb591daef3888c60d4ebab7fd2856",
+    "native/core/src/support_cliff.hpp": "2cc97775f4aad15e4c7ebb990e558ee90b80271bc6125757c22aad33e0d267db",
+    "native/core/src/support_twisted.hpp": "16a4d4d516b5a08536bda34f254ab056ca2b2d865f73cbe0e8dc9ee448085128",
+    "native/core/src/support_assemblies.hpp": "14be49cc2caeebc89566fd3caa8d6da69368cc52ba5136ff336917ee38836565",
+    "native/core/src/supports.cpp": "3e4eb7650e018dabbbd1f6f5c738a963c67b80cf4afd91f0960553d80e5d5126",
+    "native/core/src/support_fabrication.cpp": "f68febc20d822b1f3e9b70bbfbe2f20874f2e654a521f51b7f48d9575431c6b2",
+    "native/core/tests/support_fabrication_tests.cpp": "88b0d0af5c3ec762a5de8b6f039ff1743f656af97a0edee210130cf0331047ba",
+    "native/tools/support_review.cpp": "dbccf37f4a47da6fb926f7c2258137d798b83789a1c6532093fa1860408fec29",
+    "native/art/import_native_exa.py": "40a606a1aaac0eadc8787e4cc7205cbb7a011c7325bd87afb37c6b6813834a1e",
+    "native/art/update_native_supports.py": "ce89fd26e19029f35d13a0ed20c6130d12fd4122e99237f38a6d8746048b0f4d",
+    "native/art/style_native_review.py": "373044fd79067edf799c8c02f7b779b04a7f3575718b0e521bf2b438add1f848",
+    "native/art/render_native_ride.py": "3be8eaed2cce1c8ad7ac805de35b524538f66bc0673829b76557f20238e00fbf"
+  },
+  "canonicalSha256": "d48ed31cf62621405ee43a859c3e6e1ea468e405b383217fc7fb3e84895a0cf7",
+  "reviewSha256": "c0ff688a014f45a4d88337fc0c01a82a0a70ba1cc692a46edb1d96d4ae624ab7",
+  "shortcutSha256": "0a1e3a1a939e96aca0b721b5bb19e8f23c26677c24bc7a49d21ba148c9833eb3",
+  "supportFabricationSha256": "887a9e26744fd317ae8717e4cace212beb8b6b7f959b49bce24e6fb82f8b06fc",
+  "cpuLimit": 8,
+  "tests": "9/9 focused tests; includes resized and rotated banked-hill terrain cases",
+  "nativeAcceptance": "Fresh regenerate, full acceptance, save and reload",
+  "jointAudit": {
+    "case": "saved-layout",
+    "probes": 348544,
+    "exposed_ends": 0,
+    "tolerance_mm": 12,
+    "precision_refinements": 22,
+    "failures": []
+  },
+  "runtimeReview": {
+    "status": "support-render-review-complete",
+    "track_profile": "exa-1",
+    "full_traversal": false,
+    "views": 13
+  },
+  "blenderFile": "native\\art\\exports\\support-system\\Riftwake-Exa-Adapted-Review.blend",
+  "blenderBytes": 335407949,
+  "retainedTrackMeshSource": "out/support-direct/ride/fixtures/saved-layout-fabrication.json",
+  "commonTrackFramesVerified": 24819
+}

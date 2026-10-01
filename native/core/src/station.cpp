@@ -188,7 +188,12 @@ StationGeometry buildStation(const Track& track,const Terrain& terrain,const Tra
     for(double x:{front+4.55,front+9.8})
         add(x,-23.65,(coverBottom+postBottom)*.5,
             {.18,.18,(coverBottom-postBottom)*.5},StationRole::Post);
-    add(front+11.7,0,ground+1.60,{1.7,24,1.75},StationRole::Underpass);
+    if(track.profile==TrackProfile::Exa){
+        const auto section=trackSection(track.profile);
+        const double underpassFloor=ground-.15;
+        const double underpassRoof=std::min(ground+3.35,section.bottom()-section.hardwarePadding()-.1);
+        add(front+11.7,0,(underpassFloor+underpassRoof)*.5,{1.7,24,(underpassRoof-underpassFloor)*.5},StationRole::Underpass);
+    }else add(front+11.7,0,ground+1.60,{1.7,24,1.75},StationRole::Underpass);
 
     const int count=std::max(2,int(std::ceil((len-8)/16))+1);
     for(int i=0;i<count;++i) {
@@ -266,6 +271,7 @@ StationGeometry buildStation(const Track& track,const Terrain& terrain,const Tra
     try {
         std::optional<ClearanceSweep> ownedSweep;
         const ClearanceSweep* sweep=prepared;
+        if(sweep&&sweep->trackProfile()!=track.profile){out.fail("SWEEP_PROFILE","Prepared station clearance uses a different track profile");return out;}
         if(!sweep){ownedSweep.emplace(buildClearanceSweep(track,train,cancel));sweep=&*ownedSweep;}
         size_t scan=0;
         std::vector<double> obstacleRadii;obstacleRadii.reserve(station.boxes.size());
@@ -279,23 +285,15 @@ StationGeometry buildStation(const Track& track,const Terrain& terrain,const Tra
                 if(!(norm(q.position-station.boxes[j].center)>obstacleRadii[j]))nearby.push_back(j);
             if(nearby.empty())continue;
             std::array<StationBox,3> trainBoxes{{
-                {q.position,q.tangent,q.right,q.up,{1.4,.95,.3},StationRole::Post},
+                {q.position,q.tangent,q.right,q.up,{1.4,trackSection(track.profile).trainWidth*.5,.3},StationRole::Post},
                 {q.position+q.up*.35,q.tangent,q.right,q.up,{1.275,.85,.225},StationRole::Post},
                 {q.position+q.up*((riderBottom+riderTop)*.5),q.tangent,q.right,q.up,{trainHalfLength,patronHalfWidth,(riderTop-riderBottom)*.5},StationRole::Post}
             }};
             for(auto& b:trainBoxes)b=expanded(b,sweep->padding());
-            // Rail, tie and spine corners all lie <.9 m from the canonical origin.
-            // True cell midpoint motion <=.02*(1+2*.9)=.056 m; .06 encloses it.
-            const auto saddles=trackTieSaddlesLocal();
-            std::array<StationBox,8> hardware{{
-                {q.position-q.up*spineDepth,q.tangent,q.right,q.up,{spineRadius,spineRadius,spineRadius},StationRole::Post},
-                {q.position-q.right*.65,q.tangent,q.right,q.up,{.085,.085,.085},StationRole::Post},
-                {q.position+q.right*.65,q.tangent,q.right,q.up,{.085,.085,.085},StationRole::Post},
-                {q.position-q.up*.19,q.tangent,q.right,q.up,{.07,.825,.08},StationRole::Post},
-                trackWebWorld(trackWebsLocal()[0],q),trackWebWorld(trackWebsLocal()[1],q),
-                trackWebWorld(saddles[0],q),trackWebWorld(saddles[1],q)
-            }};
-            for(auto& b:hardware)b=expanded(b,.06);
+            // The profile's hardware radius bounds every corner; its pad
+            // encloses midpoint translation and rotation over the whole cell.
+            auto hardware=trackHardwareLocal(track.profile);
+            for(auto& b:hardware)b=expanded(trackWebWorld(b,q),trackSection(track.profile).hardwarePadding());
 
             for(size_t j:nearby){
                 const auto& obstacle=station.boxes[j];

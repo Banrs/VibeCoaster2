@@ -6,6 +6,7 @@
 #include "VibeCoasterGame.h"
 #include "VibeCoasterWorld.h"
 #include "Engine/Engine.h"
+#include "Camera/CameraComponent.h"
 #include "Engine/GameViewportClient.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
@@ -45,6 +46,7 @@ FString GeometryIdentity(const coaster::Design& D)
     std::ostringstream S; S.imbue(std::locale::classic()); S << std::setprecision(17);
     auto V = [&](coaster::Vec3 P) { S << P.x << ',' << P.y << ',' << P.z << ';'; };
     S << D.generationVersion << ';' << D.request.seed << ';' << int(D.request.terrain.kind) << ';' << D.track.closed << ';';
+    if(D.track.profile==coaster::TrackProfile::Exa) S << "exa-1;";
     const auto& Terrain = D.request.terrain;
     S << Terrain.centerX << ';' << Terrain.centerY << ';' << Terrain.heightMeters << ';' << Terrain.radiusX << ';' << Terrain.radiusY << ';' << Terrain.bend << ';';
     S << Terrain.ridge.spineCount << ';' << Terrain.ridge.width << ';' << Terrain.ridge.curvature << ';';
@@ -70,11 +72,17 @@ FString GeometryIdentity(const coaster::Design& D)
 
 struct FCoasterRuntimeVerification::FState
 {
-    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, OverviewView, OverviewCaptured, StationView, StationCaptured, StationQueueView, StationQueueCaptured, StationExitView, StationExitCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, AwaitGenerationPhase, CancelGeneration, AwaitGenerationCancel, AwaitMeshPhase, AwaitMeshCancel, AwaitScenePhase, AwaitSceneCancel, Finish, Done } Stage = Init;
+    enum EStage { Init, DefaultView, StartRequest, AwaitRide, AwaitMotion, CameraViews, SupportViews, OverviewView, OverviewCaptured, StationView, StationCaptured, StationQueueView, StationQueueCaptured, StationExitView, StationExitCaptured, PauseProbe, PauseHold, PoseProbe, Warmup, Traverse, EndView, AwaitSave, AwaitReload, AwaitSaveCancel, AwaitGenerationPhase, CancelGeneration, AwaitGenerationCancel, AwaitMeshPhase, AwaitMeshCancel, AwaitScenePhase, AwaitSceneCancel, Finish, Done } Stage = Init;
     FString Output, Profile, SavePath, Error, Identity, SaveHash, PendingShot, FrameRows = TEXT("wall_seconds,ride_seconds,distance_m,speed_ms,wall_frame_ms,engine_delta_ms\n");
     FString Seed = TEXT("42"), Terrain = TEXT("highlands");
     uint64 CommittedRevision = 0;
     int32 PoseProbeIndex = 0;
+    int32 CameraStep = 0;
+    bool CamerasOnly = false;
+    bool SupportsOnly = false;
+    struct FSupportView { FVector Eye, Target; FString Label; };
+    TArray<FSupportView> SupportPoses;
+    FTransform InspectionPose;
     int32 Seat = 0, ShotIndex = 0, NextShot = 0, ObservedWidth = 0, ObservedHeight = 0;
     bool LoadOnly = false, Screenshots = true, RefusalChecked = false, Traversed = false, SaveChecked = false, LoadChecked = false, PauseChecked = false, RestartChecked = false;
     double Started = FPlatformTime::Seconds(), StageStarted = Started, TraversalStarted = 0, PreviousTick = 0, PauseTime = 0, LastRideTime = 0, LastDistance = 0, ShotRequested = 0, Duration = 0, FinalDistance = 0;
@@ -177,6 +185,8 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (!S.LoadOnly && !FFileHelper::SaveStringToFile(TEXT("VibeCoaster isolated runtime verification profile v1\n"), *Marker, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) { S.Fail(TEXT("Could not mark isolated profile")); return; }
         if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI")) || FApp::UseFixedTimeStep()) { S.Fail(TEXT("Real rendering and normal wall-time playback are required")); return; }
         S.Benchmark = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyBenchmark"));
+        S.CamerasOnly = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyCameras"));
+        S.SupportsOnly = FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifySupports"));
         S.Screenshots = !S.Benchmark && !FParse::Param(FCommandLine::Get(), TEXT("CoasterVerifyNoScreenshots"));
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifySeed="), S.Seed);
         FParse::Value(FCommandLine::Get(), TEXT("CoasterVerifyTerrain="), S.Terrain);
@@ -256,7 +266,7 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (!S.LoadOnly && !PC.InputError.IsEmpty()) { S.Fail(PC.InputError); break; }
         S.Advance(FState::AwaitRide); break;
     case FState::AwaitRide:
-        if (PC.Ride->IsBusy()) { if (Now - S.StageStarted > 240) S.Fail(TEXT("Generation/load/commit timeout: ") + PC.Ride->Status()); break; }
+        if (PC.Ride->IsBusy()) { if (Now - S.StageStarted > (S.SupportsOnly ? 900 : 240)) S.Fail(TEXT("Generation/load/commit timeout: ") + PC.Ride->Status()); break; }
         if (!PC.Ride->HasRide() || !PC.Ride->ActiveDesign()->accepted()) { S.Fail(TEXT("No accepted committed ride: ") + PC.Ride->Status()); break; }
         {
             const auto& D = *PC.Ride->ActiveDesign();
@@ -266,12 +276,107 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
             S.Identity = GeometryIdentity(D); S.Duration = D.simulation.frames.back().time; S.FinalDistance = D.simulation.frames.back().distance;
             if (S.LoadOnly) S.LoadChecked = true;
             S.Event(TEXT("accepted-commit"), TEXT(",\"geometry_sha1\":") + Q(S.Identity) + TEXT(",\"seed\":") + Q(FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(D.request.seed))) + TEXT(",\"terrain\":") + Q(FString(UTF8_TO_TCHAR(D.request.terrain.name().c_str()))) + TEXT(",\"duration_s\":") + N(S.Duration) + TEXT(",\"track_length_m\":") + N(D.track.length) + TEXT(",\"convergence_performed\":true,\"convergence_passed\":true"));
+            if (S.SupportsOnly)
+            {
+                if (D.track.profile != coaster::TrackProfile::Exa) { S.Fail(TEXT("Support review requires the explicit Exa profile")); break; }
+                PC.Menu=false; PC.ShowComparison=false; PC.ShowTelemetry=false;
+                if(auto* Hud=PC.GetHUD())Hud->bShowHUD=false;
+                if (!PC.Ride->IsPaused()) PC.Ride->TogglePause();
+                const auto Position=[](coaster::Vec3 V){const auto P=VibeCoordinates::Position(V);return FVector(P.X,P.Y,P.Z);};
+                int Seen[4]={0,0,0,0};
+                const auto SupportRegions=coaster::planSupportRegions(D.track,D.request.terrain);
+                for(const auto& Region:SupportRegions)
+                {
+                    const int Kind=int(Region.kind),Number=++Seen[Kind];
+                    coaster::Vec3 Lo{INFINITY,INFINITY,INFINITY},Hi{-INFINITY,-INFINITY,-INFINITY};double Apex=Region.begin,ApexZ=-INFINITY;
+                    for(double At=Region.begin;At<=Region.end;At+=2){const auto Q=D.track.sample(At);const auto V=Q.position;
+                        Lo={std::min(Lo.x,V.x),std::min(Lo.y,V.y),std::min(Lo.z,V.z)};Hi={std::max(Hi.x,V.x),std::max(Hi.y,V.y),std::max(Hi.z,V.z)};
+                        if(V.z>ApexZ){ApexZ=V.z;Apex=At;}}
+                    for(const auto& Support:D.supports)if(Support.trackDistance>=Region.begin&&Support.trackDistance<=Region.end)
+                        for(const auto& Member:Support.members)for(const auto V:{Member.base,Member.top}){
+                            Lo={std::min(Lo.x,V.x),std::min(Lo.y,V.y),std::min(Lo.z,V.z)};Hi={std::max(Hi.x,V.x),std::max(Hi.y,V.y),std::max(Hi.z,V.z)};}
+                    const auto Q=D.track.sample(Apex);const auto Centre=(Lo+Hi)*.5;
+                    const double Extent=std::max({Hi.x-Lo.x,Hi.y-Lo.y,Hi.z-Lo.z,30.});
+                    auto Right=coaster::unit(coaster::Vec3{Q.right.x,Q.right.y,0});if(coaster::norm(Right)<.5)Right={0,1,0};
+                    auto Eye=Centre+Right*(Extent*2.2);Eye.z=D.request.terrain.height(Eye.x,Eye.y)+1.8;
+                    FString Label=Kind==0?TEXT("camelback"):Kind==1?TEXT("loop"):Kind==2?TEXT("immelmann"):TEXT("twisted-drop");
+                    if(Number>1)Label+=FString::Printf(TEXT("-%d"),Number);
+                    S.SupportPoses.Add({Position(Eye),Position(Centre),Label+TEXT("-ground")});
+                    const auto Closest=std::min_element(D.supports.begin(),D.supports.end(),[&](const auto& A,const auto& B){return std::abs(A.trackDistance-Apex)<std::abs(B.trackDistance-Apex);});
+                    if(Closest!=D.supports.end()){
+                        const auto Frame=D.track.sample(Closest->trackDistance);
+                        S.SupportPoses.Add({Position(Frame.position+Frame.right*4+Frame.tangent*3.5-Frame.up*1.5),Position(Closest->attachment-Frame.up*.3),Label+TEXT("-joint")});
+                    }
+                }
+                {
+                    std::vector<const coaster::Support*> Wall;
+                    coaster::Vec3 Lo{INFINITY,INFINITY,INFINITY},Hi{-INFINITY,-INFINITY,-INFINITY};
+                    for(const auto& Support:D.supports)if(std::any_of(Support.members.begin(),Support.members.end(),[](const auto& M){return M.kind==coaster::SupportMemberKind::RockAnchor;})){
+                        Wall.push_back(&Support);for(const auto& M:Support.members)for(const auto Vertex:{M.base,M.top}){
+                            Lo={std::min(Lo.x,Vertex.x),std::min(Lo.y,Vertex.y),std::min(Lo.z,Vertex.z)};Hi={std::max(Hi.x,Vertex.x),std::max(Hi.y,Vertex.y),std::max(Hi.z,Vertex.z)};}
+                    }
+                    if(!Wall.empty()){
+                        const auto& T=D.request.terrain;const coaster::Vec3 N{std::cos(T.cliffHeading),std::sin(T.cliffHeading),0},Side{-N.y,N.x,0};
+                        const auto Centre=(Lo+Hi)*.5;const double Extent=std::max({Hi.x-Lo.x,Hi.y-Lo.y,Hi.z-Lo.z,40.});
+                        auto Eye=Centre+(N*2.2+Side*.7)*Extent;Eye.z=T.height(Eye.x,Eye.y)+1.8;
+                        S.SupportPoses.Add({Position(Eye),Position(Centre),TEXT("cliff-wall-ground")});
+                        const auto& Mount=*Wall[Wall.size()/2];const auto Q=D.track.sample(Mount.trackDistance);
+                        S.SupportPoses.Add({Position(Q.position+Q.right*4+Q.tangent*3.5-Q.up*1.5),Position(Mount.attachment-Q.up*.3),TEXT("cliff-wall-joint")});
+                        const auto Anchor=std::find_if(Mount.members.begin(),Mount.members.end(),[](const auto& M){return M.kind==coaster::SupportMemberKind::RockAnchor;});
+                        S.SupportPoses.Add({Position(Anchor->top+N*7+Side*5+coaster::Vec3{0,0,2}),Position(Anchor->top),TEXT("cliff-wall-anchor")});
+                    }
+                }
+                // Review the tallest ordinary transition as well as every
+                // planned element. A first-of-each-kind capture missed the
+                // main camelback and the terrain-dependent high approaches.
+                const coaster::Support* Tallest=nullptr;double SupportHeight=90;
+                for(const auto& Support:D.supports){
+                    bool InElement=false;for(const auto& Region:SupportRegions)
+                        InElement|=Support.trackDistance>=Region.begin&&Support.trackDistance<=Region.end;
+                    const double H=Support.top.z-D.request.terrain.height(Support.top.x,Support.top.y);
+                    if(!InElement&&H>SupportHeight){Tallest=&Support;SupportHeight=H;}
+                }
+                if(Tallest){
+                    const auto Frame=D.track.sample(Tallest->trackDistance);
+                    auto Right=coaster::unit(coaster::Vec3{Frame.right.x,Frame.right.y,0});if(coaster::norm(Right)<.5)Right={0,1,0};
+                    const auto Centre=(Tallest->base+Tallest->top)*.5;
+                    auto Eye=Centre+Right*(SupportHeight*2.4);Eye.z=D.request.terrain.height(Eye.x,Eye.y)+1.8;
+                    double BestScore=INFINITY;
+                    // A cliff can hide the whole tower from the default side.
+                    // Search actual ground positions with a clear sightline.
+                    for(double Scale:{1.3,1.8,2.4})for(int Angle=0;Angle<24;++Angle){
+                        const double A=2*coaster::pi*Angle/24.;
+                        auto Candidate=Centre+coaster::Vec3{std::cos(A),std::sin(A),0}*(SupportHeight*Scale);
+                        Candidate.z=D.request.terrain.height(Candidate.x,Candidate.y)+1.8;
+                        bool Visible=true;
+                        for(int Step=1;Step<128;++Step){const auto SightPoint=Candidate+(Centre-Candidate)*(Step/128.);
+                            if(SightPoint.z<D.request.terrain.height(SightPoint.x,SightPoint.y)+.15){Visible=false;break;}}
+                        const double Score=Candidate.z+SupportHeight*Scale*.04;
+                        if(Visible&&Score<BestScore){BestScore=Score;Eye=Candidate;}
+                    }
+                    S.SupportPoses.Add({Position(Eye),Position(Centre),TEXT("high-transition-ground")});
+                    S.SupportPoses.Add({Position(Frame.position+Frame.right*4+Frame.tangent*3.5-Frame.up*1.5),Position(Tallest->attachment-Frame.up*.3),TEXT("high-transition-joint")});
+                }
+                if(S.SupportPoses.IsEmpty()){S.Fail(TEXT("No support regions available for external review"));break;}
+                S.StationReviewTarget=PC.GetViewTarget();
+                if(!S.StationReviewTarget.IsValid()){S.Fail(TEXT("No support review camera"));break;}
+                S.RiderCameraPose=S.StationReviewTarget->GetActorTransform();S.PauseTime=PC.Ride->Playback().Time;
+                S.CameraStep=0;S.Advance(FState::SupportViews);break;
+            }
             if (S.Benchmark)
             {
                 PC.Menu = false; PC.Ride->SetSeat(S.Seat);
                 PC.Ride->Restart();
                 if (PC.Ride->IsPaused()) PC.Ride->TogglePause();
                 S.Advance(FState::AwaitMotion); break;
+            }
+            if (S.CamerasOnly)
+            {
+                PC.Menu = false; PC.ShowComparison = false;
+                if (!PC.Ride->IsPaused()) PC.Ride->TogglePause();
+                PC.Ride->Restart(); PC.Ride->ToggleView(ECoasterView::ThirdPerson);
+                S.PauseTime = PC.Ride->Playback().Time;
+                S.Advance(FState::CameraViews); break;
             }
             double ApexTime = 0, ApexHeight = -1e30, HighestTime = 0, HighestGround = -1e30;
             double LowPassTime = 0, LowPassHeight = 1e30;
@@ -359,6 +464,88 @@ void FCoasterRuntimeVerification::Tick(AVibeCoasterController& PC, float DeltaSe
         if (!S.Write(TEXT("result.json"), TEXT("{\"status\":\"launch-benchmark-passed\",\"full_traversal\":false,\"verification_seconds\":") + N(Now - S.Started) + TEXT("}\n")))
         { S.Fail(TEXT("Could not retain launch benchmark result")); break; }
         S.Stage = FState::Done; FPlatformMisc::RequestExitWithStatus(false, 0); break;
+    case FState::CameraViews:
+    {
+        if (Now - S.StageStarted < .5) break;
+        AActor* Target = PC.GetViewTarget();
+        if (!Target) { S.Fail(TEXT("Inspection camera has no view target")); break; }
+        const FTransform Pose = Target->GetActorTransform();
+        if (PC.Ride->GeometryRevision() != S.CommittedRevision) { S.Fail(TEXT("Inspection changed ride geometry")); break; }
+        if (S.CameraStep < 4 && PC.Ride->Playback().Time != S.PauseTime) { S.Fail(TEXT("Inspection moved paused playback")); break; }
+        switch (S.CameraStep)
+        {
+        case 0:
+            if (PC.Ride->View() != ECoasterView::ThirdPerson) { S.Fail(TEXT("Third-person mode did not activate")); break; }
+            S.Capture(PC, TEXT("third-person")); S.InspectionPose = Pose;
+            PC.Ride->CameraInput(FVector2D(230, -60), false, -3, FVector::ZeroVector, false, 0);
+            PC.Ride->CameraInput(FVector2D(30, 20), true, 0, FVector::ZeroVector, false, 0);
+            break;
+        case 1:
+            if (Pose.Equals(S.InspectionPose, .01)) { S.Fail(TEXT("Paused orbit/pan/zoom did not move the camera")); break; }
+            S.Capture(PC, TEXT("third-person-pan")); S.InspectionPose = Pose;
+            PC.Ride->ToggleView(ECoasterView::Free);
+            break;
+        case 2:
+            if (PC.Ride->View() != ECoasterView::Free || !Pose.Equals(S.InspectionPose, .01)) { S.Fail(TEXT("Free view did not retain the current camera")); break; }
+            PC.Ride->CameraInput(FVector2D(20, 10), false, 1, FVector(1, 1, 1), true, .1);
+            break;
+        case 3:
+            if (Pose.Equals(S.InspectionPose, .01)) { S.Fail(TEXT("Free-flight input did not move the camera")); break; }
+            S.Capture(PC, TEXT("free-view")); S.InspectionPose = Pose;
+            PC.Ride->TogglePause();
+            break;
+        case 4:
+            if (!Pose.Equals(S.InspectionPose, .01) || PC.Ride->Playback().Time <= S.PauseTime) { S.Fail(TEXT("Free view failed to stay detached during playback")); break; }
+            PC.Ride->TogglePause(); PC.Ride->SetSeat(0);
+            break;
+        case 5:
+        {
+            const auto* D = PC.Ride->ActiveDesign();
+            const auto K = D->track.sample(PC.Ride->Playback().Distance + coaster::seatDistanceOffset(D->request.train, 0));
+            const auto C = VibeCoordinates::Position(K.position + K.up * D->request.train.seatHeight);
+            if (PC.Ride->View() != ECoasterView::Rider || !Pose.GetLocation().Equals(FVector(C.X, C.Y, C.Z), .01)) { S.Fail(TEXT("Seat shortcut failed to restore rider POV")); break; }
+            S.InspectionPose = Pose;
+            PC.Ride->CameraInput(FVector2D::ZeroVector, false, 2, FVector::ZeroVector, false, 0);
+            break;
+        }
+        case 6:
+        {
+            const auto* Lens = Target->FindComponentByClass<UCameraComponent>();
+            if (!Lens || !FMath::IsNearlyEqual(Lens->FieldOfView, 72.f) || !Pose.Equals(S.InspectionPose, .01))
+            { S.Fail(TEXT("Rider scroll did not change the lens without moving the seat")); break; }
+            S.Capture(PC, TEXT("rider-zoom"));
+            PC.Ride->ResetInspectionCamera();
+            break;
+        }
+        case 7:
+        {
+            const auto* Lens = Target->FindComponentByClass<UCameraComponent>();
+            if (!Lens || !FMath::IsNearlyEqual(Lens->FieldOfView, 82.f) || !Pose.Equals(S.InspectionPose, .01))
+            { S.Fail(TEXT("Rider reset did not restore the normal lens")); break; }
+            if (!S.Write(TEXT("result.json"), TEXT("{\"status\":\"camera-verification-passed\",\"paused_orbit_pan_zoom\":true,\"free_flight\":true,\"free_view_detached\":true,\"rider_return\":true,\"rider_scroll_fov\":true,\"rider_fov_reset\":true,\"full_traversal\":false,\"keyboard_input\":\"untested\"}\n"))) { S.Fail(TEXT("Could not write camera evidence")); break; }
+            S.Stage = FState::Done; FPlatformMisc::RequestExitWithStatus(false, 0); return;
+        }
+        }
+        if (S.Stage == FState::Finish) break;
+        ++S.CameraStep; S.Advance(FState::CameraViews); break;
+    }
+    case FState::SupportViews:
+    {
+        if(Now-S.StageStarted<1)break;
+        if(!S.StationReviewTarget.IsValid()||PC.Ride->GeometryRevision()!=S.CommittedRevision||PC.Ride->Playback().Time!=S.PauseTime){S.Fail(TEXT("Support review lost its unchanged paused ride"));break;}
+        const int ViewIndex=S.CameraStep/2;
+        if(ViewIndex>=S.SupportPoses.Num()){
+            if(!S.Write(TEXT("result.json"),TEXT("{\"status\":\"support-render-review-complete\",\"track_profile\":\"exa-1\",\"full_traversal\":false,\"views\":")+FString::FromInt(S.SupportPoses.Num())+TEXT("}\n"))){S.Fail(TEXT("Could not save support review result"));break;}
+            S.StationReviewTarget->SetActorTransform(S.RiderCameraPose);S.StationReviewTarget.Reset();
+            S.Stage=FState::Done;FPlatformMisc::RequestExitWithStatus(false,0);return;
+        }
+        const auto& View=S.SupportPoses[ViewIndex];
+        if(S.CameraStep%2==0){
+            S.StationReviewTarget->SetActorLocationAndRotation(View.Eye,(View.Target-View.Eye).Rotation());
+            if(auto* Lens=S.StationReviewTarget->FindComponentByClass<UCameraComponent>())Lens->SetFieldOfView(60);
+        }else S.Capture(PC,View.Label);
+        ++S.CameraStep;S.Advance(FState::SupportViews);break;
+    }
     case FState::OverviewView:
         if (Now - S.StageStarted < 1) break;
         for (const auto& Knot : PC.Ride->ActiveDesign()->track.knots)

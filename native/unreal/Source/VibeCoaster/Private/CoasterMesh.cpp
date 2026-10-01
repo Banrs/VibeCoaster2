@@ -1,6 +1,8 @@
 #include "coaster/operation_hardware.hpp"
 #include "CoasterMesh.h"
 #include "coaster/support_mesh.hpp"
+#include "coaster/support_fabrication.hpp"
+#include "coaster/track_mesh.hpp"
 #include "Math/RotationMatrix.h"
 
 namespace VibeMesh
@@ -10,6 +12,7 @@ namespace
 constexpr int32 RingSides = 8;
 constexpr double ChunkMetres = 80, RailStep = 2;
 constexpr int32 MaxChunks = 4096, MaxVertices = 2000000, MaxInstances = 100000;
+int64 VertexBudget(const FPreparedRide& Out) { return Out.Design && Out.Design->track.profile == coaster::TrackProfile::Exa ? 24000000 : MaxVertices; }
 void EngineTriangle(FChunk& Chunk, int32 A, int32 B, int32 C)
 {
     // UE's GenerateBoxMesh uses clockwise front faces: Cross(B-A, C-A) has
@@ -161,11 +164,33 @@ bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel)
     if (!std::isfinite(D.track.length) || D.track.length <= 0 || D.track.length > 150000)
     { Out.Error = TEXT("Track exceeds the prototype rendering budget."); return false; }
     int64 Vertices = 0;
+    const bool Exa = D.track.profile == coaster::TrackProfile::Exa;
+    const auto Section = coaster::trackSection(D.track.profile);
+    const auto AppendMesh = [&Out, &Vertices](FChunk& Chunk, const coaster::SupportMeshBuffer& Mesh)
+    {
+        const int32 Base = Chunk.Vertices.Num();
+        for (size_t I = 0; I < Mesh.positions.size(); ++I) {
+            const FVector P = Position(Mesh.positions[I]); Chunk.Vertices.Add(P);
+            Chunk.Normals.Add(Direction(Mesh.normals[I])); Chunk.UV.Add(FVector2D(0,0)); Out.Bounds += P;
+        }
+        for (size_t I = 0; I < Mesh.indices.size(); I += 3)
+            EngineTriangle(Chunk, Base + Mesh.indices[I], Base + Mesh.indices[I+1], Base + Mesh.indices[I+2]);
+        Vertices += Mesh.positions.size();
+    };
     for (double Begin = 0; Begin < D.track.length; Begin += ChunkMetres)
     {
         if (Cancel()) return false;
         FChunk Chunk;
         const double End = FMath::Min(Begin + ChunkMetres, D.track.length);
+        if (Exa) {
+            AppendMesh(Chunk, coaster::trackTubeMesh(D.track,Begin,End,-Section.gauge*.5,0,Section.railRadius));
+            AppendMesh(Chunk, coaster::trackTubeMesh(D.track,Begin,End,Section.gauge*.5,0,Section.railRadius));
+            AppendMesh(Chunk, coaster::trackTubeMesh(D.track,Begin,End,0,-Section.spineDepth,Section.spineRadius));
+            for (double S = std::ceil(Begin/Section.tieSpacing)*Section.tieSpacing; S < End; S += Section.tieSpacing)
+                AppendMesh(Chunk,coaster::fabricationMesh(coaster::exaCrosshead(D.track.sample(S))));
+            if (Vertices > VertexBudget(Out)) { Out.Error=TEXT("Exa track exceeds mesh budget."); return false; }
+            Out.Chunks.Add(MoveTemp(Chunk)); continue;
+        }
         const int32 Rings = FMath::CeilToInt((End - Begin) / RailStep) + 1;
         TArray<coaster::TrackSample, TInlineAllocator<41>> Samples;
         Samples.Reserve(Rings);
@@ -184,7 +209,7 @@ bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel)
         Vertices += Chunk.Vertices.Num();
         Out.Chunks.Add(MoveTemp(Chunk));
     }
-    for (double S = 0; S < D.track.length; S += 3)
+    for (double S = 0; !Exa && S < D.track.length; S += 3)
     {
         if (Cancel()) return false;
         const auto P = D.track.sample(S);
@@ -223,8 +248,24 @@ bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel)
             Out.Chunks.Add(MoveTemp(Chunk)); Chunk = FChunk{}; Chunk.Structure = Structure; Chunk.Footing = Footing; }
     };
     int64 MemberCount = 0;
+    if (Exa) {
+        try {
+            const auto Parts = coaster::buildSupportFabrication(D.track,D.supports,Cancel);
+            for (const auto& Part : Parts) {
+                if (Cancel()) return false;
+                auto& Chunk = Part.material == coaster::FabricationMaterial::Concrete ? Footings : Steel;
+                const auto Mesh = coaster::fabricationMesh(Part);
+                if (Chunk.Vertices.Num()+int32(Mesh.positions.size()) > 16000) Flush(Chunk);
+                AppendMesh(Chunk,Mesh);
+                if (Vertices > VertexBudget(Out) || Out.Chunks.Num() > MaxChunks) {
+                    Out.Error=TEXT("Exa fitting mesh exceeds budget; active ride retained."); return false;
+                }
+            }
+        } catch (const std::exception& Error) { Out.Error=UTF8_TO_TCHAR(Error.what()); return false; }
+    }
     for (const auto& Support : D.supports)
     {
+        if (Exa) break;
         if (Cancel()) return false;
         if (Support.members.empty())
         {
@@ -238,7 +279,7 @@ bool Prepare(FPreparedRide& Out, const coaster::Cancel& Cancel)
             if (++MemberCount > int64(coaster::maxTotalSupportMembers))
             { Out.Error = TEXT("Canonical support member budget exceeded; active ride retained."); return false; }
             const auto Mesh = coaster::supportMemberMesh(Member);
-            FChunk& Chunk = Member.kind == coaster::SupportMemberKind::Footing ? Footings : Steel;
+            FChunk& Chunk = Member.kind != coaster::SupportMemberKind::Steel ? Footings : Steel;
             if (Chunk.Vertices.Num() + int32(Mesh.positions.size()) > 984) Flush(Chunk);
             const int32 Base = Chunk.Vertices.Num();
             for (size_t I = 0; I < Mesh.positions.size(); ++I)
@@ -272,7 +313,7 @@ bool AppendGround(FPreparedRide& Out, const coaster::Cancel& Cancel)
     const bool Highlands = Terrain.kind == coaster::TerrainKind::Highlands;
     int64 ExistingVertices = 0;
     for (const auto& Chunk : Out.Chunks) ExistingVertices += Chunk.Vertices.Num();
-    if (Out.Chunks.Num() + 1 > MaxChunks || ExistingVertices + 4 > MaxVertices ||
+    if (Out.Chunks.Num() + 1 > MaxChunks || ExistingVertices + 4 > VertexBudget(Out) ||
         Out.Ties.Num() + Out.Supports.Num() + Out.Station.Num() + Out.LSMHardware.Num() + Out.BrakeHardware.Num() > MaxInstances)
     { Out.Error = TEXT("Accepted geometry exceeds the mesh budget; active ride retained."); return false; }
     if (Highlands)
@@ -289,7 +330,7 @@ bool AppendGround(FPreparedRide& Out, const coaster::Cancel& Cancel)
             // Bernstein controls enclose the complete position polynomials,
             // not merely the sampled rail mesh. The existing body radius is a
             // rotationally invariant enclosure of every occupied cross-section.
-            const double Radius = coaster::occupiedRadius(Out.Design->request.train);
+            const double Radius = coaster::occupiedRadius(Out.Design->request.train,Out.Design->track.profile);
             for (const auto& Span : Out.Design->track.spans)
             {
                 if (Cancel && Cancel()) return false;
@@ -331,7 +372,7 @@ bool AppendGround(FPreparedRide& Out, const coaster::Cancel& Cancel)
         }
         const double CellsX=(Patch[2]-Patch[0])/coaster::Terrain::gridStep, CellsY=(Patch[3]-Patch[1])/coaster::Terrain::gridStep;
         if (!std::isfinite(CellsX)||!std::isfinite(CellsY)||CellsX<1||CellsY<1||
-            CellsX>MaxVertices||CellsY>MaxVertices||(CellsX+1)*(CellsY+1)+ExistingVertices>MaxVertices)
+            CellsX>MaxVertices||CellsY>MaxVertices||(CellsX+1)*(CellsY+1)+ExistingVertices>VertexBudget(Out))
         { Out.Error=TEXT("Exact ride terrain exceeds the mesh budget; active ride retained."); return false; }
         const int32 NX=int32(std::llround(CellsX)), NY=int32(std::llround(CellsY));
         int64 Vertices=ExistingVertices+int64(NX+1)*(NY+1);
@@ -352,7 +393,7 @@ bool AppendGround(FPreparedRide& Out, const coaster::Cancel& Cancel)
             }
             const int32 RX=int32(std::llround((Outer[2]-Outer[0])/Step)), RY=int32(std::llround((Outer[3]-Outer[1])/Step));
             Vertices+=2*int64(RX+RY);
-            if (Vertices>MaxVertices) {Out.Error=TEXT("Surrounding terrain exceeds the mesh budget; active ride retained.");return false;}
+            if (Vertices>VertexBudget(Out)) {Out.Error=TEXT("Surrounding terrain exceeds the mesh budget; active ride retained.");return false;}
             Rings.push_back({Outer,Step,RX,RY});
         }
         FChunk Ground; Ground.Ground = true;

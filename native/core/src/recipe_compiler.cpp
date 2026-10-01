@@ -36,7 +36,8 @@ Design compileRecipe(const GenerationRequest& input,int attempt,const RecipeFeed
     if(mode!=RecipeCompileMode::ClosedCircuit&&mode!=RecipeCompileMode::EnergyCalibrationPrefix)throw std::invalid_argument("Unknown recipe compile mode" );
     const bool energyPrefix=mode==RecipeCompileMode::EnergyCalibrationPrefix;
     ports.clear();
-    Design d;d.request=input;d.candidate=attempt;
+    Design d;d.request=input;d.candidate=attempt;d.track.profile=input.trackProfile;
+    (void)trackSection(d.track.profile);
     if(d.request.recipe.elements.empty())d.request.recipe=defaultRideRecipe();
     if(d.request.style.returnStyle<0)d.request.style.returnStyle=int(elementSeed(input.seed,"return-style")&1);
     d.topology="recipe/"+d.request.recipe.name;

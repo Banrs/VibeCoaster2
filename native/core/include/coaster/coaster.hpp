@@ -5,6 +5,7 @@
 #include "coaster/progress.hpp"
 #include "coaster/recipe.hpp"
 #include "coaster/acceleration.hpp"
+#include "coaster/track_profile.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -43,6 +44,7 @@ struct Track {
     double length{};
     bool closed{true};
     bool authoredGeometry{},authoredFrame{};
+    TrackProfile profile{TrackProfile::Legacy};
     void rebuild();
     TrackLocation locate(double distance) const;
     TrackLocation locate(double distance,size_t& spanHint) const;
@@ -72,7 +74,7 @@ constexpr double limbExtension=.0762,patronSeparation=.0762;
 constexpr double patronHalfWidth=.43+1.012+limbExtension+patronSeparation;
 constexpr double trainHalfLength=1.275,trainEnvelopeBottom=-spineDepth-spineRadius;
 inline double patronTopHeight(const TrainConfig& train){return std::max(1.51,train.seatHeight-.45+1.469+limbExtension+patronSeparation);}
-inline double occupiedRadius(const TrainConfig& train){return norm(Vec3{trainHalfLength,patronHalfWidth,std::max(-trainEnvelopeBottom,patronTopHeight(train))});}
+inline double occupiedRadius(const TrainConfig& train,TrackProfile profile=TrackProfile::Legacy){return norm(Vec3{trainHalfLength,patronHalfWidth,std::max(-trackSection(profile).bottom(),patronTopHeight(train))});}
 inline double seatDistanceOffset(const TrainConfig& train,int seat){int car=seat==0?0:seat==1?(train.cars-1)/2:train.cars-1;return ((train.cars-1)*.5-car)*train.spacing;}
 enum class DriveKind { Launch, Boost, Brake, Station, Trim };
 struct Operation {
@@ -131,6 +133,7 @@ struct GenerationRequest {
     int maxCandidates{8}; double simulationStep{1./960};
     RideStyle style;
     RideRecipe recipe; // Empty selects the current default; accepted new rides retain the resolved recipe.
+    TrackProfile trackProfile{TrackProfile::Legacy};
 };
 struct Finding { std::string code,message; double distance{},actual{},limit{}; };
 struct ValidationReport {
@@ -197,6 +200,10 @@ public:
     double padding() const{return pad;}
     double bodyRadius() const{return radius;}
     double trainTop() const{return top;}
+    TrackProfile trackProfile() const{return profile;}
+    double trainBottom() const{return trackSection(profile).bottom();}
+    // Frame origins inside a world box; callers include their motion/body reserve.
+    std::vector<size_t> nearbyFrames(Vec3 low,Vec3 high) const;
     void prepareGround(const Terrain&,Cancel cancel={});
     const std::vector<double>* groundBounds(const Terrain& terrain) const{return sampledTerrain&&*sampledTerrain==terrain?&groundLowerBounds:nullptr;}
 private:
@@ -206,6 +213,7 @@ private:
     std::vector<ClearanceFrame> samples;
     std::unordered_map<Key,std::vector<size_t>,Hash> cells;
     double top{},length{},pad{},radius{};
+    TrackProfile profile{TrackProfile::Legacy};
     std::optional<Terrain> sampledTerrain;
     std::vector<double> groundLowerBounds;
     friend ClearanceSweep buildClearanceSweep(const Track&,const TrainConfig&,Cancel);
@@ -216,7 +224,7 @@ private:
 // Input must satisfy the checked polynomial and normalized orientation domain.
 ClearanceSweep buildClearanceSweep(const Track&,const TrainConfig&,Cancel cancel={});
 int supportCollision(const Support&,const ClearanceSweep&,Cancel cancel={});
-enum class SupportMemberKind { Steel, Footing };
+enum class SupportMemberKind { Steel, Footing, RockAnchor }; // Persisted values 0/1 remain unchanged.
 // Straight closed tapered circular solids in canonical SI coordinates. Empty
 // Support.members preserves the historical column/arm at supportRadius exactly.
 struct SupportMember {
@@ -226,6 +234,12 @@ struct SupportMember {
 struct Support {Vec3 base,top,attachment; bool hasAttachment{false}; double trackDistance{}; std::vector<SupportMember> members;};
 constexpr size_t maxSupportMembers=512,maxTotalSupportMembers=60000;
 ValidationReport validateSupportMembers(const Support&,const Terrain&,Cancel cancel={});
+// Shared structures may have track attachments without their own foundations.
+// Validate their complete endpoint graph, including every actual terrain anchor.
+ValidationReport validateSupportLayout(const std::vector<Support>&,const Terrain&,Cancel cancel={});
+enum class SupportStructureKind { Camelback, Loop, Immelmann, TwistedDrop };
+struct SupportRegion { double begin{},end{}; SupportStructureKind kind{}; };
+std::vector<SupportRegion> planSupportRegions(const Track&,const Terrain&,Cancel cancel={});
 
 enum class StationRole {
     Platform, Canopy, Post, Pier, Footing, // Persisted roles 0..4 stay stable.
@@ -356,6 +370,13 @@ ValidationReport validateSimulationTargets(const SimulationResult&,const Targets
 ValidationReport compareSimulationConvergence(const SimulationResult&,const SimulationResult&,const Limits&,ConvergenceAssessment&);
 void verifyConvergence(Design&,Cancel cancel={});
 void buildSupportLayout(Design&,Cancel cancel={});
+// Rebuild only supports, then run the same complete acceptance replay as load.
+// Commit the new design atomically; cancellation/failure preserves the caller.
+bool regenerateSupports(Design&,std::string& error,Cancel cancel={},Progress progress={});
+// Fit the existing escarpment to the frozen drop, retaining the complete train envelope.
+// Called explicitly by Exa generation/regeneration, never as a load-time migration.
+void fitCliffTerrain(Design&,Cancel cancel={});
+bool migrateTrackProfile(Design&,TrackProfile,std::string& error,Cancel cancel={},Progress progress={});
 Design generate(const GenerationRequest&,Cancel cancel={},Progress progress={});
 // Completed ride: powered departure until the train centre reaches final braking.
 // Derived from replay and the terminal Station operation, including after load.

@@ -1,6 +1,8 @@
 #include "coaster/coaster.hpp"
 #include "coaster/clearance.hpp"
+#include "coaster/support_fabrication.hpp"
 #include <stdexcept>
+#include "support_members.hpp"
 
 namespace coaster {
 bool memberSeparatedFromBox(const SupportMember& member,const StationBox& box,double padding){
@@ -39,12 +41,7 @@ bool memberSeparatedFromBox(const SupportMember& member,const StationBox& box,do
 bool supportStationCollision(const Support& support,const StationGeometry& station,Cancel cancel){
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
     if(!station.enabled)return false;
-    std::vector<SupportMember> legacy;
-    if(support.members.empty()){
-        legacy.push_back({support.base,support.top,supportRadius,supportRadius,SupportMemberKind::Steel,false});
-        if(support.hasAttachment)legacy.push_back({support.top,support.attachment,supportRadius,supportRadius,SupportMemberKind::Steel,true});
-    }
-    const auto& members=support.members.empty()?legacy:support.members;
+    const SupportMembers members(support);
     for(const auto& m:members){
         if(cancel&&cancel())throw std::runtime_error("CANCELLED");
         double radius=std::max(m.radiusBase,m.radiusTop);
@@ -80,7 +77,12 @@ static ValidationReport validateDesignStructuresImpl(const Design& d,const Clear
             out.fail("STATION_SUPPORT_CLEARANCE","Cannot certify clearance between canonical support solids and station parts",support.trackDistance);
             if(out.errors.size()>=8)return out;
         }
-    }}catch(const std::exception& e){out.fail(std::string(e.what())=="CANCELLED"?"CANCELLED":"STRUCTURE_CONFIG",e.what());}
+    }
+        if(out.valid()&&d.track.profile==TrackProfile::Exa){
+            if(prepared)out=validateSupportFabrication(d.track,d.supports,d.request.terrain,d.station,*prepared,cancel);
+            else {const auto sweep=buildClearanceSweep(d.track,d.request.train,cancel);out=validateSupportFabrication(d.track,d.supports,d.request.terrain,d.station,sweep,cancel);}
+        }
+    }catch(const std::exception& e){out.fail(std::string(e.what())=="CANCELLED"?"CANCELLED":"STRUCTURE_CONFIG",e.what());}
     return out;
 }
 ValidationReport validateDesignStructures(const Design& d,Cancel cancel){return validateDesignStructuresImpl(d,nullptr,cancel);}

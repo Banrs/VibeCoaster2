@@ -1,16 +1,33 @@
 ﻿[CmdletBinding()]
-param([switch]$Desktop,[switch]$Development,[string]$UnrealRoot)
+param([switch]$Desktop,[switch]$Development,[switch]$GeometryReview,[string]$UnrealRoot)
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).Path
-if ($Development) {
+if ($Development -and $GeometryReview) { throw 'Choose Development or GeometryReview.' }
+if ($Development -or $GeometryReview) {
     if (-not $UnrealRoot) { throw 'Development shortcuts require -UnrealRoot.' }
     $Target = (Resolve-Path -LiteralPath (Join-Path $UnrealRoot 'Engine/Binaries/Win64/UnrealEditor.exe')).Path
     $Project = Join-Path $RepositoryRoot 'native/unreal/VibeCoaster.uproject'
     if (-not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'native/unreal/Binaries/Win64/UnrealEditor-VibeCoaster.dll') -PathType Leaf)) { throw 'Build the local Unreal game module first.' }
     $PackageRoot = $RepositoryRoot
-    $Profile = (Resolve-Path -LiteralPath (Join-Path $RepositoryRoot 'UserData-Development')).Path
+    if ($GeometryReview) {
+        $Profile = Join-Path $RepositoryRoot 'UserData-GeometryReview'
+        $Save = Join-Path $Profile 'Saved/VibeCoaster2/Designs/Accepted.vcdesign'
+        if (-not (Test-Path -LiteralPath $Save)) {
+            $Current = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'dist/current.json') -Raw | ConvertFrom-Json
+            $Source = Join-Path $RepositoryRoot ($Current.profile + '/Saved/VibeCoaster2/Designs/Accepted.vcdesign')
+            if ((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -ne $Current.acceptedDesignSha256) { throw 'The baseline save does not match the playable selector.' }
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Save) | Out-Null
+            Copy-Item -LiteralPath $Source -Destination $Save
+        }
+    } else {
+        $Profile = (Resolve-Path -LiteralPath (Join-Path $RepositoryRoot 'UserData-Development')).Path
+    }
     $Arguments = '"' + $Project + '" -game -UserDir="' + $Profile + '" -CoasterLoad'
     $Release = 'Current local game build'
+    if ($GeometryReview) {
+        $Arguments += ' -windowed -ResX=1600 -ResY=900'
+        $Release = 'Geometry review - third-person and free view'
+    }
 } else {
     $Current = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'dist/current.json') -Raw | ConvertFrom-Json
     $ManifestPath = Join-Path $RepositoryRoot $Current.manifest

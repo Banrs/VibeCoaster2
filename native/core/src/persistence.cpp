@@ -2,7 +2,7 @@
 #include "coaster/clearance.hpp"
 #include "simulation_internal.hpp"
 #include "progress_internal.hpp"
-#include "acceptance_internal.hpp"
+#include "acceptance_replay.hpp"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -31,8 +31,6 @@
 namespace coaster {
 namespace {
 std::filesystem::path utf8path(const std::string& s){return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()),s.size()));}
-// Compatible rides retain their authored operations and provenance; every
-// version passes the same geometry, structure and independent replay checks.
 uint64_t checksum(const std::string& s){uint64_t h=14695981039346656037ull;for(unsigned char c:s){h^=c;h*=1099511628211ull;}return h;}
 std::string quote(const std::string& s){std::ostringstream o;o<<'"';for(unsigned char c:s){switch(c){case '"':o<<"\\\"";break;case '\\':o<<"\\\\";break;case '\n':o<<"\\n";break;case '\r':o<<"\\r";break;case '\t':o<<"\\t";break;default:if(c<32)o<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<int(c)<<std::dec;else o<<c;}}o<<'"';return o.str();}
 void number(std::ostream& o,double x){if(std::isfinite(x))o<<x;else o<<"null";}
@@ -49,6 +47,9 @@ void vec(std::istream& i,Vec3& v){i>>v.x>>v.y>>v.z;}
 std::string extensionTail(const Design& d,Cancel cancel){
     const auto& r=d.request;
     std::vector<std::pair<std::string,std::string>> blocks;
+    if(d.track.profile!=r.trackProfile)throw std::runtime_error("Track/request section profile mismatch");
+    (void)trackSection(d.track.profile);
+    if(d.track.profile==TrackProfile::Exa)blocks.push_back({"TRACK_PROFILE","exa-1\n"});
     // Existing flat COASTER6 payloads remain byte-compatible. The new terrain
     // kind owns its resolved landform parameters rather than regenerating them.
     if(r.terrain.kind==TerrainKind::Flat)blocks.push_back({"TERRAIN_PROFILE","1 1 0 0 0 0 600\n"});
@@ -131,7 +132,10 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
     for(size_t i=0;i<count;++i){if(cancel&&cancel()){error="CANCELLED";return false;}std::string name;int version;size_t size;p>>name>>version>>size;
         if(!p||version!=1||size==0||size>1024*1024||!seen.insert(name).second||p.get()!='\n'){error="Malformed, duplicate or oversized extension";return false;}
         std::string bytes(size,'\0');if(!p.read(bytes.data(),std::streamsize(size))){error="Truncated extension";return false;}
-        if(name=="REFERENCE"){
+        if(name=="TRACK_PROFILE"){
+            if(bytes!="exa-1\n"){error="Unknown track section profile";return false;}
+            request.trackProfile=TrackProfile::Exa;result.track.profile=TrackProfile::Exa;
+        }else if(name=="REFERENCE"){
             Targets parsed=request.targets;if(!parseReference(bytes,parsed,error))return false;
             if(parsed.referenceExposure!=request.targets.referenceExposure||parsed.referenceId!=request.targets.referenceId){error="Reference extension disagrees with saved scalar target";return false;}request.targets=std::move(parsed);
         }else if(name=="AXIS_RATE_LIMITS"){
@@ -234,6 +238,7 @@ bool parseExtensions(std::istream& p,Design& out,std::string& error,Cancel cance
     p>>std::ws;if(!p.eof()){error="Unexpected data after extensions";return false;}out=std::move(result);return true;
 }
 bool recheck(Design& d,Cancel cancel,WorkRecorder* work=nullptr){
+    if(d.track.profile!=d.request.trackProfile){d.report.fail("TRACK_PROFILE","Track/request section profile mismatch");return false;}
     std::mutex cancellationMutex;
     const Cancel requestedCancel=std::move(cancel);
     if(requestedCancel)cancel=[&]{std::lock_guard lock(cancellationMutex);return requestedCancel();};
@@ -242,14 +247,8 @@ bool recheck(Design& d,Cancel cancel,WorkRecorder* work=nullptr){
     for(const auto& op:d.operations)if(!validDriveParameters(op)){d.report.fail("DRIVE_CONFIG","Invalid explicit drive operation");return false;}
     if(work)work->enter(WorkPhase::Geometry,d.candidate,"Checking saved track and clearance");
     d.track.rebuild();d.inversionDimensions=d.request.recipe.elements.empty()?measureInversionDimensions(d.track,cancel):measureInversionDimensions(d.track,d.sections,cancel);
-    // Rebuild certifies the numerical interpolation domain. Independent
-    // dynamics and spatial checks can now overlap the solid-clearance pass;
-    // no result is accepted until all of them have joined and passed.
-    std::atomic<bool> stopFine{false};
-    const Cancel stop=[&]{return stopFine.load()||(cancel&&cancel());};
-    auto coarse=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,d.request.train,d.request.simulationStep,stop);});
-    auto fine=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,d.request.train,d.request.simulationStep*.5,stop);});
-    auto spatial=std::async(std::launch::async,[&]{return replaySpatialRefinement(d,stop);});
+    AcceptanceReplay replay(d,cancel);
+    replay.startSpatial();
     auto sweep=buildClearanceSweepVerified(d.track,d.request.train,cancel);sweep.prepareGround(d.request.terrain,cancel);
     // Both checks read the rebuilt design and the prepared sweep.
     auto structures=std::async(std::launch::async,[&]{return validateDesignStructures(d,sweep,cancel);});
@@ -257,23 +256,10 @@ bool recheck(Design& d,Cancel cancel,WorkRecorder* work=nullptr){
     if(work)work->enter(WorkPhase::Structures,d.candidate,"Checking saved supports and station");
     auto structureReport=structures.get();d.report.errors.insert(d.report.errors.end(),structureReport.errors.begin(),structureReport.errors.end());
     if(!d.report.valid()){
-        stopFine.store(true);
         if(std::any_of(d.report.errors.begin(),d.report.errors.end(),[](const Finding& f){return f.code=="CANCELLED";}))d.simulation.cancelled=true;
         return false;
     }
-    // Both resolutions read the same rebuilt geometry; callback invocations stay
-    // serialized, and the worker joins before any design can escape this check.
-    if(work)work->enter(WorkPhase::Forces,d.candidate,"Replaying all seats at both native resolutions");
-    d.convergence={};d.simulation=coarse.get();
-    evaluateTargets(d,&sweep);
-    if(work)work->enter(WorkPhase::Authorship,d.candidate,"Checking editable sources and continuous motion");
-    assessAuthorship(d,cancel);assessMotion(d,cancel);
-    if(work)work->enter(WorkPhase::Refinement,d.candidate,"Checking independent time and spatial refinement");
-    verifyConvergenceWith(d,[&]{return fine.get();},cancel);
-    if(fine.valid()){stopFine.store(true);fine.wait();}
-    if(d.report.valid()&&d.convergence.passed)verifySpatialRefinementWith(d,[&]{return spatial.get();},cancel);
-    if(spatial.valid()){stopFine.store(true);spatial.wait();}
-    if(d.checksPassed())freezeAcceptedRevision(d);
+    replay.finish(sweep,work);
     return d.accepted();
 }
 }
@@ -283,9 +269,40 @@ void freezeAcceptedRevision(Design& d){
     d.acceptedPayload_=std::make_shared<const std::string>(designPayload(d,{}));
     d.acceptedCache_=std::make_shared<const std::string>(cachePayload(d.track));
 }
+bool regenerateSupports(Design& design,std::string& error,Cancel cancel,Progress progress){
+    WorkRecorder work(std::move(progress),WorkPhase::Structures);error.clear();
+    try{
+        Design candidate=design;
+        fitCliffTerrain(candidate,cancel);
+        work.enter(WorkPhase::Structures,candidate.candidate,"Planning terrain-aware support structures");
+        buildSupportLayout(candidate,cancel);
+        if(!recheck(candidate,cancel,&work)){
+            error=candidate.simulation.cancelled?"CANCELLED":"REVALIDATION_FAILED";
+            if(!candidate.report.errors.empty())error+=" | "+candidate.report.errors.front().code+": "+candidate.report.errors.front().message;
+            return false;
+        }
+        if(cancel&&cancel()){error="CANCELLED";return false;}
+        candidate.timings=work.snapshot();design=std::move(candidate);return true;
+    }catch(const std::exception& e){error=e.what();return false;}
+}
+bool migrateTrackProfile(Design& design,TrackProfile profile,std::string& error,Cancel cancel,Progress progress){
+    error.clear();
+    try{
+        (void)trackSection(profile);
+        if(cancel&&cancel()){error="CANCELLED";return false;}
+        Design candidate=design;
+        candidate.track.profile=profile;candidate.request.trackProfile=profile;
+        candidate.station=buildStation(candidate.track,candidate.request.terrain,candidate.request.train,cancel);
+        if(!regenerateSupports(candidate,error,cancel,std::move(progress)))return false;
+        if(cancel&&cancel()){error="CANCELLED";return false;}
+        design=std::move(candidate);return true;
+    }catch(const std::exception& e){error=e.what();return false;}
+}
 std::string reportJson(const Design& d){
     std::ostringstream o;o.imbue(std::locale::classic());o<<std::setprecision(17);
     o<<"{\"schemaVersion\":1,\"generatorVersion\":"<<quote(d.generationVersion)<<",\"runtimeVersion\":"<<quote(generatorVersion)<<",\"buildCommit\":"<<quote(COASTER_BUILD_COMMIT)<<",\"seed\":"<<d.request.seed<<",\"terrain\":"<<quote(d.request.terrain.name())<<",\"preset\":"<<quote(d.request.targets.requireIntensity?"reference":"default")<<",\"intensityRequired\":"<<(d.request.targets.requireIntensity?"true":"false")<<",\"accepted\":"<<(d.accepted()?"true":"false")<<",\"completed\":"<<(d.simulation.completed?"true":"false")<<",\"cancelled\":"<<(d.simulation.cancelled?"true":"false")<<",\"candidate\":"<<d.candidate<<",\"topology\":"<<quote(d.topology)<<",\"lengthMeters\":";number(o,d.track.length);
+    const auto section=trackSection(d.track.profile);
+    o<<",\"trackProfile\":"<<quote(d.track.profile==TrackProfile::Exa?"exa-1":"legacy")<<",\"trackSection\":{\"gaugeMeters\":"<<section.gauge<<",\"railRadiusMeters\":"<<section.railRadius<<",\"spineRadiusMeters\":"<<section.spineRadius<<",\"spineDepthMeters\":"<<section.spineDepth<<'}';
     o<<",\"timingsSeconds\":{";
     for(size_t i=0;i<d.timings.seconds.size();++i){if(i)o<<',';o<<quote(phaseKey(WorkPhase(i)))<<':';number(o,d.timings.seconds[i]);}o<<'}';
     o<<",\"accelerationAssessment\":{\"edition\":\"ASTM F2291-25\",\"scope\":\"upright Class 4/5 base case; numerical acceleration checks; not whole-standard certification\",\"sampleRateHz\":";number(o,1/d.request.simulationStep);o<<",\"seats\":[";
@@ -438,7 +455,7 @@ static bool readDesign(const std::string& path,Design& out,std::string& error,Ca
             for(size_t j=0;j<count;++j){
                 if(cancel&&cancel()){error="CANCELLED";return false;}
                 SupportMember m;int kind=-1;vec(p,m.base);vec(p,m.top);p>>m.radiusBase>>m.radiusTop>>kind>>m.spineContact;
-                if(!p||kind<0||kind>1){error="Malformed support member";return false;}m.kind=SupportMemberKind(kind);s.members.push_back(m);
+                if(!p||kind<0||kind>2){error="Malformed support member";return false;}m.kind=SupportMemberKind(kind);s.members.push_back(m);
             }
             d.supports.push_back(std::move(s));
         }

@@ -4,9 +4,33 @@ string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" release_number "${release_definiti
 project(VibeCoaster2 VERSION ${release_number} LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_library(coaster_core core/src/track.cpp core/src/frame.cpp core/src/drive_profile.cpp core/src/simulation.cpp core/src/convergence.cpp core/src/generation.cpp core/src/authoring.cpp core/src/authorship.cpp core/src/motion_program.cpp core/src/banking.cpp core/src/fvd.cpp core/src/persistence.cpp core/src/reference.cpp core/src/supports.cpp core/src/clearance.cpp core/src/dimensions.cpp core/src/station.cpp core/src/structures.cpp core/src/motion_audit.cpp)
+add_library(coaster_core
+  core/src/track.cpp
+  core/src/frame.cpp
+  core/src/drive_profile.cpp
+  core/src/simulation.cpp
+  core/src/convergence.cpp
+  core/src/generation.cpp
+  core/src/authoring.cpp
+  core/src/authorship.cpp
+  core/src/motion_program.cpp
+  core/src/banking.cpp
+  core/src/fvd.cpp
+  core/src/persistence.cpp
+  core/src/reference.cpp
+  core/src/supports.cpp
+  core/src/support_fabrication.cpp
+  core/src/clearance.cpp
+  core/src/dimensions.cpp
+  core/src/station.cpp
+  core/src/structures.cpp
+  core/src/motion_audit.cpp
+  core/src/recipe.cpp
+  core/src/recipe_compiler.cpp
+  core/src/launch_camelback.cpp
+  core/src/acceleration.cpp
+)
 target_include_directories(coaster_core PUBLIC core/include)
-target_sources(coaster_core PRIVATE core/src/recipe.cpp core/src/recipe_compiler.cpp core/src/launch_camelback.cpp core/src/acceleration.cpp)
 execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   OUTPUT_VARIABLE coaster_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 if(coaster_commit MATCHES "^[0-9a-f]+$")
@@ -30,39 +54,37 @@ else()
 endif()
 add_executable(coaster_cli core/src/main.cpp)
 target_link_libraries(coaster_cli PRIVATE coaster_core)
-enable_testing()
+add_executable(support_review tools/support_review.cpp)
+target_link_libraries(support_review PRIVATE coaster_core)
 find_package(Threads REQUIRED)
 target_link_libraries(coaster_core PUBLIC Threads::Threads)
-add_executable(coaster_tests core/tests/tests.cpp)
-target_link_libraries(coaster_tests PRIVATE coaster_core)
-add_test(NAME core COMMAND coaster_tests)
-add_test(NAME core_persistence COMMAND coaster_tests --persistence)
 
-foreach(suite launch_camelback inherited_port persistence_cancel motion_spline recipe acceleration reference support support_family organic_generation terrain_profile dimensions clearance track_web station structures geometry frame_force terrain convergence drive_profile fvd)
-  add_executable(${suite}_tests core/tests/${suite}_tests.cpp)
-  target_include_directories(${suite}_tests PRIVATE unreal/Source/VibeCoaster/Public)
-  target_link_libraries(${suite}_tests PRIVATE coaster_core)
-  add_test(NAME ${suite} COMMAND ${suite}_tests)
-endforeach()
-set_tests_properties(persistence_cancel PROPERTIES TIMEOUT 600)
-add_test(NAME generation_cancel COMMAND convergence_tests --generation-cancel)
-find_package(Python3 COMPONENTS Interpreter QUIET)
-if(Python3_Interpreter_FOUND)
-  add_test(NAME cli_arguments COMMAND "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/cli_arguments_test.py" "$<TARGET_FILE:coaster_cli>")
-  set_tests_properties(cli_arguments PROPERTIES TIMEOUT 60)
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(coaster_tests core/tests/tests.cpp)
+  target_link_libraries(coaster_tests PRIVATE coaster_core)
+  add_test(NAME core COMMAND coaster_tests)
+  add_test(NAME core_persistence COMMAND coaster_tests --persistence)
+
+  foreach(suite launch_camelback inherited_port persistence_cancel motion_spline recipe acceleration reference support support_family support_system support_fabrication organic_generation terrain_profile dimensions clearance track_web track_profile station structures geometry frame_force terrain convergence drive_profile fvd)
+    add_executable(${suite}_tests core/tests/${suite}_tests.cpp)
+    target_include_directories(${suite}_tests PRIVATE unreal/Source/VibeCoaster/Public)
+    target_link_libraries(${suite}_tests PRIVATE coaster_core)
+    add_test(NAME ${suite} COMMAND ${suite}_tests)
+  endforeach()
+  set_tests_properties(persistence_cancel PROPERTIES TIMEOUT 600)
+  add_test(NAME generation_cancel COMMAND convergence_tests --generation-cancel)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME cli_arguments COMMAND "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/cli_arguments_test.py" "$<TARGET_FILE:coaster_cli>")
+    set_tests_properties(cli_arguments PROPERTIES TIMEOUT 60)
+  endif()
+
+  get_property(core_tests DIRECTORY PROPERTY TESTS)
+  set_tests_properties(${core_tests} PROPERTIES LABELS component)
+  set_tests_properties(core_persistence persistence_cancel reference support
+    support_family organic_generation station structures convergence generation_cancel
+    PROPERTIES LABELS integration)
+  set_tests_properties(organic_generation PROPERTIES LABELS "integration;representative" TIMEOUT 1800)
 endif()
-
-get_property(core_tests DIRECTORY PROPERTY TESTS)
-set_tests_properties(${core_tests} PROPERTIES LABELS component)
-set_tests_properties(core_persistence persistence_cancel reference support
-  support_family organic_generation station structures convergence generation_cancel
-  PROPERTIES LABELS integration)
-set_tests_properties(organic_generation PROPERTIES LABELS "integration;representative" TIMEOUT 1800)
-
-add_executable(coaster_convergence EXCLUDE_FROM_ALL core/src/convergence_main.cpp)
-target_link_libraries(coaster_convergence PRIVATE coaster_core)
-
-# Manual numerical diagnostic; never a replacement for acceptance tests.
-add_executable(angular_recompile_probe EXCLUDE_FROM_ALL core/tests/angular_recompile_probe.cpp)
-target_link_libraries(angular_recompile_probe PRIVATE coaster_core)

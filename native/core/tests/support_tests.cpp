@@ -29,7 +29,16 @@ int main(){try{
     for(size_t i=0;i<d.track.knots.size();++i){auto& a=d.track.knots[i];auto& b=baseline.track.knots[i];exact(a.position,b.position,"Track position unchanged");exact(a.tangent,b.tangent,"Track tangent unchanged");exact(a.curvature,b.curvature,"Track curvature unchanged");exact(a.up,b.up,"Track up unchanged");check(a.bank==b.bank&&a.element==b.element,"Track bank/element unchanged");}
     check(d.simulation.frames.size()==baseline.simulation.frames.size(),"Physics sample count unchanged");for(size_t i=0;i<d.simulation.frames.size();++i){auto& a=d.simulation.frames[i];auto& b=baseline.simulation.frames[i];check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed,"Physics timing/distance/speed unchanged");for(int seat=0;seat<3;++seat)check(a.seats[seat].vertical==b.seats[seat].vertical&&a.seats[seat].lateral==b.seats[seat].lateral&&a.seats[seat].longitudinal==b.seats[seat].longitudinal,"Measured rider forces unchanged");}
     size_t members=0;
-    for(auto& support:d.supports){check(!support.members.empty(),"Every new support explicit");check(validateSupportMembers(support,d.request.terrain).valid(),"Member shape/terrain/connectivity valid");
+    // A support edit invalidates its old acceptance revision. The public edit
+    // path replays all independent checks before a changed graph can be saved.
+    d.supports.front().members.clear();
+    check(regenerateSupports(d,error),"Support-only edit receives fresh complete acceptance: "+error);
+    auto beforeCancel=d;int regenerateCalls=0;
+    check(!regenerateSupports(d,error,[&]{return ++regenerateCalls>100;})&&error=="CANCELLED","Cancelled support-only edit is rejected");
+    for(size_t i=0;i<d.supports.size();++i)sameSupport(d.supports[i],beforeCancel.supports[i]);
+    check(std::any_of(d.supports.begin(),d.supports.end(),[](const Support& s){return std::none_of(s.members.begin(),s.members.end(),[](const SupportMember& m){return m.kind==SupportMemberKind::Footing;});}),"Accepted save/load fixture actually exercises shared-foundation attachments");
+    check(validateSupportLayout(d.supports,d.request.terrain).valid(),"Shared member shape/terrain/connectivity valid");
+    for(auto& support:d.supports){check(!support.members.empty(),"Every new support explicit");
         for(auto& member:support.members){++members;auto mesh=supportMemberMesh(member);
             check(mesh.positions.size()==66&&mesh.indices.size()==192&&mesh.normals.size()==66,"Closed frustum buffer size");Vec3 axis=unit(member.top-member.base);double length=norm(member.top-member.base);
             for(size_t i=0;i<mesh.positions.size();++i){Vec3 delta=mesh.positions[i]-member.base;double z=dot(delta,axis),radial=norm(delta-axis*z),radius=member.radiusBase+(member.radiusTop-member.radiusBase)*std::clamp(z/length,0.,1.);

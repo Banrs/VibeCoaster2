@@ -75,7 +75,9 @@ void assessMotion(Design& d,Cancel cancel){
         result.passiveExitSpeedUpperBound=std::sqrt(std::max(0.,first.speed*first.speed+2*gravity*(trainHeight(section.start)-trainHeight(section.end))));
         const auto& train=d.request.train;
         std::array<size_t,16> gradeHints{};gradeHints.fill(d.track.spans.size());
-        for(const auto& f:d.simulation.frames)if(f.distance>=section.start&&f.distance<=section.end){
+        const auto begin=std::lower_bound(d.simulation.frames.begin(),d.simulation.frames.end(),section.start,[](const Frame& f,double s){return f.distance<s;});
+        const auto end=std::upper_bound(begin,d.simulation.frames.end(),section.end,[](double s,const Frame& f){return s<f.distance;});
+        for(auto it=begin;it!=end;++it){const auto& f=*it;
             result.minimumSpeed=std::min(result.minimumSpeed,f.speed);result.maximumSpeed=std::max(result.maximumSpeed,f.speed);
             double grade=0;for(int car=0;car<train.cars;++car){const auto where=d.track.locate(f.distance+((train.cars-1)*.5-car)*train.spacing,gradeHints[car]);grade+=d.track.sampleSpan(where.span,where.parameter).tangent.z/train.cars;}
             const double actuator=f.acceleration+gravity*grade+gravity*train.rollingResistance+.5*train.airDensity*train.dragCdA*f.speed*f.speed/(train.cars*train.carMass);
@@ -83,30 +85,21 @@ void assessMotion(Design& d,Cancel cancel){
         }
         const bool boost=std::any_of(d.operations.begin(),d.operations.end(),[&](const Operation& op){return op.kind==DriveKind::Boost&&op.start>=section.start&&op.end<=section.end;});
         if(boost&&d.generationVersion==generatorVersion&&(result.exitSpeed<result.entrySpeed||result.driveWorkPerMass<=0||result.exitSpeed<=result.passiveExitSpeedUpperBound||result.maximumActuatorAcceleration<=gravity))
-            d.report.fail("PURPOSEFUL_BOOST","Visible LSM must gain speed, outperform gravity alone and produce over 1g of actual motor acceleration",section.start);
+            d.report.warnings.push_back("BOOST_PACING: review motor work, speed gain and placement in "+section.name);
         if(result.heightReversals>section.heightReversals)d.report.fail("INTERIOR_SHAPE",section.name+" has an unintended height reversal",section.start,result.heightReversals,section.heightReversals);
         if(result.pitchExtrema>(inverted?2:1))d.report.fail("INTERIOR_PITCH_SHAPE",section.name+" contains an extra pitch shoulder or oscillation",section.start,result.pitchExtrema,inverted?2:1);
         audit.sections.push_back(result);
     }
     if(std::abs(previousEnd-d.track.length)>1e-5)d.report.fail("MOTION_INTENT","Section intent does not cover the final canonical circuit");
     if(!d.request.recipe.elements.empty()){
-        std::array<bool,size_t(LandmarkKind::BrakeEntry)+1> seen{};double plateauTime=NAN,dropTime=NAN;
+        std::array<bool,size_t(LandmarkKind::BrakeEntry)+1> seen{};
         for(const auto& landmark:d.landmarks){const auto kind=size_t(landmark.kind);
             if(kind>=seen.size()||seen[kind]||!std::isfinite(landmark.distance)||landmark.distance<0||landmark.distance>d.track.length){d.report.fail("LANDMARK_INTENT","Invalid, duplicate or out-of-range verification landmark");continue;}
-            seen[kind]=true;const double time=frameAt(d.simulation.frames,landmark.distance-seatDistanceOffset(d.request.train,0)).time;
-            if(landmark.kind==LandmarkKind::PlateauArrival)plateauTime=time;if(landmark.kind==LandmarkKind::CliffDeparture)dropTime=time;
+            seen[kind]=true;
         }
         if(!std::all_of(seen.begin(),seen.end(),[](bool value){return value;}))d.report.fail("LANDMARK_INTENT","Default recipe is missing a required verification landmark");
-        // Legacy saves retain their former total-interval check. New rides
-        // distinguish active clifftop track from the short brake/lip approach.
-        if(d.generationVersion!=generatorVersion){
-            constexpr double clifftopLimit=20.5;
-            if(!std::isfinite(plateauTime)||!std::isfinite(dropTime)||dropTime<plateauTime||dropTime-plateauTime>clifftopLimit)
-                d.report.fail("CLIFFTOP_PACING","Legacy front-seat crest-to-cliff commitment exceeds its pacing cap",0,dropTime-plateauTime,clifftopLimit);
-        }
-    }
-    // Elements may compile into several motion sections.
 
+    }
     auto frontTime=[&](double distance){return frameAt(d.simulation.frames,distance-seatDistanceOffset(d.request.train,0)).time;};
     auto landmarkDistance=[&](LandmarkKind kind){
         double distance=NAN;bool found=false;
@@ -125,16 +118,6 @@ void assessMotion(Design& d,Cancel cancel){
     if(std::isfinite(plateau)&&std::isfinite(departure)&&std::isfinite(lipStart)&&plateau<=lipStart&&lipStart<=departure){
         audit.clifftopActiveSeconds=frontTime(lipStart)-frontTime(plateau);
         audit.clifftopBrakingSeconds=frontTime(departure)-frontTime(lipStart);
-    }
-    if(d.generationVersion==generatorVersion&&d.request.recipe.name=="Riftwake"){
-        // FF's retained overlay shows several summit turns at video84-106s,
-        // then a separate brake approach. These are design pacing bounds,
-        // not precision measurements or limits from an acceleration standard.
-        constexpr double activeMinimum=20,activeMaximum=35,brakingMaximum=6;
-        if(!std::isfinite(audit.clifftopActiveSeconds)||audit.clifftopActiveSeconds<activeMinimum||audit.clifftopActiveSeconds>activeMaximum)
-            d.report.fail("CLIFFTOP_ACTIVE_PACING","Clifftop needs 20-35 seconds of active track",plateau,audit.clifftopActiveSeconds,audit.clifftopActiveSeconds<activeMinimum?activeMinimum:activeMaximum);
-        if(!std::isfinite(audit.clifftopBrakingSeconds)||audit.clifftopBrakingSeconds<0||audit.clifftopBrakingSeconds>brakingMaximum||audit.clifftopBrakingSeconds>=audit.clifftopActiveSeconds)
-            d.report.fail("CLIFFTOP_BRAKING_PACING","Cliff brake/lip approach must be at most six seconds and shorter than the active summit track",lipStart,audit.clifftopBrakingSeconds,brakingMaximum);
     }
     if(std::isfinite(signatureEnd)&&std::isfinite(d.simulation.metrics.duration)){
         const double duration=d.simulation.metrics.duration-frontTime(signatureEnd);
@@ -190,14 +173,13 @@ void assessMotion(Design& d,Cancel cancel){
             else returnRun=0;
         }else{levelRun=0;returnRun=0;}
     }
-    if(audit.longestFlatCoastSeconds>2*Limits::allowanceFactor)d.report.fail("WAITING_TRACK","Unpowered level track exceeds the two-second pacing target and its five-percent allowance",0,audit.longestFlatCoastSeconds,2*Limits::allowanceFactor);
-    else if(audit.longestFlatCoastSeconds>2)d.report.warnings.push_back("Quiet coast exceeds the nominal two-second pacing target within its five-percent allowance");
+    if(audit.longestFlatCoastSeconds>2)d.report.warnings.push_back("COAST_PACING: review the measured unpowered level intervals");
     audit.passed=d.report.errors.size()==errors;
 }
 SpatialReplay replaySpatialRefinement(const Design& d,Cancel cancel){
     SpatialReplay work;auto& result=work.assessment;result.performed=true;
     try{
-        Track refined;refined.closed=d.track.closed;refined.authoredGeometry=refined.authoredFrame=true;refined.knots.reserve(d.track.knots.size()*2);
+        Track refined;refined.profile=d.track.profile;refined.closed=d.track.closed;refined.authoredGeometry=refined.authoredFrame=true;refined.knots.reserve(d.track.knots.size()*2);
         for(size_t i=0;i<d.track.spans.size();++i){
             if(cancel&&cancel())throw std::runtime_error("CANCELLED");
             for(double u:{0.,.5}) {

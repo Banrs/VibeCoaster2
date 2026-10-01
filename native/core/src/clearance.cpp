@@ -1,6 +1,7 @@
 #include "coaster/coaster.hpp"
 #include "coaster/track_hardware.hpp"
 #include <stdexcept>
+#include "support_members.hpp"
 
 namespace coaster {
 namespace {
@@ -65,15 +66,27 @@ bool intersectsBox(Vec3 a,Vec3 b,Vec3 lo,Vec3 hi){
     return true;
 }
 }
+std::vector<size_t> ClearanceSweep::nearbyFrames(Vec3 low,Vec3 high) const {
+    if(!finite(low)||!finite(high)||norm(low)>2000000||norm(high)>2000000||low.x>high.x||low.y>high.y||low.z>high.z)throw std::runtime_error("Invalid clearance query");
+    const Key a{int(std::floor(low.x/cellSize)),int(std::floor(low.y/cellSize)),int(std::floor(low.z/cellSize))};
+    const Key b{int(std::floor(high.x/cellSize)),int(std::floor(high.y/cellSize)),int(std::floor(high.z/cellSize))};
+    std::vector<size_t> out;
+    if(double(b.x-a.x+1)*(b.y-a.y+1)*(b.z-a.z+1)>2048){
+        for(const auto& [k,v]:cells)if(k.x>=a.x&&k.x<=b.x&&k.y>=a.y&&k.y<=b.y&&k.z>=a.z&&k.z<=b.z)out.insert(out.end(),v.begin(),v.end());
+    }else for(int x=a.x;x<=b.x;++x)for(int y=a.y;y<=b.y;++y)for(int z=a.z;z<=b.z;++z){
+        auto it=cells.find({x,y,z});if(it!=cells.end())out.insert(out.end(),it->second.begin(),it->second.end());
+    }
+    std::sort(out.begin(),out.end());return out;
+}
 ClearanceSweep buildClearanceSweepVerified(const Track& t,const TrainConfig& train,Cancel cancel){
     if(cancel&&cancel())throw std::runtime_error("CANCELLED");
     if(!std::isfinite(train.seatHeight)||train.seatHeight<0||train.seatHeight>3)throw std::runtime_error("Invalid clearance seat height");
-    ClearanceSweep out;out.top=patronTopHeight(train);out.length=t.length;out.radius=occupiedRadius(train);out.pad=arcCell*.5+angleCell*.5*out.radius+1e-8;
+    ClearanceSweep out;out.profile=t.profile;out.top=patronTopHeight(train);out.length=t.length;out.radius=occupiedRadius(train,t.profile);out.pad=arcCell*.5+angleCell*.5*out.radius+1e-8;
     // Each accepted canonical-u cell has true arc bound <=.04 m and frame
     // angular variation <=.08 rad. From its exact midpoint every body point
     // moves <=.02+.04*occupiedRadius(train); each hardware point moves
-    // <=.02+.04*.9=.056 m. The computed body and .06 hardware pads cover
-    // the complete interval. This
+    // <=.02+.04*hardwareRadius. The computed body and profile hardware pads
+    // cover the complete interval. This
     // uses the actual cached raw frame/bank, with no nlerp rate premise.
     size_t visited=0;
     for(size_t i=0;i<t.spans.size();++i){
@@ -123,14 +136,9 @@ ClearanceSweep buildClearanceSweep(const Track& source,const TrainConfig& train,
     return buildClearanceSweepVerified(source,train,cancel);
 }
 int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel cancel){
-    // Legacy solids retain exactly their saved endpoints and historical radius.
-    // They receive the same corrected sweep checks; no clearance grandfathering.
-    std::vector<SupportMember> legacy;
-    if(support.members.empty()){
-        legacy.push_back({support.base,support.top,supportRadius,supportRadius,SupportMemberKind::Steel,false});
-        if(support.hasAttachment)legacy.push_back({support.top,support.attachment,supportRadius,supportRadius,SupportMemberKind::Steel,true});
-    }
-    const auto& members=support.members.empty()?legacy:support.members;
+    const auto section=trackSection(sweep.trackProfile());
+    const double sectionDepth=section.spineDepth,sectionRadius=section.spineRadius,hardwarePad=section.hardwarePadding();
+    const SupportMembers members(support);
     for(const auto& member:members){
         if(cancel&&cancel())return -2;
         Vec3 a=member.base,b=member.top;double radius=std::max(member.radiusBase,member.radiusTop);
@@ -144,7 +152,7 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
                 if((index&63)==0&&cancel&&cancel())return -2;
                 const auto& f=sweep.samples[index];const auto& p=f.sample;
                 auto local=[&](Vec3 v){v=v-p.position;return Vec3{dot(v,p.tangent),dot(v,p.right),dot(v,p.up)};};
-                const double bottom=-spineDepth-spineRadius;
+                const double bottom=-sectionDepth-sectionRadius;
                 const StationBox combined{p.position+p.up*((bottom+sweep.top)*.5),p.tangent,p.right,p.up,{trainHalfLength,patronHalfWidth,(sweep.top-bottom)*.5},StationRole::Post};
                 if(memberSeparatedFromBox(member,combined,sweep.padding()))continue;
                 Vec3 al=local(a),bl=local(b);double margin=radius+sweep.padding();
@@ -152,19 +160,19 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
                 if(!memberSeparatedFromBox(member,rider,sweep.padding())&&intersectsBox(al,bl,{-trainHalfLength-margin,-patronHalfWidth-margin,-margin},{trainHalfLength+margin,patronHalfWidth+margin,sweep.top+margin}))return int(index);
                 // This box contains every hardware solid below and uses the
                 // larger train pad. A miss cannot reach any detailed web test.
-                if(!intersectsBox(al,bl,{-trainHalfLength-margin,-patronHalfWidth-margin,-spineDepth-spineRadius-margin},
+                if(!intersectsBox(al,bl,{-trainHalfLength-margin,-patronHalfWidth-margin,-sectionDepth-sectionRadius-margin},
                     {trainHalfLength+margin,patronHalfWidth+margin,sweep.top+margin}))continue;
-                // Track hardware has corner radius <.9 m, so midpoint motion is
-                // at most .02+.04*.9=.056 m. Keep the larger train pad above.
-                margin=radius+.06;
+                // The profile reserves midpoint motion for its complete hardware
+                // corner radius. Keep the larger train pad above.
+                margin=radius+hardwarePad;
                 // Webs have no attachment exemption: test the entire member,
                 // including an approved spine-contact endpoint. Euclidean capsule
                 // distance avoids falsely filling the diagonal OBB's corners.
-                for(const auto& web:trackWebsLocal())
-                    if(!memberSeparatedFromBox(member,trackWebWorld(web,p),.06)&&segmentWebDistanceSquared(al,bl,web)<=(margin+1e-9)*(margin+1e-9))return int(index);
+                for(const auto& web:trackWebsLocal(sweep.trackProfile()))
+                    if(!memberSeparatedFromBox(member,trackWebWorld(web,p),hardwarePad)&&segmentWebDistanceSquared(al,bl,web)<=(margin+1e-9)*(margin+1e-9))return int(index);
                 // Saddles are swept as complete solids alongside the diagonal webs.
-                for(const auto& saddle:trackTieSaddlesLocal())
-                    if(!memberSeparatedFromBox(member,trackWebWorld(saddle,p),.06)&&segmentWebDistanceSquared(al,bl,saddle)<=(margin+1e-9)*(margin+1e-9))return int(index);
+                for(const auto& saddle:trackTieSaddlesLocal(sweep.trackProfile()))
+                    if(!memberSeparatedFromBox(member,trackWebWorld(saddle,p),hardwarePad)&&segmentWebDistanceSquared(al,bl,saddle)<=(margin+1e-9)*(margin+1e-9))return int(index);
                 double separation=std::abs(f.distance-support.trackDistance);separation=std::min(separation,sweep.length-separation);
                 Vec3 spineEnd=b;
                 if(member.spineContact&&member.kind==SupportMemberKind::Steel&&norm(b-support.attachment)<1e-5&&separation<2.5)
@@ -174,10 +182,13 @@ int supportCollision(const Support& support,const ClearanceSweep& sweep,Cancel c
                     SupportMember solid=member;solid.top=end;solid.radiusTop=member.radiusBase+(member.radiusTop-member.radiusBase)*norm(end-a)/norm(b-a);
                     const Vec3 centre=(low+high)*.5;
                     const StationBox box{p.position+p.tangent*centre.x+p.right*centre.y+p.up*centre.z,p.tangent,p.right,p.up,(high-low)*.5,StationRole::Post};
-                    if(memberSeparatedFromBox(solid,box,.06))return false;
+                    if(memberSeparatedFromBox(solid,box,hardwarePad))return false;
                     const Vec3 reserve{margin,margin,margin};return intersectsBox(al,local(end),low-reserve,high+reserve);
                 };
-                if(hitsHardware(spineEnd,{-spineRadius,-spineRadius,-spineDepth-spineRadius},{spineRadius,spineRadius,-spineDepth+spineRadius})||
+                if(sweep.trackProfile()==TrackProfile::Exa){
+                    const auto parts=trackHardwareLocal(sweep.trackProfile());
+                    for(size_t i=0;i<4;++i)if(hitsHardware(i==0?spineEnd:b,parts[i].center-parts[i].half,parts[i].center+parts[i].half))return int(index);
+                }else if(hitsHardware(spineEnd,{-sectionRadius,-sectionRadius,-sectionDepth-sectionRadius},{sectionRadius,sectionRadius,-sectionDepth+sectionRadius})||
                    hitsHardware(b,{-.085,-.735,-.085},{.085,-.565,.085})||
                    hitsHardware(b,{-.085,.565,-.085},{.085,.735,.085})||
                    hitsHardware(b,{-.07,-.825,-.27},{.07,.825,-.11}))return int(index);

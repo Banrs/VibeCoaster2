@@ -124,11 +124,24 @@ void AVibeCoasterController::PlayerTick(float DeltaSeconds)
         if (WasInputKeyJustPressed(EKeys::T)) ShowTelemetry = !ShowTelemetry;
         if (WasInputKeyJustPressed(EKeys::F5)) Ride->Save();
         if (WasInputKeyJustPressed(EKeys::F9)) Ride->Load();
-        if (!Menu)
+        if (!Menu && !ShowComparison)
         {
             if (WasInputKeyJustPressed(EKeys::One)) Ride->SetSeat(0);
             if (WasInputKeyJustPressed(EKeys::Two)) Ride->SetSeat(1);
             if (WasInputKeyJustPressed(EKeys::Three)) Ride->SetSeat(2);
+            if (WasInputKeyJustPressed(EKeys::V)) Ride->ToggleView(ECoasterView::ThirdPerson);
+            if (WasInputKeyJustPressed(EKeys::F)) Ride->ToggleView(ECoasterView::Free);
+            if (WasInputKeyJustPressed(EKeys::H)) Ride->ResetInspectionCamera();
+            float MouseX = 0, MouseY = 0;
+            GetInputMouseDelta(MouseX, MouseY);
+            const bool Panning = IsInputKeyDown(EKeys::MiddleMouseButton);
+            if (!Panning && !IsInputKeyDown(EKeys::RightMouseButton)) MouseX = MouseY = 0;
+            const double Wheel = (WasInputKeyJustPressed(EKeys::MouseScrollUp) ? 1. : 0.) - (WasInputKeyJustPressed(EKeys::MouseScrollDown) ? 1. : 0.);
+            const FVector Move((IsInputKeyDown(EKeys::W) ? 1. : 0.) - (IsInputKeyDown(EKeys::S) ? 1. : 0.),
+                (IsInputKeyDown(EKeys::D) ? 1. : 0.) - (IsInputKeyDown(EKeys::A) ? 1. : 0.),
+                (IsInputKeyDown(EKeys::E) ? 1. : 0.) - (IsInputKeyDown(EKeys::Q) ? 1. : 0.));
+            Ride->CameraInput(FVector2D(MouseX, MouseY), Panning, Wheel, Move,
+                IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift), DeltaSeconds);
         }
     }
     if (!Menu || ShowComparison) return;
@@ -167,6 +180,7 @@ FString AVibeCoasterController::RowText(int32 Row) const
 void AVibeCoasterHUD::DrawHUD()
 {
     Super::DrawHUD();
+    if (!bShowHUD) return;
     auto* PC = Cast<AVibeCoasterController>(GetOwningPlayerController()); if (!PC || !Canvas || !GEngine) return;
     const float Scale = FMath::Clamp(Canvas->SizeY / 900.f, .65f, 1.35f);
     const float X = 24 * Scale, Width = FMath::Min(850 * Scale, Canvas->SizeX - X * 2);
@@ -255,18 +269,20 @@ void AVibeCoasterHUD::DrawHUD()
         else if (std::isfinite(PC->Settings.targets.referenceExposure) && !PC->Settings.targets.referenceId.empty()) Line(TEXT("Optional external comparison metadata configured. C opens comparison."), Amber);
         if (!PC->ReferenceError.IsEmpty()) Line(PC->ReferenceError, Amber);
         Line(TEXT("Tab hides setup  |  Esc cancels current generation/load"));
-        Line(TEXT("Space pause/ride  |  R restart  |  1/2/3 POV when setup hidden"));
+        Line(TEXT("Space pause/ride | R restart | 1/2/3 POV | V third person | F free view"));
         Line(TEXT("C comparison  |  M overview  |  T telemetry  |  F5 save  |  F9 load"));
         if (!PC->InputError.IsEmpty()) Line(PC->InputError, Amber);
         Y = 590 * Scale;
     }
     else
     {
-        DrawRect(FLinearColor(.012f, .025f, .044f, .75f), X, 8 * Scale, Width, 78 * Scale);
-        const FString View = PC->Ride && PC->Ride->IsOverview() ? TEXT("Overview") : PC->Ride && PC->Ride->Seat() == 1 ? TEXT("Middle POV") : PC->Ride && PC->Ride->Seat() == 2 ? TEXT("Rear POV") : TEXT("Front POV");
+        DrawRect(FLinearColor(.012f, .025f, .044f, .75f), X, 8 * Scale, Width, 101 * Scale);
+        const ECoasterView Mode = PC->Ride ? PC->Ride->View() : ECoasterView::Rider;
+        const FString View = Mode == ECoasterView::Overview ? TEXT("Overview") : Mode == ECoasterView::ThirdPerson ? TEXT("Third person") : Mode == ECoasterView::Free ? TEXT("Free view") : PC->Ride && PC->Ride->Seat() == 1 ? TEXT("Middle POV") : PC->Ride && PC->Ride->Seat() == 2 ? TEXT("Rear POV") : TEXT("Front POV");
         Line((PC->Ride && PC->Ride->HasRide() ? View + (PC->Ride->IsPaused() ? TEXT("  /  paused") : TEXT("  /  riding")) : TEXT("No accepted ride")) + TEXT("  |  ") + VibeCoasterAppVersion, Accent);
-        Line(TEXT("Tab setup  |  C comparison  |  Space pause  |  R restart  |  1/2/3 POV  |  M overview"));
-        Y = 102 * Scale;
+        Line(TEXT("Tab setup | C comparison | Space pause | R restart | V third person | F free | M overview"));
+        if (PC->Ride) Line(PC->Ride->CameraControls());
+        Y = 125 * Scale;
     }
     if (PC->Ride)
     {

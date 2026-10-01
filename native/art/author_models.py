@@ -1,8 +1,7 @@
 """V3 ride kit, authored through Blender MCP in metres at the runtime pivots.
 
 X is forward and Z is up. Every module stays inside its existing conservative
-collision solid. The open roof, hollow track web and high-speed lead/passenger train are
-deliberate sightline choices; no transparent windshield is needed.
+collision solid. Train art is absent pending a new design; this kit contains station and hardware only.
 """
 import bpy
 import bmesh
@@ -35,7 +34,6 @@ pearl = material("VC2_Pearl", (0.57, 0.64, 0.65), 0.4, 0.27)
 graphite = material("VC2_Graphite", (0.022, 0.031, 0.035), 0.45, 0.42)
 copper = material("VC2_Copper", (0.83, 0.265, 0.045), 0.46, 0.34)
 steel = material("VC2_Steel", (0.31, 0.38, 0.41), 0.78, 0.3)
-padding = material("VC2_Padding", (0.016, 0.024, 0.029), 0.0, 0.82)
 concrete = material("VC2_Concrete", (0.38, 0.395, 0.36), 0.0, 0.88)
 light = material("VC2_Light", (0.59, 0.88, 0.93), 0.0, 0.29)
 glass = material("VC2_Glass", (0.43, 0.69, 0.76), 0.0, 0.08)
@@ -109,28 +107,6 @@ def loft(name, sections, mat):
     return obj
 
 
-def bent_tube(name, points, radius, mat):
-    bpy.ops.object.select_all(action="DESELECT")
-    curve = bpy.data.curves.new(name,"CURVE")
-    curve.dimensions = "3D"
-    curve.resolution_u = 2
-    curve.bevel_depth = radius
-    curve.bevel_resolution = 1
-    curve.resolution_u = 6
-    spline = curve.splines.new("BEZIER")
-    spline.bezier_points.add(len(points)-1)
-    for point, co in zip(spline.bezier_points,points):
-        point.co=co
-        point.handle_left_type="AUTO"
-        point.handle_right_type="AUTO"
-    obj=bpy.data.objects.new(name,curve)
-    scene.collection.objects.link(obj)
-    bpy.context.view_layer.objects.active=obj
-    obj.select_set(True)
-    bpy.ops.object.convert(target="MESH")
-    obj=bpy.context.object
-    obj.data.materials.append(mat)
-    return obj
 
 
 assets = []
@@ -156,8 +132,6 @@ def collect(name, start):
             [round(max(p[i] for p in coordinates),8) for i in range(3)]]
     entry={"name":name,"boundsMetres":bounds,"triangles":len(obj.data.polygons),
            "vertices":len(coordinates),"materials":[mat.name for mat in obj.data.materials]}
-    if name == "SM_TrainCoupler":
-        entry["runtime"] = False  # Frozen train concept; runtime coupling is out of scope.
     assets.append(entry)
     asset_objects.append(obj)
     collection=bpy.data.collections.new(name)
@@ -233,32 +207,12 @@ def panel(name, rows, mat, thickness=.035, smooth=True, depth_axis=(0,0,1)):
     return obj
 
 
-def smooth_sections(keys, steps=5):
-    result=[]
-    for i in range(len(keys)-1):
-        a=keys[max(0,i-1)]
-        b=keys[i]
-        c=keys[i+1]
-        d=keys[min(len(keys)-1,i+2)]
-        for j in range(steps):
-            t=j/steps
-            values=[b[0]+(c[0]-b[0])*t]
-            for k in range(1,len(b)):
-                value=.5*((2*b[k])+(-a[k]+c[k])*t+(2*a[k]-5*b[k]+4*c[k]-d[k])*t*t+(-a[k]+3*b[k]-3*c[k]+d[k])*t*t*t)
-                values.append(max(min(b[k],c[k]),min(max(b[k],c[k]),value)))
-            result.append(values)
-    result.append(keys[-1])
-    return result
 
 
-vehicles=author_train_models(box,tube,collect,{"shell":petrol,"ceramic":pearl,
-    "carbon":graphite,"metal":steel,"accent":copper,"cushion":padding,"glass":glass,"light":light})
-train=vehicles["lead"]
 author_track_hardware(box,tube,collect,{"shell":petrol,"edge":pearl,"dark":graphite,"conductor":copper,"steel":steel})
 
 start=set(scene.objects)
-# Thin, swept canopy blades continue the car's split-nose language. The open
-# central slot keeps sky visible; longitudinal module edges retain exact seams.
+# The central canopy slot keeps sky visible; module edges retain exact seams.
 for side in (-1,1):
     rows=[]
     for y,z in ((1.35,.16),(1.65,.18),(2.40,.15),(3.50,.10),(4.65,.045),(5.65,-.015)):
@@ -308,6 +262,6 @@ for obj in asset_objects:
     obj.select_set(True)
 for obj in asset_objects:
     obj.hide_set(obj.name != "SM_StationRouteRoof")
-bpy.ops.wm.save_as_mainfile(filepath=EXPORT_ROOT+"/VibeCoaster-V3.blend",compress=True)
+bpy.ops.wm.save_as_mainfile(filepath=EXPORT_ROOT+"/Station-Hardware-V3.blend",compress=True)
 print("ASSET_MANIFEST="+json.dumps({"createdThrough":"Blender MCP execute_blender_code",
     "blender":bpy.app.version_string,"units":"metres","assets":assets}))

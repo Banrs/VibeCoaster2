@@ -1,0 +1,166 @@
+{
+  "date": "2026-10-01",
+  "status": "Buggy local snapshot for diagnosis; no design approval",
+  "artifacts": [
+    {
+      "path": "default3.vcdesign.gz",
+      "source": "out/riftwake-completion-07.vcdesign",
+      "bytes": 6761210,
+      "sha256": "c78b64f60d6c5b390dcafa90323ee4d4b93c8b4b7ff56771caeeadb81384bbb8",
+      "uncompressedBytes": 16028026,
+      "uncompressedSha256": "d48ed31cf62621405ee43a859c3e6e1ea468e405b383217fc7fb3e84895a0cf7"
+    },
+    {
+      "path": "support-adapted.vcdesign.gz",
+      "source": "out/support-adapted/final/regenerated-supports.vcdesign",
+      "bytes": 6765477,
+      "sha256": "e9f2cdaa957dba20b9163ef04ae6f8625321dd4ae09b53b9f7692f918ce08cd2",
+      "uncompressedBytes": 16077271,
+      "uncompressedSha256": "c0ff688a014f45a4d88337fc0c01a82a0a70ba1cc692a46edb1d96d4ae624ab7"
+    },
+    {
+      "path": "support-review-receipt.json",
+      "source": "out/support-adapted/review-receipt.json",
+      "bytes": 3281,
+      "sha256": "016c9cd690156019f0c1dce5f0b1eac75e39719e4487ffa48c00afa68dd7c052"
+    },
+    {
+      "path": "support-tests-2026-09-30.log",
+      "source": "out/support-adapted/tests.log",
+      "bytes": 1094,
+      "sha256": "f20edee4adce3ad9a0cd2ad5f613c75dc5bc0c5d3378baad60062b9dcb8f35b6"
+    },
+    {
+      "path": "train-verification.json",
+      "source": "out/train-model/verification.json",
+      "bytes": 4423,
+      "sha256": "53886093f3e096893e8c946a89e9c595b253f12c9afc7bf7f9c27facc0c87e19"
+    },
+    {
+      "path": "retained-package-selector.json",
+      "source": "dist/current.json",
+      "bytes": 626,
+      "sha256": "faf05a07b302890202b7543206b026bbf5ac4d8ea4dba81e0f43dc26fa5b900a"
+    },
+    {
+      "path": "supports/twisted-drop-oblique.png",
+      "source": "out/support-adapted/ride/twisted-drop-oblique.png",
+      "bytes": 1180642,
+      "sha256": "9e8ea39c63063cbeb6d2acab9956566b735e4701fb2275820a2a501416729916"
+    },
+    {
+      "path": "supports/loop-oblique.png",
+      "source": "out/support-adapted/ride/loop-oblique.png",
+      "bytes": 1201957,
+      "sha256": "00ade8b374c0defc528fe7dba7ff283fe599624cd592fe7885fe646ec6815984"
+    },
+    {
+      "path": "supports/immelmann-oblique.png",
+      "source": "out/support-adapted/ride/immelmann-oblique.png",
+      "bytes": 1204799,
+      "sha256": "96fbd7b7a7ab8e3b9a166327a613e8c8cfc48b99de3b80be2aeabe70c18b7790"
+    },
+    {
+      "path": "supports/camelback-ground.png",
+      "source": "out/support-adapted/ride/camelback-ground.png",
+      "bytes": 1125803,
+      "sha256": "2328b8255ffeb51e76e3e6e3eba8889b4279477b5a4ba4ea3451850f39f1a839"
+    },
+    {
+      "path": "supports/cliff-wall-ground.png",
+      "source": "out/support-adapted/ride/cliff-wall-ground.png",
+      "bytes": 1035408,
+      "sha256": "b9895b8b2abeb14e3c9d3ab687a2fe11c057470b714e6829944bf98569af054e"
+    },
+    {
+      "path": "train/hero.png",
+      "source": "out/train-model/hero.png",
+      "bytes": 2562670,
+      "sha256": "ce67143261c094c2564f1cd79ea78f8665c35a0707106825bed5023429c623bf"
+    },
+    {
+      "path": "train/clamp.png",
+      "source": "out/train-model/clamp.png",
+      "bytes": 2452871,
+      "sha256": "765e1f57f88f17c4c6e38c269f0affd9f52c42ff33bbd2145221051ac295407b"
+    },
+    {
+      "path": "train/rider.png",
+      "source": "out/train-model/rider.png",
+      "bytes": 2020198,
+      "sha256": "980720b35d707eeda50afb0735b6ef85f9959fa9262fe5ff2168f379cfc89b5f"
+    },
+    {
+      "path": "runtime/00-twisted-drop-ground.png",
+      "source": "out/support-adapted/runtime-verified/00-twisted-drop-ground.png",
+      "bytes": 3069687,
+      "sha256": "6e3c65b4f9e470ca349bebaabb892b0c1f118e3abe6d8d0c8ee297c2b52233c0"
+    },
+    {
+      "path": "runtime/04-loop-ground.png",
+      "source": "out/support-adapted/runtime-verified/04-loop-ground.png",
+      "bytes": 3595306,
+      "sha256": "a24e180c0426526334301a0f38eebb7db3f4254d84a6d1c58754d3c1d097c1ef"
+    },
+    {
+      "path": "default3-report.json",
+      "source": "out/push-current-20261001/default3-report.json",
+      "bytes": 75703,
+      "sha256": "db446c667989976eaecb27ba60659aee31b6fee2f9b2c384b5910f0d56b4cc76"
+    },
+    {
+      "path": "support-adapted-report.json",
+      "source": "out/push-current-20261001/support-adapted-report.json",
+      "bytes": 75712,
+      "sha256": "2cac11da67d973c5495c623c175c87baa2f875b8d3cbd19a1ed751c5b7c321f2"
+    },
+    {
+      "path": "default3-motion.svg",
+      "source": "out/online-diagnosis/default3-motion.svg",
+      "bytes": 1983763,
+      "sha256": "1b37ec71f64c8736ca77cee50142cec0dde139dedbccbe3bf8483a2e07cd30b5"
+    },
+    {
+      "path": "default3-motion-middle.svg",
+      "source": "out/online-diagnosis/default3-motion-middle.svg",
+      "bytes": 1983760,
+      "sha256": "c9eb65460555fa3aaed7cf48399f9abc126d957eb6aca56e95433891bc5684d5"
+    },
+    {
+      "path": "default3-motion-rear.svg",
+      "source": "out/online-diagnosis/default3-motion-rear.svg",
+      "bytes": 1983784,
+      "sha256": "194114224330e02f37f8c3b56e12d9ee22654e078698b5e75f8d6e589e7089e5"
+    },
+    {
+      "path": "push-native-checks.log",
+      "source": "out/push-current-20261001/native-checks.log",
+      "bytes": 1364,
+      "sha256": "1f42ff1a5abb126f22b2a4abff9705c653725fb354a9bb9f49b3bfa5d163c814"
+    }
+  ],
+  "preservedLocalIdentities": [
+    {
+      "path": "out/riftwake-completion-07.vcdesign",
+      "sha256": "d48ed31cf62621405ee43a859c3e6e1ea468e405b383217fc7fb3e84895a0cf7"
+    },
+    {
+      "path": "dist/current.json",
+      "sha256": "faf05a07b302890202b7543206b026bbf5ac4d8ea4dba81e0f43dc26fa5b900a"
+    },
+    {
+      "path": "Play VibeCoaster2.lnk",
+      "sha256": "0a1e3a1a939e96aca0b721b5bb19e8f23c26677c24bc7a49d21ba148c9833eb3"
+    }
+  ],
+  "pushVerification": {
+    "nativeBuild": "up to date; nine affected test targets and CLI checked",
+    "focusedTests": "9/9 passed",
+    "testSeconds": 180.56,
+    "savedDesigns": "default.3 and adapted-support snapshots freshly accepted",
+    "pythonSyntaxFiles": 38,
+    "fullSuiteRerun": false,
+    "unrealRebuiltForPush": false,
+    "bugsResolved": false
+  }
+}

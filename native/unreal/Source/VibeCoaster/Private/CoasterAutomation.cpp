@@ -459,12 +459,8 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
     };
     // Evaluated Blender MCP source bounds at canonical runtime pivots.
     // These are measured source dimensions, independently checked against
-    // imported buffers; train and hardware containment remain guarded below.
+    // imported buffers; hardware containment remains guarded below.
     const TArray<FAssetContract> Contracts = {
-        {TEXT("SM_LeadCar"), FVector(-127.5, -88, -27.097765), FVector(126.5, 88, 162.5),
-            {TEXT("VC2_Padding"), TEXT("VC2_Steel"), TEXT("VC2_Graphite"), TEXT("VC2_Petrol"), TEXT("VC2_Light"), TEXT("VC2_Pearl"), TEXT("VC2_Copper"), TEXT("VC2_Glass")}},
-        {TEXT("SM_TrainCar"), FVector(-127.5, -88, -27.097765), FVector(126.5, 88, 162.5),
-            {TEXT("VC2_Padding"), TEXT("VC2_Steel"), TEXT("VC2_Graphite"), TEXT("VC2_Petrol"), TEXT("VC2_Light"), TEXT("VC2_Pearl"), TEXT("VC2_Copper"), TEXT("VC2_Glass")}},
         {TEXT("SM_TrackTieWeb"), FVector(-5.500003, -66.500002, -26.573604), FVector(5.500003, 66.500002, 10.5),
             {TEXT("VC2_Petrol"), TEXT("VC2_Pearl"), TEXT("VC2_Graphite"), TEXT("VC2_Steel"), TEXT("VC2_Copper")}},
         {TEXT("SM_LSMStator"), FVector(-47.999999, -48.249999, -50), FVector(47.999999, 48.249999, 50),
@@ -532,7 +528,7 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
         TestTrue(Label + TEXT(" preserves distinct authored material roles without a default-material fallback"), MaterialContract && Found.Num() == Contract.MaterialNames.Num());
         FBox VertexBounds(ForceInit);
         int64 VertexCount = 0, TriangleCount = 0;
-        bool GeometryValid = true, TrainEnvelopeFit = true, TieAssemblyFit = true;
+        bool GeometryValid = true, TieAssemblyFit = true;
         // The temporary flag permits reading resident buffers; the asset is not saved.
         const bool PreviousCPUAccess = Mesh->bAllowCPUAccess;
         Mesh->bAllowCPUAccess = true;
@@ -579,11 +575,6 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
                 const bool Finite = FMath::IsFinite(P.X) && FMath::IsFinite(P.Y) && FMath::IsFinite(P.Z);
                 GeometryValid &= Finite;
                 if (Finite) VertexBounds += P;
-                if (Label == TEXT("SM_TrainCar") || Label == TEXT("SM_LeadCar"))
-                    TrainEnvelopeFit &= Finite && std::abs(P.X) <= 100 * coaster::trainHalfLength + ToleranceCm &&
-                        std::abs(P.Y) <= 100 * coaster::patronHalfWidth + ToleranceCm &&
-                        P.Z >= 100 * coaster::trainEnvelopeBottom - ToleranceCm &&
-                        P.Z <= 100 * coaster::patronTopHeight(coaster::TrainConfig{}) + ToleranceCm;
             }
         }
         Mesh->bAllowCPUAccess = PreviousCPUAccess;
@@ -593,12 +584,6 @@ bool FCoasterImportedArtTest::RunTest(const FString& Parameters)
             VertexBounds.Max.Equals(AssetBounds.Max, ToleranceCm));
         if (Label == TEXT("SM_TrackTieWeb"))
             TestTrue(TEXT("Every imported tie/web triangle is contained in one canonical hardware solid at the unchanged tie pivot"), TieAssemblyFit);
-        if (Label == TEXT("SM_TrainCar") || Label == TEXT("SM_LeadCar"))
-        {
-            TestTrue(TEXT("All imported train vertices fit the unchanged occupied clearance envelope"), TrainEnvelopeFit);
-            TestTrue(TEXT("Train origin remains at the rail midpoint with below-rail wheel retention and raised seating"),
-                VertexBounds.Min.Z < 0 && VertexBounds.Max.Z > 150 && VertexBounds.GetCenter().Z > 0);
-        }
     }
     return true;
 }

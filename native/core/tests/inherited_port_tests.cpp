@@ -3,7 +3,6 @@
 #include "../src/authoring.hpp"
 #include "coaster/clearance.hpp"
 #include <iostream>
-#include <iomanip>
 #include <stdexcept>
 using namespace coaster;
 namespace {
@@ -150,36 +149,9 @@ void loopPlaneYaw(const FvdHillResult& loop,double entryYaw,double requestedYaw)
     std::cout<<"LOOP_PLANE_YAW requested="<<requestedYaw<<" planeChange="<<planeYaw-entryYaw<<" integratedOmegaZ="<<integral
         <<" minimumSignedOmegaZ="<<minimumSignedOmega<<" maximumAbsOmegaZ="<<maximumOmega<<" controls="<<loop.authoring.controls.size()<<'\n';
 }
-void probeWave(const char* label,FvdWaveRequest request){
-    FvdRequest initial;initial.position={};initial.speed=request.entrySpeed;
-    initial.forward={std::cos(request.entryPitch),0,std::sin(request.entryPitch)};
-    initial.up={-initial.forward.z,0,initial.forward.x};
-    initial.rollingAcceleration=request.rollingAcceleration;initial.dragAccelerationCoefficient=request.dragAccelerationCoefficient;
-    const double normal=request.entryNormalG==0?std::cos(request.entryPitch):request.entryNormalG;
-    initial.controls={{0,normal,0,0},{.02,normal,0,0}};
-    const auto portSource=designFvdSection(initial);good(portSource);
-    const auto isolated=designFvdWave(request);
-    request.entry=makeFvdEntry(portSource.track.knots.front(),request.entrySpeed,request.rollingAcceleration,request.dragAccelerationCoefficient);
-    const auto inherited=designFvdWave(request);
-    for(const auto& candidate:std::array<std::pair<const char*,const FvdHillResult*>,2>{{{"legacy",&isolated},{"inherited",&inherited}}}){
-        const auto& result=candidate.second->section;
-        std::cout<<"WAVE_PROBE "<<label<<" path="<<candidate.first<<" speed="<<request.entrySpeed<<" pitch="<<request.entryPitch
-            <<" normal="<<normal<<" rise="<<request.height<<" exitHeight="<<request.exitHeight<<" passed="<<(result.report.valid()&&result.assessment.passed)<<'\n';
-        if(!result.samples.empty()){const auto& end=result.samples.back();std::cout<<" endpoint="<<end.position.x<<','<<end.position.y<<','<<end.position.z<<" duration="<<end.time<<'\n';}
-        for(const auto& error:result.report.errors)std::cout<<error.code<<": "<<error.message<<'\n';
-    }
-}
-}
-int main(int argc,char** argv){try{
-    if(argc==2&&std::string(argv[1])=="--wave-probe"){
-        std::cout<<std::setprecision(12)<<"Diagnostic solver comparisons; failure is a bounded-family solve result, not proof of physical impossibility.\n";
-        FvdWaveRequest request;request.rollingAcceleration=gravity*.004;request.dragAccelerationCoefficient=.0002041666666667;
-        probeWave("original-pose",request);request.entryPitch=0;probeWave("level-entry-same-intent",request);
-        request.entrySpeed=72.9563;request.entryPitch=.02;request.entryNormalG=1.9;request.entryHoldSeconds=1.8;
-        request.height=90;request.exitHeight=10;request.bankAngle=73*pi/180;request.exitNormalG=3.5;
-        probeWave("rounded-measured-chain-port",request);return 0;
-    }
 
+}
+int main(){try{
     // Independent banked-circle jets: constant speed, constant load, zero
     // transported tangent twist. No authoring replay generates this oracle.
     const double radius=100,speed=20,bank=std::atan(speed*speed/(radius*gravity));
@@ -263,9 +235,6 @@ int main(int argc,char** argv){try{
     check(!liveLoop.section.report.valid()&&liveLoop.section.report.errors.front().code=="FVD_LOOP_ENTRY_FAMILY",
         "A nonplanar inherited loop entry rejects explicitly instead of resetting live lateral/twist jets");
     FvdWaveRequest wave;wave.rollingAcceleration=prefix.rollingAcceleration;wave.dragAccelerationCoefficient=prefix.dragAccelerationCoefficient;
-    // Match the actual isolated fixture's -15-degree entry, rather than
-    // silently changing it to a level port while retaining its 75 m rise and
-    // -11 m exit constraints. --wave-probe records that separate level case.
     auto wavePort=neutral;wavePort.tangent={std::cos(wave.entryPitch),0,std::sin(wave.entryPitch)};
     wavePort.up={-wavePort.tangent.z,0,wavePort.tangent.x};wavePort=located(wavePort,{120,-80,35},.37);
     wave.entry=makeFvdEntry(wavePort,wave.entrySpeed,wave.rollingAcceleration,wave.dragAccelerationCoefficient);

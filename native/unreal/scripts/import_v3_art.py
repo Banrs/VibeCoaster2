@@ -10,7 +10,7 @@ import unreal
 source = Path(__file__).resolve().parents[2] / "art" / "exports"
 manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
 required_runtime_assets = {
-    "SM_LeadCar", "SM_TrainCar", "SM_TrackTieWeb", "SM_LSMStator", "SM_BrakeFin",
+    "SM_TrackTieWeb", "SM_LSMStator", "SM_BrakeFin",
     "SM_StationPlatformPanel", "SM_StationPlatformEndPanel",
     "SM_StationRoofPanel", "SM_StationPost",
     "SM_StationQueueDeck", "SM_StationRouteRoof", "SM_StationMergeDeck",
@@ -33,7 +33,6 @@ palette = {
     "VC2_Graphite": ((.022,.031,.035),.45,.42),
     "VC2_Copper": ((.83,.265,.045),.46,.34),
     "VC2_Steel": ((.31,.38,.41),.78,.3),
-    "VC2_Padding": ((.016,.024,.029),0,.82),
     "VC2_Concrete": ((.38,.395,.36),0,.88),
     "VC2_Light": ((.59,.88,.93),0,.29),
     "VC2_Glass": ((.43,.69,.76),0,.08),

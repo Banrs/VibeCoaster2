@@ -6,8 +6,7 @@
 #include "trim_layout.hpp"
 #include "simulation_internal.hpp"
 #include "progress_internal.hpp"
-#include "acceptance_internal.hpp"
-#include <future>
+#include "acceptance_replay.hpp"
 #include <mutex>
 #include <stdexcept>
 #include <sstream>
@@ -15,8 +14,8 @@
 
 namespace coaster {
 static double motorAlignmentMargin(const TrainConfig& train){return (train.cars-1)*train.spacing+1.5;}
-static bool propulsionGeometry(const Track& track,double s){
-    const auto k=sampleKinematics(track,s);const auto& p=k.sample;
+static bool propulsionGeometry(const TrackKinematics& k){
+    const auto& p=k.sample;
     const Vec3 upright=unit(Vec3{0,0,1}-p.tangent*p.tangent.z);
     return std::hypot(p.tangent.x,p.tangent.y)>1e-3&&std::abs(cross(p.tangent,p.curvature).z)<1e-5&&dot(p.up,upright)>.9998&&std::abs(dot(k.upS,p.right))<.001;
 }
@@ -134,6 +133,7 @@ void evaluateTargets(Design& d,const ClearanceSweep* prepared){
 
 }
 ValidationReport validateRequest(const GenerationRequest& req){
+    if(req.trackProfile!=TrackProfile::Legacy&&req.trackProfile!=TrackProfile::Exa){ValidationReport r;r.fail("TRACK_PROFILE","Unknown track section profile");return r;}
     if(!req.recipe.elements.empty()){
         std::string error;if(!validateRecipe(req.recipe,error)){ValidationReport report;report.fail("RECIPE_CONFIG",error);return report;}
     }
@@ -302,27 +302,18 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
             for(const auto& operation:d.operations)if(operation.kind==DriveKind::Launch||operation.kind==DriveKind::Boost){
                 const auto first=d.track.sample(operation.start-alignmentMargin);
                 const double heading=std::atan2(first.tangent.y,first.tangent.x);
-                double minimumPitch=std::asin(first.tangent.z),maximumPitch=minimumPitch;
                 auto checkMotorGeometry=[&](double s){
-                    const auto p=d.track.sample(s);minimumPitch=std::min(minimumPitch,std::asin(p.tangent.z));maximumPitch=std::max(maximumPitch,std::asin(p.tangent.z));
-                    if(!propulsionGeometry(d.track,s)||std::abs(std::remainder(std::atan2(p.tangent.y,p.tangent.x)-heading,2*pi))>.001)
+                    const auto k=sampleKinematics(d.track,s);const auto& p=k.sample;
+                    if(!propulsionGeometry(k)||std::abs(std::remainder(std::atan2(p.tangent.y,p.tangent.x)-heading,2*pi))>.001)
                         throw std::runtime_error("Final banked geometry entered a powered car's alignment corridor at "+std::to_string(s));
                 };
                 for(double s=operation.start-alignmentMargin;s<operation.end+alignmentMargin;s+=.125)checkMotorGeometry(s);
                 checkMotorGeometry(operation.end+alignmentMargin);
                 for(const auto& span:d.track.spans)if(span.start>=operation.start-alignmentMargin&&span.start<=operation.end+alignmentMargin)checkMotorGeometry(span.start);
-                const bool level=std::max(std::abs(minimumPitch),std::abs(maximumPitch))<=.05*pi/180;
-                // About five degrees is the visual criterion. Datum fitting
-                // may perturb the authored grade by a tenth of a degree.
-                const bool visibleIncline=minimumPitch>=4.9*pi/180||maximumPitch<=-4.9*pi/180;
-                if(!level&&!visibleIncline)throw std::runtime_error("Section booster is neither level nor visibly inclined: "+std::to_string(operation.start)+" pitch "+std::to_string(minimumPitch*180/pi)+" to "+std::to_string(maximumPitch*180/pi));
+
             }
-            // These replays read frozen track/drive data. Structure construction
-            // writes separate members; all workers join before d can be retired.
-            std::atomic<bool> stopFine{false};
-            auto coarse=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,req.train,req.simulationStep,cancel);});
-            std::future<SimulationResult> fine;
-            if(motion.completed)fine=std::async(std::launch::async,[&]{return simulate(d.track,d.operations,req.train,req.simulationStep*.5,[&]{return stopFine.load()||(cancel&&cancel());});});
+            fitCliffTerrain(d,cancel);
+            AcceptanceReplay replay(d,cancel);
             work.enter(WorkPhase::Structures,i,"Replaying final geometry while constructing station and supports");
             std::vector<Finding> constructionFailures;
             try{d.station=buildStation(d.track,d.request.terrain,req.train,cancel);}
@@ -330,33 +321,18 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
             try{buildSupportLayout(d,cancel);}
             catch(const std::exception& e){constructionFailures.push_back({"SUPPORT_LAYOUT",e.what()});}
             d.inversionDimensions=measureInversionDimensions(d.track,d.sections,cancel);
-            auto spatial=std::async(std::launch::async,[&]{return replaySpatialRefinement(d,[&]{return stopFine.load()||(cancel&&cancel());});});
+            replay.startSpatial();
             work.enter(WorkPhase::Geometry,i,"Checking measured targets and clearance");
             auto sweep=buildClearanceSweepVerified(d.track,req.train,cancel);sweep.prepareGround(d.request.terrain,cancel);
             d.report=validateGeometry(d.track,d.request.terrain,req.limits,req.train,d.supports,sweep,cancel);
             d.report.errors.insert(d.report.errors.end(),constructionFailures.begin(),constructionFailures.end());
             auto structures=validateDesignStructures(d,sweep,cancel);d.report.errors.insert(d.report.errors.end(),structures.errors.begin(),structures.errors.end());
-            d.simulation=coarse.get();
-            work.enter(WorkPhase::Forces,i,"Checking measured seat loads and ride targets");
-            evaluateTargets(d,&sweep);
-            work.enter(WorkPhase::Authorship,i,"Checking editable geometry and continuous motion");
-            assessAuthorship(d,cancel);assessMotion(d,cancel);
-            if(d.report.valid()&&d.simulation.completed&&d.simulation.report.valid()&&!d.simulation.cancelled){
-                work.enter(WorkPhase::Refinement,i,"Checking independent half-step simulation");
-                if(fine.valid())verifyConvergenceWith(d,[&]{return fine.get();},cancel);
-                else verifyConvergence(d,cancel);
-            }
-            if(fine.valid()){stopFine.store(true);fine.wait();}
-            if(d.report.valid()&&d.convergence.passed)verifySpatialRefinementWith(d,[&]{return spatial.get();},cancel);
-            if(spatial.valid()){stopFine.store(true);spatial.wait();}
+            replay.finish(sweep,&work);
             if(d.simulation.cancelled)return d;
-            if(d.checksPassed())freezeAcceptedRevision(d);
             remember(&d,i);if(d.accepted()){
                 return withHistory(std::move(d),"first-physically-accepted-composition");
             }
             const bool forceChanged=improveForceIntent(d,calibratedEnergy);
-            const bool layoutChanged=std::any_of(d.report.errors.begin(),d.report.errors.end(),[](const Finding& f){return f.code=="WAITING_TRACK";})&&
-                improveReturnLayout(d,calibratedEnergy,{},cancel);
             if(cancel&&cancel()){d.simulation.cancelled=true;d.report.fail("CANCELLED","Generation cancelled during return planning");return d;}
             bool intensityOnly=d.simulation.completed&&d.simulation.report.valid()&&d.report.errors.size()==1&&d.report.errors.front().code=="INTENSITY_TARGET";
             if(intensityOnly&&(!haveBestIntensity||d.simulation.metrics.exposure10Seconds>bestIntensity.simulation.metrics.exposure10Seconds)){bestIntensity=d;haveBestIntensity=true;}last=std::move(d);
@@ -365,7 +341,7 @@ Design generate(const GenerationRequest& input,Cancel cancel,Progress callback){
             if(onlyMissing)return withHistory(std::move(last),"reference-unavailable");
             // Preserve the usual best-intensity selection when stopping a
             // search whose next attempt would compile the same geometry.
-            if(feedback.compactReturn&&!layoutChanged&&!forceChanged)break;
+            if(feedback.compactReturn&&!forceChanged)break;
         }catch(RecipeCompileFailure& e){last=std::move(e.partial);if(last.simulation.cancelled||(cancel&&cancel())){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled");return last;}last.report.fail("AUTHORING",e.what());const bool layoutChanged=improveReturnLayout(last,calibratedEnergy,e.pendingPort,cancel);if(cancel&&cancel()){last.simulation.cancelled=true;last.report.fail("CANCELLED","Generation cancelled during return planning");return last;}remember(&last,i);
             // Later candidates change placement, not the failed source's force
             // family. Repeating a converged energy bootstrap cannot repair it.

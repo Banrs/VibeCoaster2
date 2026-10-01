@@ -1,0 +1,144 @@
+{
+  "status": "passed",
+  "profile": "riftwake-train-02",
+  "geometry": {
+    "status": "passed",
+    "scope": "editable Blender art and straight Exa track fit only",
+    "profile": "riftwake-train-02",
+    "cars": 7,
+    "seats": 14,
+    "gauge_metres": 1.4000000357627869,
+    "width_metres": 2.3499999046325684,
+    "bounds_metres": [
+      [
+        -22.20800018310547,
+        -1.1749999523162842,
+        -0.40700000524520874
+      ],
+      [
+        2.315000057220459,
+        1.1749999523162842,
+        2.015448808670044
+      ]
+    ],
+    "car_pitch_metres": 3.4,
+    "unique_closed_meshes": 495,
+    "clamp_count": 28,
+    "clamp_orientation": "transverse YZ; 100 mm along travel",
+    "curve_cap_seams_welded_for_closure_check": 34,
+    "train_triangles": 572156,
+    "object_roles": {
+      "chassis": 504,
+      "wheel": 1428,
+      "fastener": 959,
+      "body": 104,
+      "detail": 28,
+      "seat": 56,
+      "restraint": 182,
+      "coupler": 28,
+      "nose": 20
+    },
+    "minimum_crosshead_gusset_swept_gap_metres": 0.04200002312660244,
+    "nearest_part": "RT / road wheel / polyurethane",
+    "track_triangle_intersections": [],
+    "clear_forward_sight_rays": 132,
+    "sight_yaw_degrees": [
+      -25,
+      25
+    ],
+    "sight_pitch_degrees": [
+      -10,
+      15
+    ],
+    "limitations": [
+      "No occupied-train sweep on the complete ride",
+      "No station/hardware fit or runtime integration",
+      "Art dimensions are proposals, not manufacturer measurements",
+      "No structural or restraint engineering assessment"
+    ]
+  },
+  "export": {
+    "status": "passed",
+    "cars": 7,
+    "unique_meshes": 2,
+    "width_metres": 2.3499999046325684,
+    "triangles_all_cars": 572156,
+    "glTF_Y_up_bounds_metres": [
+      [
+        -22.20799970626831,
+        -0.40700000524520874,
+        -1.1749999523162842
+      ],
+      [
+        2.315000057220459,
+        2.015448808670044,
+        1.1749999523162842
+      ]
+    ],
+    "binary_bytes": 3628340
+  },
+  "identity": [
+    {
+      "Path": "D:\\Coding\\Codex\\Vibecoaster2\\out\\riftwake-completion-07.vcdesign",
+      "Before": "D48ED31CF62621405EE43A859C3E6E1EA468E405B383217FC7FB3E84895A0CF7",
+      "After": "D48ED31CF62621405EE43A859C3E6E1EA468E405B383217FC7FB3E84895A0CF7",
+      "Unchanged": true
+    },
+    {
+      "Path": "D:\\Coding\\Codex\\Vibecoaster2\\dist\\current.json",
+      "Before": "FAF05A07B302890202B7543206B026BBF5AC4D8EA4DBA81E0F43DC26FA5B900A",
+      "After": "FAF05A07B302890202B7543206B026BBF5AC4D8EA4DBA81E0F43DC26FA5B900A",
+      "Unchanged": true
+    },
+    {
+      "Path": "D:\\Coding\\Codex\\Vibecoaster2\\native\\art\\exports\\support-system\\Riftwake-Exa-Adapted-Review.blend",
+      "Before": "7B704340DFF17543137ABC99DB8B3790FB972DE90B0CDE6EDFA1702F78E7BA3E",
+      "After": "7B704340DFF17543137ABC99DB8B3790FB972DE90B0CDE6EDFA1702F78E7BA3E",
+      "Unchanged": true
+    },
+    {
+      "Path": "D:\\Coding\\Codex\\Vibecoaster2\\Play VibeCoaster2.lnk",
+      "Before": "0A1E3A1A939E96ACA0B721B5BB19E8F23C26677C24BC7A49D21BA148C9833EB3",
+      "After": "0A1E3A1A939E96ACA0B721B5BB19E8F23C26677C24BC7A49D21BA148C9833EB3",
+      "Unchanged": true
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "native\\art\\exports\\train\\Riftwake-Train.blend",
+      "sha256": "942c6eae383fb6424c625894107c74579f9ecf9c474bee4601f2d625cf469081"
+    },
+    {
+      "path": "native\\art\\exports\\train\\Riftwake-Train.glb",
+      "sha256": "4afa59656de2a94e0d223f2167884fe5d3b734e8c5f91a52c179d9579e1a3849"
+    },
+    {
+      "path": "native\\art\\train_profile.json",
+      "sha256": "fc9966f91698075ba71a74ab6ce7264fcb6f280b8cf989759ed40630ec7680c1"
+    },
+    {
+      "path": "native\\art\\author_train.py",
+      "sha256": "d5c1a23d2fa177d1de4bea311dc4703d5336893a087674c2c34817bfdc21cfa7"
+    },
+    {
+      "path": "native\\art\\verify_train_model.py",
+      "sha256": "87a0b94feb362177d8dc7888b4dced6875716b3766653cab108a4ca1e863777b"
+    },
+    {
+      "path": "native\\art\\export_train.py",
+      "sha256": "61d1c5fa7e9307628c7ee12be8f385a6d9383d960992518ef5314196742fe67e"
+    }
+  ],
+  "views": [
+    "hero",
+    "clamp",
+    "full-train",
+    "front",
+    "side",
+    "wheel",
+    "seating",
+    "rider",
+    "rear"
+  ],
+  "visual_approval": "not established"
+}
