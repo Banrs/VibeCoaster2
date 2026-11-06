@@ -16,7 +16,8 @@
 | Simulation | `simulation.cpp`, `acceleration.cpp` | Finite-train motion, forces, energy, acceleration histories. |
 | Spatial checks | `clearance.cpp`, `track.cpp`, `structures.cpp` | Occupied train envelope, geometry and structure clearance. |
 | Persistence | `persistence.cpp` | Atomic saves, fresh load validation, original generation identity. |
-| Command line | `main.cpp` | Generate, validate and recipe commands; report, trace and plan export. |
+| Command line | `native/cli/main.cpp`, `native/cli/trace_export.cpp` | Generate, validate and recipe commands; atomic scene/replay trace export. |
+| Offline review | `native/tools/ride_review.py`, `ride_review.html` | Self-contained browser replay of actual geometry, terrain, structures and seat dynamics. |
 
 Paths above without a prefix are under `native/core/src`.
 

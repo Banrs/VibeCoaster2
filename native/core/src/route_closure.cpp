@@ -1,6 +1,7 @@
 #include "route_closure.hpp"
 #include <optional>
 #include <stdexcept>
+#include <sstream>
 
 namespace coaster {
 namespace {
@@ -175,9 +176,13 @@ void closeRouteApproach(MotionBuilder &motion, Vec3 endPosition, double endHeadi
             consider(finish);
         }
     }
-    if (!selected)
-        throw std::runtime_error(std::string(name) +
-                                 ": no forward C3 approach fits the station port");
+    if (!selected) {
+        std::ostringstream detail;
+        detail << name << ": no forward C3 approach from (" << start.position.x << ','
+               << start.position.y << ") heading " << begin << " at " << speed
+               << " m/s fits station port (" << endPosition.x << ',' << endPosition.y << ')';
+        throw std::runtime_error(detail.str());
+    }
 
     // Correct quadrature and inherited-jet roundoff in the two global layout
     // variables. No final span or canonical endpoint is moved independently.

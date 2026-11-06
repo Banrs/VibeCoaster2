@@ -229,7 +229,7 @@ void compileInterval(Design &d, const std::vector<Frame> &frames,
     std::vector<TimedMotion> motion(count);
     std::vector<Vec3> reference(count);
     std::vector<double> distance(count), time(count), target(count), load(count),
-        uprightAngle(count);
+        uprightAngle(count), positiveLoadAngle(count), positiveBank(count);
     std::vector<bool> hardware(count);
     Vec3 up = local.knots.front().up;
     const double initialTime = motionAtDistance(frames, routeDistance[interval.first]).time;
@@ -276,6 +276,8 @@ void compileInterval(Design &d, const std::vector<Frame> &frames,
         const double raw = angle(desired);
         target[i] = i ? target[i - 1] + std::remainder(raw - target[i - 1], 2 * pi) : raw;
         uprightAngle[i] = angle(upright);
+        positiveBank[i] = std::atan2(lateral, normal);
+        positiveLoadAngle[i] = angle(rotate(upright, knot.tangent, positiveBank[i]));
     }
     struct RollPhrase {
         double crestTime;
@@ -286,9 +288,41 @@ void compileInterval(Design &d, const std::vector<Frame> &frames,
         if (source.requestedRoll != 0 && source.lastKnot >= interval.first &&
             source.lastKnot <= interval.last) {
             const size_t crest = source.lastKnot - interval.first;
-            phrases.push_back(
-                {time[crest], continuousRollTarget(uprightAngle, target, crest,
-                                                   source.hand * source.requestedRoll)});
+            if (std::abs(source.requestedRoll) > pi * .5) {
+                // An explicitly overbanked source chooses positive rider load.
+                // Follow that physical force direction through the crest and
+                // recovery; the ordinary signed-load branch stays upright in
+                // unrelated airtime. Recover once the load points mostly up.
+                const size_t begin = std::max(source.firstKnot, interval.first) - interval.first;
+                size_t end = crest;
+                while (end + 1 < count && !hardware[end + 1]) {
+                    ++end;
+                    if (std::abs(positiveBank[end]) < pi * .25)
+                        break;
+                }
+                for (size_t i = begin; i <= end; ++i) {
+                    if (hardware[i] || (i == 0 && interval.inheritFirst) ||
+                        (i + 1 == count && interval.inheritLast))
+                        continue;
+                    const double previous = i ? target[i - 1] : target[i];
+                    const double desired = load[i] > .3 ? positiveLoadAngle[i] : previous;
+                    target[i] = previous + std::remainder(desired - previous, 2 * pi);
+                }
+                for (size_t i = 1; i < count; ++i)
+                    target[i] = target[i - 1] + std::remainder(target[i] - target[i - 1], 2 * pi);
+                // The requested bank is a crest cue, not a constant angle to
+                // hold throughout a loaded turn. Nearby targets follow its
+                // changing force direction rather than fighting that turn.
+                auto phrase = target;
+                phrase[crest] += std::remainder(
+                    uprightAngle[crest] + source.hand * source.requestedRoll - phrase[crest],
+                    2 * pi);
+                phrases.push_back({time[crest], std::move(phrase)});
+            } else {
+                phrases.push_back(
+                    {time[crest], continuousRollTarget(uprightAngle, target, crest,
+                                                       source.hand * source.requestedRoll)});
+            }
         }
     if (!(time.back() > 0))
         throw std::runtime_error("Frame interval has no motion duration");
@@ -357,7 +391,25 @@ void compileInterval(Design &d, const std::vector<Frame> &frames,
     // lateral bound ignores the rotational acceleration of elevated seats and
     // can demand abrupt roll. Independent finite-train replay assesses the
     // actual force/rate histories after this smooth field is compiled.
-    const auto controlAngle = solve(matrix, rhs, fixed, values);
+    auto controlAngle = solve(matrix, rhs, fixed, values);
+    // Quadratic smoothing alone keeps following every small bank correction.
+    // Total variation instead rewards settled physical attitudes between turns.
+    // Because these angles use parallel transport, a constant value means zero
+    // rider roll even while the track changes pitch and heading. Load-squared
+    // fitting weights retain stronger authority where an angle error would
+    // produce a larger lateral force. The same C3 basis and port jets remain.
+    constexpr double holdPreference = .35, smoothZeroRate = .002;
+    for (int iteration = 0; iteration < 5; ++iteration) {
+        auto held = matrix;
+        for (size_t i = 0; i + 1 < controls; ++i) {
+            const double rate = (controlAngle[i + 1] - controlAngle[i]) / step;
+            // Five local reweighted banded solves minimize a smooth absolute
+            // roll-rate cost; this never rebuilds geometry or retries a route.
+            const double weight = holdPreference / (step * step * std::hypot(rate, smoothZeroRate));
+            held.penalty(i, {-1, 1}, weight);
+        }
+        controlAngle = solve(std::move(held), rhs, fixed, values);
+    }
     for (size_t i = 0; i < count; ++i) {
         const double x = time[i] / step;
         const int center = int(std::floor(x));

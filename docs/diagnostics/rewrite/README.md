@@ -1,5 +1,8 @@
 # Forward generator rewrite verification
 
+Historical 3.0 checkpoint. The current ride and verification are documented in
+[Faultline 3.1](../faultline/README.md).
+
 6 November 2026, Linux GCC 14.2 Release. Seed 42, highlands, completes generation
 and independent acceptance in **7.53 seconds**. Original main (`5dab7c0`) took
 28.74 seconds in this workspace; the first V3 implementation took 77–85 seconds.

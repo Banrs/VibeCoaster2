@@ -82,6 +82,10 @@ jobs:
             throw 'Baseline did not pass the native acceptance and convergence gates'
           }
           Write-Host ("baseline-42 accepted={0} generationSeconds={1}" -f $report.accepted, $report.generationSeconds)
+      - name: Export interactive ride review
+        run: |
+          python native/tools/ride_review.py ride-checks/baseline-42 --out ride-checks/baseline-42-review.html
+          if ($LASTEXITCODE -ne 0) { throw 'Could not export the generated ride review' }
       - name: Check ride feel and fresh saved-design replay
         run: |
           $tests = if ($IsWindows) { 'native/build-ci/Release/ride_feel_tests.exe' } else { 'native/build-ci/ride_feel_tests' }

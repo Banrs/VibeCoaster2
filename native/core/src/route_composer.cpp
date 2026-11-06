@@ -62,6 +62,7 @@ class RouteDraft {
     Vec3 plateauArrival{}, cliffTop{}, cliffFoot{}, waveBase{}, loopBase{}, immelExit{},
         returnRavine{};
     double cliffYaw = 0, brakeCapacity = 7, brakeAlignment = 0;
+    bool haveOpening{}, haveCliff{}, haveWave{}, haveLoop{}, haveImmelmann{}, haveSignature{};
     Vec3 openingRecovery{};
     std::array<Vec3, 2> openingCrests{}, openingValleys{};
     struct SourceOptions {
@@ -73,6 +74,7 @@ class RouteDraft {
         design.request = plan.request;
         design.track.profile = plan.request.trackProfile;
         design.track.closed = false;
+        design.request.terrain.heightMeters = 0;
         (void)trackSection(design.track.profile);
         design.topology = "route/" + plan.request.recipe.name;
         return design;
@@ -187,7 +189,9 @@ class RouteDraft {
     MotionBuilder::Range heightSweep(MotionJet end, double length, Element kind,
                                      const std::string &name, double bank = 0) {
         const auto start = cursor;
-        const auto first = detail::directionAngles(start), last = detail::directionAngles(end);
+        const auto first = detail::directionAngles(start);
+        auto last = detail::directionAngles(end);
+        last[1].value = first[1].value + std::remainder(last[1].value - first[1].value, 2 * pi);
         const double half = length * .5;
         const auto yaw = detail::anglePolynomial(first[1], last[1], length);
         const auto middleYaw = detail::angleAt(yaw, half, length);
@@ -381,25 +385,25 @@ class RouteDraft {
         t.knolls.clear();
         t.foothills.clear();
         t.ravines.clear();
-        const double openingGrade = (openingValleys.back().z - openingRecovery.z) /
-                                    std::hypot(openingValleys.back().x - openingRecovery.x,
-                                               openingValleys.back().y - openingRecovery.y);
-        t.ramps.push_back({openingRecovery.x, openingRecovery.y, openingValleys.back().x,
-                           openingValleys.back().y, openingRecovery.z - datum,
-                           openingValleys.back().z - datum, openingGrade, openingGrade, 140});
-        t.foothills.push_back(
-            {openingCrests[0].x, openingCrests[0].y, std::max(0., openingCrests[0].z - 17.5), 190});
-        t.foothills.push_back(
-            {openingCrests[1].x, openingCrests[1].y, std::max(0., openingCrests[1].z - 13.5), 170});
+        if (haveOpening) {
+            const double openingGrade = (openingValleys.back().z - openingRecovery.z) /
+                                        std::hypot(openingValleys.back().x - openingRecovery.x,
+                                                   openingValleys.back().y - openingRecovery.y);
+            t.ramps.push_back({openingRecovery.x, openingRecovery.y, openingValleys.back().x,
+                               openingValleys.back().y, openingRecovery.z - datum,
+                               openingValleys.back().z - datum, openingGrade, openingGrade, 100});
+            t.foothills.push_back({openingCrests[0].x, openingCrests[0].y,
+                                   std::max(0., openingCrests[0].z - 18), 140});
+        }
         const auto center = plateauCenter;
         t.centerX = center.x;
         t.centerY = center.y;
         t.heightMeters = std::max(0., summit - 14.5);
         t.backSlope = TerrainSlope{
             crest.x, crest.y, t.heightMeters, .65 * std::cos(yaw), .65 * std::sin(yaw), 60};
-        t.radiusX = 700;
-        t.radiusY = 620;
-        t.plateau = .72;
+        t.radiusX = 460;
+        t.radiusY = 420;
+        t.plateau = .68;
         t.bend = .06;
         t.cliffX = crest.x + 500 * std::cos(yaw);
         t.cliffY = crest.y + 500 * std::sin(yaw);
@@ -429,40 +433,36 @@ class RouteDraft {
     }
 
     void authorOpening(const RecipeElement &element) {
-        const uint64_t random = elementSeed(req.seed, element.id);
-        const double variation = seeded(elementSeed(req.seed, element.id), .985, 1.015);
-
         const auto &p = std::get<HillParameters>(element.parameters);
-        FvdHillRequest intent;
-        intent.entrySpeed = speedFor(element.id);
-        intent.height = p.riseMeters * p.profileScale * variation;
-        intent.airtimeG = p.negativeG * req.style.airtime;
-        intent.positiveG = p.pulloutG;
-        intent.twistAngle = p.twistDegrees * seeded(random, .9, 1.1) * pi / 180;
-        intent.rampSeconds = p.releaseSeconds;
-        intent.exitRampSeconds = p.recoverySeconds;
-        intent.exitHeight = 6;
-        intent.exitPitch = .08;
-        lossFor(intent);
-        source(designFvdHill(intent, cancel), Element::Hill, element);
+        if (p.pulloutG <= 1 || p.releaseSeconds <= 0 || p.recoverySeconds <= 0)
+            throw std::invalid_argument(
+                "Ravine opening requires a positive loading reserve and transition times");
+        const double beginYaw = heading(), scale = p.profileScale;
+        const double rise = p.riseMeters * scale;
+        const double releaseLength = 270 * scale * p.releaseSeconds;
+        const double recoveryLength =
+            330 * scale * (p.recoverySeconds / 1.3) * std::sqrt(2.6 / (p.pulloutG - 1));
+        auto crest = detail::planarJet(
+            {cursor.position.x, cursor.position.y, cursor.position.z + rise},
+            beginYaw - 75 * pi / 180, 0,
+            motion.crestCurvature(rise, releaseLength, p.negativeG * req.style.airtime));
+        heightSweep(crest, releaseLength, Element::Airtime, element.id + "-ravine-crest",
+                    p.twistDegrees * pi / 180);
+        openingCrests[0] = cursor.position;
+        landmarks.push_back({LandmarkKind::OpeningCrest, d.track.knots.size() - 1});
+        auto valley = detail::planarJet({cursor.position.x, cursor.position.y, datum + 7},
+                                        beginYaw - 175 * pi / 180, 0);
+        heightSweep(valley, recoveryLength, Element::Turn, element.id + "-ravine-dive");
         openingRecovery = cursor.position;
-        // Broad low hills follow the first twisted drop. They carry the
-        // complete live geometry into deliberate rising and falling curves.
-        for (int n = 0; n < 2; ++n) {
-            const double base = datum + (n == 0 ? 6 : 3), rise = n == 0 ? 35 : 20, yaw = heading();
-            const double crest = motion.crestCurvature(rise, 180, .05);
-            auto top = detail::planarJet({cursor.position.x, cursor.position.y, base + rise},
-                                         yaw + (n == 0 ? -25 : 30) * pi / 180, 0, crest);
-            terrainCurve(top, 190, Element::Airtime,
-                         element.id + (n == 0 ? "-river-hop-crest" : "-rising-bank-crest"),
-                         (n == 0 ? -15 : 20) * pi / 180);
-            openingCrests[n] = cursor.position;
-            auto low = detail::planarJet({cursor.position.x, cursor.position.y, base},
-                                         heading() + (n == 0 ? -20 : 15) * pi / 180, 0);
-            terrainCurve(low, 190, Element::Airtime,
-                         element.id + (n == 0 ? "-river-hop-valley" : "-rising-bank-valley"));
-            openingValleys[n] = cursor.position;
-        }
+        landmarks.push_back({LandmarkKind::OpeningRecovery, d.track.knots.size() - 1});
+        motion.line(240 * scale, Element::Turn, (element.id + "-canyon-floor-run").c_str());
+        // The low canyon releases its bank before the mountain comes into
+        // view. The first act has one float, then a deliberate settling beat.
+        auto release = detail::planarJet({cursor.position.x, cursor.position.y, datum + 10},
+                                         beginYaw - 55 * pi / 180, 0);
+        heightSweep(release, 360 * scale, Element::Turn, element.id + "-canyon-exit");
+        openingValleys.back() = cursor.position;
+        haveOpening = true;
     }
 
     void authorCliffApproach(const RecipeElement &element) {
@@ -476,38 +476,25 @@ class RouteDraft {
                       std::max(120., motion.nominalSpeed * 2.0), Element::Turn,
                       element.id + "-recovery");
         motion.driveGraded(summit - 55, 32 * pi / 180, 58, 16, (element.id + "-ascent").c_str());
-        motion.pitchToHeight(summit, {0, motion.crestCurvature(55, 180, -.5), 0, 0}, Element::Hill,
+        motion.pitchToHeight(summit, {0, 0, 0, 0}, Element::Hill,
                              (element.id + "-arrival").c_str());
         plateauArrival = cursor.position;
         const double arrivalYaw = heading();
         groundLandscape(plateauArrival, arrivalYaw, summit);
         landmarks.push_back({LandmarkKind::PlateauArrival, d.track.knots.size() - 1});
-        // The powered ascent is a viaduct over the valley into the mesa's
-        // rear slope. An independent raised ribbon here would extend through
-        // the cliff face and bury the lower launch corridor.
-        // An active shelf journey: outward reveal, inland counterturn,
-        // second edge crest and two low turns into the dive approach.
-        // Each direction programme owns its pitch/yaw jets. No overlap
-        // operation may resculpt these curves after they are authored.
-        const double shelfHeading = heading(), lengthScale = p.approachLengthMeters / 1000.;
-        for (size_t n = 0; n < plan.shelf.size(); ++n) {
-            const auto &point = plan.shelf[n];
-            auto end = detail::directionJet({0, point.pitchCurvature / lengthScale, 0, 0},
-                                            {shelfHeading + point.headingDegrees * pi / 180,
-                                             point.yawCurvature / lengthScale, 0, 0});
-            end.position = {cursor.position.x, cursor.position.y, summit + point.heightOffset};
-            const double outward = (n == 1 || n == 3) ? p.outwardBankDegrees * pi / 180 : 0;
-            heightSweep(end, point.lengthMeters * lengthScale, Element::Turn,
-                        element.id + "-shelf-" + std::to_string(n + 1), outward);
-            if (req.terrain.kind == TerrainKind::Highlands && n % 2 == 0) {
-                // Three shallow dry gullies cross the natural low points;
-                // the mesa remains connected beneath the intervening hills.
-                auto &t = d.request.terrain;
-                const Vec3 side{-std::sin(heading()), std::cos(heading()), 0};
-                const auto a = cursor.position - side * 130, b = cursor.position + side * 130;
-                const double depth = std::max(0., t.heightMeters - cursor.position.z + 7);
-                t.ravines.push_back({a.x, a.y, b.x, b.y, depth, depth, 150, 150});
-            }
+        haveCliff = true;
+        // A single held rim turn reveals the drop. The summit is a brief
+        // destination with one direction, not a chain of counterbanked turns.
+        const auto end = detail::planarJet({cursor.position.x, cursor.position.y, summit - 10},
+                                           heading() + p.approachHeadingDegrees * pi / 180, 0);
+        heightSweep(end, p.approachLengthMeters, Element::Turn, element.id + "-rim-reveal",
+                    -std::copysign(p.outwardBankDegrees, p.approachHeadingDegrees) * pi / 180);
+        if (req.terrain.kind == TerrainKind::Highlands) {
+            const Vec3 side{-std::sin(heading()), std::cos(heading()), 0};
+            const auto a = cursor.position - side * 130, b = cursor.position + side * 130;
+            const double depth =
+                std::max(0., d.request.terrain.heightMeters - cursor.position.z + 7);
+            d.request.terrain.ravines.push_back({a.x, a.y, b.x, b.y, depth, depth, 150, 150});
         }
     }
 
@@ -538,11 +525,11 @@ class RouteDraft {
         intent.drop = cliffTop.z - (datum + 57);
         intent.maximumPitch = p.dropDegrees * pi / 180;
         intent.exitPitch = boostParameters.gradeDegrees * pi / 180;
-        intent.crestRampSeconds = 2.2;
+        intent.crestRampSeconds = 1.6;
         intent.crestG = -.9;
         intent.pulloutG = 4.3;
-        intent.pulloutRampSeconds = 1.5;
-        intent.exitRampSeconds = 1.2;
+        intent.pulloutRampSeconds = 1.2;
+        intent.exitRampSeconds = .9;
         lossFor(intent);
         if (progress)
             progress({WorkPhase::Authoring, 0, 0, 0,
@@ -594,6 +581,42 @@ class RouteDraft {
     }
 
     void authorCamelback(const RecipeElement &element) {
+        if (const auto *p = std::get_if<HillParameters>(&element.parameters)) {
+            // An original force-authored landmark, free to change height,
+            // airtime, roll and asymmetric transitions. Its inherited port
+            // includes the launch grade and the actual train energy.
+            FvdHillRequest intent;
+            intent.entrySpeed = speedFor(element.id);
+            intent.entry = motion.fvdEntry(intent.entrySpeed);
+            intent.height = p->riseMeters * p->profileScale;
+            intent.airtimeG = p->negativeG * req.style.airtime;
+            intent.positiveG = p->pulloutG;
+            intent.rampSeconds = p->releaseSeconds;
+            intent.ascentReleaseSeconds = p->releaseSeconds;
+            intent.exitRampSeconds = p->recoverySeconds;
+            intent.twistAngle = p->twistDegrees * pi / 180;
+            intent.exitHeight = datum + 20 - cursor.position.z;
+            intent.exitPitch = 0;
+            intent.exitNormalG = 1;
+            intent.exitReleaseSeconds = 1.2;
+            lossFor(intent);
+            const size_t begin = d.track.knots.size() - 1;
+            source(designFvdHill(intent, cancel), Element::Airtime, element,
+                   {.worldCoordinates = true});
+            if (req.terrain.kind == TerrainKind::Highlands && !d.request.terrain.ramps.empty() &&
+                &element > req.recipe.elements.data() &&
+                (&element - 1)->role == RideRole::DownhillLaunch) {
+                const auto low = std::min_element(
+                    d.track.knots.begin() + begin, d.track.knots.end(),
+                    [](const Knot &a, const Knot &b) { return a.position.z < b.position.z; });
+                auto &bench = d.request.terrain.ramps.back();
+                bench.x1 = low->position.x;
+                bench.y1 = low->position.y;
+                bench.h1 = std::max(0., low->position.z - datum);
+                bench.grade1 = 0;
+            }
+            return;
+        }
 
         auto p = std::get<CamelbackParameters>(element.parameters);
         auto entry = element;
@@ -625,26 +648,42 @@ class RouteDraft {
     }
 
     void authorWave(const RecipeElement &element) {
-
         const auto &p = std::get<TurnParameters>(element.parameters);
-        FvdWaveRequest intent;
+        if (p.riseMeters <= 0 || std::abs(p.bankDegrees) <= 0 || std::abs(p.bankDegrees) >= 170)
+            throw std::invalid_argument(
+                "Wall turn requires positive relief and a finite bank below 170 degrees");
         waveBase = cursor.position;
-        intent.entrySpeed = speedFor(element.id);
-        intent.entryPitch = std::asin(cursor.tangent.z);
-        intent.entry = motion.fvdEntry(intent.entrySpeed);
-        const auto upright = unit(Vec3{0, 0, 1} - cursor.tangent * cursor.tangent.z);
-        intent.entryNormalG =
-            dot(cursor.curvature * (intent.entrySpeed * intent.entrySpeed) + Vec3{0, 0, gravity},
-                upright) /
-            gravity;
-        intent.entryHoldSeconds = 1.8;
-        intent.height = p.riseMeters;
-        intent.exitHeight = 10;
-        intent.turnAngle = p.headingDegrees * pi / 180;
-        intent.bankAngle = p.bankDegrees * pi / 180;
-        intent.exitNormalG = p.exitNormalG;
-        lossFor(intent);
-        source(designFvdWave(intent, cancel), Element::Turn, element, {.worldCoordinates = true});
+        haveWave = true;
+        const double speed = speedFor(element.id);
+        const double turn = p.headingDegrees * pi / 180;
+        // Curvature ramps occupy a short entry and exit; the turning body
+        // carries the remaining heading. Height and bank describe the crest's
+        // support-force direction, then independent replay measures the seats.
+        const double radius = speed * speed / (gravity * std::sqrt(3.2 * 3.2 - 1));
+        const double length = std::max(p.lengthMeters, std::abs(turn) * radius + 2.2 * speed);
+        const double riseLength = length * .46, fallLength = length - riseLength;
+        const double yaw = heading(), bank = std::abs(p.bankDegrees) * pi / 180;
+        const double crestLoad = 1.8;
+        const double idealCrestEnergy = speed * speed - 2 * gravity * p.riseMeters;
+        const double crestEnergy =
+            idealCrestEnergy - 2 * riseLength *
+                                   (gravity * req.train.rollingResistance +
+                                    motion.drag * (speed * speed + idealCrestEnergy) * .5);
+        if (crestEnergy <= 100)
+            throw std::runtime_error("Wall turn has insufficient crest energy");
+        const double pitchCurvature = (crestLoad * std::cos(bank) - 1) * gravity / crestEnergy;
+        const double yawCurvature =
+            std::copysign(crestLoad * std::sin(bank) * gravity / crestEnergy, turn);
+        auto crest =
+            detail::directionJet({0, pitchCurvature, 0, 0}, {yaw + turn * .5, yawCurvature, 0, 0});
+        crest.position = {cursor.position.x, cursor.position.y, waveBase.z + p.riseMeters};
+        heightSweep(crest, riseLength, Element::Turn, element.id + "-rising-wall",
+                    -std::copysign(bank, turn));
+        landmarks.push_back({LandmarkKind::WaveCrest, d.track.knots.size() - 1});
+        auto exit = detail::planarJet(
+            {cursor.position.x, cursor.position.y, waveBase.z + 10}, yaw + turn, 0,
+            (p.exitNormalG - 1) * gravity / (motion.nominalSpeed * motion.nominalSpeed));
+        heightSweep(exit, fallLength, Element::Turn, element.id + "-diving-return");
     }
 
     void authorLoop(const RecipeElement &element) {
@@ -652,6 +691,7 @@ class RouteDraft {
         const auto &p = std::get<InversionParameters>(element.parameters);
         FvdLoopRequest intent;
         loopBase = cursor.position;
+        haveLoop = true;
         intent.entrySpeed = speedFor(element.id);
         intent.height = p.referenceRiseMeters * std::pow(intent.entrySpeed / 65, 2);
         intent.yawAngle = p.yawDegrees * pi / 180;
@@ -725,88 +765,57 @@ class RouteDraft {
         source({inversion.authoring, inversion.section}, Element::Inversion, element,
                {.worldCoordinates = true});
         immelExit = cursor.position;
+        haveImmelmann = true;
     }
 
     void authorSignature(const RecipeElement &element) {
 
         const auto &p = std::get<SweepParameters>(element.parameters);
-        // Aim the descending signature across the valley toward a staging
-        // corridor west of the station. Its average bearing includes half of
-        // the authored wing sweep; the final hill then retains room to turn
-        // into the eastbound brake run without circling behind the station.
-        const auto &brakes = std::get<OperationParameters>(req.recipe.elements.back().parameters);
-        const double returnRadius =
-            motion.nominalSpeed * motion.nominalSpeed / (gravity * std::sqrt(3.2 * 3.2 - 1));
-        const Vec3 staging{-brakes.lengthMeters - 2 * halfTrain - 3 - 3 * returnRadius,
-                           -2 * returnRadius, datum};
-        const double bearing =
-            std::atan2(staging.y - cursor.position.y, staging.x - cursor.position.x);
-        const double desiredHeading = bearing - .5 * p.headingDegrees * pi / 180;
-        const double turn = std::remainder(desiredHeading - heading(), 2 * pi);
-        // A placement bearing must bring its physical turn radius with it.
-        // The septic yaw transition peaks at 2.1875 times its mean rate.
-        const double turnLength = 2.1875 * std::abs(turn) * motion.nominalSpeed *
-                                  motion.nominalSpeed / (gravity * std::tan(65 * pi / 180));
-        freeDirection({0, 0, 0, 0}, {heading() + turn, 0, 0, 0},
-                      std::max({110., motion.nominalSpeed * 2.5, turnLength}), Element::Turn,
-                      element.id + "-approach");
+        // The finale inherits the wall turn's live direction. Its authored
+        // sweep is the geometry; only the terminal approach aligns the station.
         const Vec3 signatureEntry = cursor.position;
-        const double signatureYaw = heading(),
-                     floor = std::max(datum + 2, cursor.position.z + p.riseMeters),
-                     drop = cursor.position.z - floor, scale = p.lengthMeters / 540;
-        // Riftwake: an outward floating wing, a falling transfer across
-        // the ravine, an opposing wing and a low carving dive. The two
-        // crests share one descending silhouette and authored bearing.
-        Vec3 transfer;
-        std::array<Vec3, 2> signatureCrests;
-        for (int wing = 0; wing < 2; ++wing) {
-            const double rise = (wing == 0 ? 25 : 20) * scale, base = cursor.position.z;
-            const double crestYaw =
-                signatureYaw + p.headingDegrees * pi / 180 * (wing == 0 ? .18 : .68);
-            auto top = detail::planarJet(
-                {cursor.position.x, cursor.position.y, base + rise}, crestYaw, 0,
-                motion.crestCurvature(rise, 160 * scale, p.negativeG * req.style.airtime));
-            const double bank = (wing == 0 ? 1 : -1) * p.rollDegrees *
-                                (req.style.signatureRollDegrees / 45) * pi / 180;
-            terrainCurve(top, 160 * scale, Element::Airtime,
-                         element.id + (wing == 0 ? "-outward-wing" : "-counter-wing"), bank);
-            signatureCrests[wing] = cursor.position;
-            if (wing == 0)
-                landmarks.push_back({LandmarkKind::SignatureRelease, d.track.knots.size() - 1});
-            const double lowHeight = wing == 0 ? floor + drop * .48 : floor;
-            const double lowYaw = signatureYaw + p.headingDegrees * pi / 180 * (wing == 0 ? .5 : 1);
-            auto low = detail::planarJet({cursor.position.x, cursor.position.y, lowHeight}, lowYaw,
-                                         wing == 0 ? 0 : p.exitPitchDegrees * pi / 180);
-            terrainCurve(low, (wing == 0 ? 200 : 220) * scale, Element::Turn,
-                         element.id + (wing == 0 ? "-ravine-transfer" : "-low-carve"));
-            if (wing == 0)
-                transfer = cursor.position;
-        }
+        const double signatureYaw = heading();
+        const size_t next = size_t(&element - req.recipe.elements.data()) + 1;
+        const bool terminal = next < req.recipe.elements.size() &&
+                              req.recipe.elements[next].anchor == TerrainAnchor::Approach;
+        const double floor =
+            terminal ? datum : std::max(datum + 2, cursor.position.z + p.riseMeters);
+        const double rise = std::max(12., std::abs(p.riseMeters) * .25);
+        auto crest = detail::planarJet(
+            {cursor.position.x, cursor.position.y, cursor.position.z + rise},
+            signatureYaw + p.headingDegrees * .2 * pi / 180, 0,
+            motion.crestCurvature(rise, p.lengthMeters * .4, p.negativeG * req.style.airtime));
+        heightSweep(crest, p.lengthMeters * .4, Element::Airtime, element.id + "-ravine-float",
+                    p.rollDegrees * pi / 180);
+        const Vec3 crestPosition = cursor.position;
+        landmarks.push_back({LandmarkKind::SignatureRelease, d.track.knots.size() - 1});
+        // One float falls into a fast trench turn. The final countersteer is
+        // close to the valley floor, replacing the old pair of matching hills.
+        auto valley = detail::planarJet({cursor.position.x, cursor.position.y, floor + 7},
+                                        signatureYaw + p.headingDegrees * 1.25 * pi / 180, 0);
+        heightSweep(valley, p.lengthMeters * .65, Element::Turn, element.id + "-trench-dive");
+        const Vec3 lowPoint = cursor.position;
+        auto exit = detail::planarJet({cursor.position.x, cursor.position.y, floor},
+                                      signatureYaw + p.headingDegrees * pi / 180,
+                                      p.exitPitchDegrees * pi / 180);
+        heightSweep(exit, p.lengthMeters * .55, Element::Turn, element.id + "-low-countersteer");
         returnRavine = cursor.position;
+        haveSignature = true;
         if (req.terrain.kind == TerrainKind::Highlands) {
             auto &t = d.request.terrain;
-            // A descending terrace connects the approach and the two valley
-            // ports. A shallow stream cut leaves the hills themselves intact.
             auto terrace = [&](Vec3 a, Vec3 b, double gap0, double gap1, double width) {
                 const double h0 = std::max(0., a.z - gap0), h1 = std::max(0., b.z - gap1);
                 const double grade = (h1 - h0) / std::hypot(b.x - a.x, b.y - a.y);
                 t.ramps.push_back({a.x, a.y, b.x, b.y, h0, h1, grade, grade, width});
             };
-            // The upper approach bridges the lower inversion basin. Its
-            // shared landform must remain below the lower loop/rollover.
-            const double basin = std::max(0., loopBase.z - datum);
-            terrace(immelExit, signatureEntry, immelExit.z - basin, signatureEntry.z - basin, 140);
-            const auto wingSide =
-                unit(Vec3{-(transfer - signatureEntry).y, (transfer - signatureEntry).x, 0}) *
-                (p.headingDegrees < 0 ? 50. : -50.);
-            terrace(signatureEntry + wingSide, transfer + wingSide, 5, 5, 80);
-            terrace(transfer, cursor.position, 5, 4.5, 180);
-            for (const auto crest : signatureCrests)
-                t.foothills.push_back({crest.x, crest.y, std::max(6., crest.z - 16), 120});
+            terrace(signatureEntry, lowPoint, 12, 7, 100);
+            terrace(lowPoint, cursor.position, 7, datum, 90);
+            t.foothills.push_back(
+                {crestPosition.x, crestPosition.y, std::max(0., crestPosition.z - 18), 120});
             t.ravines.push_back(
-                {signatureEntry.x, signatureEntry.y, transfer.x, transfer.y, 3, 3, 70, 80});
+                {signatureEntry.x, signatureEntry.y, lowPoint.x, lowPoint.y, 3, 3, 70, 80});
             t.ravines.push_back(
-                {transfer.x, transfer.y, cursor.position.x, cursor.position.y, 3, 2, 80, 70});
+                {lowPoint.x, lowPoint.y, cursor.position.x, cursor.position.y, 3, 2, 80, 70});
         }
     }
 
@@ -883,7 +892,8 @@ class RouteDraft {
                         motion.modules.back().reversals = 1;
                         return;
                     }
-                    if (req.terrain.kind == TerrainKind::Highlands)
+                    if (req.terrain.kind == TerrainKind::Highlands && haveSignature &&
+                        norm(returnRavine - cursor.position) > 1)
                         d.request.terrain.ravines.push_back({returnRavine.x, returnRavine.y,
                                                              cursor.position.x, cursor.position.y,
                                                              3, 2, 70, 90});
@@ -1086,12 +1096,18 @@ class RouteDraft {
         }
         diagnostics << "],\"terrainAnchors\":[";
         bool comma = false;
-        for (const auto &[name, position] :
-             std::array<std::pair<const char *, Vec3>, 5>{{{"plateau", plateauArrival},
-                                                           {"cliff-foot", cliffFoot},
-                                                           {"wave-bench", waveBase},
-                                                           {"loop-basin", loopBase},
-                                                           {"immelmann-shoulder", immelExit}}}) {
+        std::vector<std::pair<const char *, Vec3>> terrainAnchors;
+        if (haveCliff) {
+            terrainAnchors.push_back({"plateau", plateauArrival});
+            terrainAnchors.push_back({"cliff-foot", cliffFoot});
+        }
+        if (haveWave)
+            terrainAnchors.push_back({"wave-bench", waveBase});
+        if (haveLoop)
+            terrainAnchors.push_back({"loop-basin", loopBase});
+        if (haveImmelmann)
+            terrainAnchors.push_back({"immelmann-shoulder", immelExit});
+        for (const auto &[name, position] : terrainAnchors) {
             if (comma)
                 diagnostics << ',';
             comma = true;

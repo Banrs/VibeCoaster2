@@ -70,12 +70,11 @@ void AVibeCoasterController::ChangeRow(int32 Direction)
     }
     case 1: Settings.targets.height = FMath::Clamp(Settings.targets.height + Direction * 5, 180., 350.); break;
     case 2: Settings.targets.speed = FMath::Clamp(Settings.targets.speed + Direction * (10 / 3.6), 250 / 3.6, 390 / 3.6); break;
-    case 3: Settings.targets.inversionHeight = FMath::Clamp(Settings.targets.inversionHeight + Direction * 5, 80., 140.); break;
+    case 3: Settings.targets.inversionHeight = FMath::Clamp(Settings.targets.inversionHeight + Direction * 5, 40., 100.); break;
     case 4: Settings.targets.launchSeconds = FMath::Clamp(Settings.targets.launchSeconds + Direction * .05, 1.1, 2.); break;
     case 5: Settings.style.airtime = FMath::Clamp(Settings.style.airtime + Direction * .05, .75, 1.2); break;
     case 6: Settings.style.signatureRollDegrees = FMath::Clamp(Settings.style.signatureRollDegrees + Direction * 5, 30., 60.); break;
-    case 7: Settings.style.returnStyle = (Settings.style.returnStyle + Direction + 4) % 3 - 1; break;
-    case 8: Settings.terrain.kind = Settings.terrain.kind == coaster::TerrainKind::Flat ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat; break;
+    case 7: Settings.terrain.kind = Settings.terrain.kind == coaster::TerrainKind::Flat ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat; break;
     }
 }
 void AVibeCoasterController::RequestGeneration()
@@ -191,14 +190,13 @@ FString AVibeCoasterController::RowText(int32 Row) const
     switch (Row)
     {
     case 0: return TEXT("Seed: ") + SeedText + TEXT("   (Left/Right changes; type digits; Delete clears)");
-    case 1: return FString::Printf(TEXT("Maximum track height above ground >= %.0f m"), Settings.targets.height);
+    case 1: return FString::Printf(TEXT("Cliff relief above station: %.0f m"), Settings.targets.height);
     case 2: return FString::Printf(TEXT("Top speed %.0f km/h"), Settings.targets.speed * 3.6);
-    case 3: return FString::Printf(TEXT("Inversion height above ground >= %.0f m"), Settings.targets.inversionHeight);
+    case 3: return FString::Printf(TEXT("Nominal turnaround size: %.0f m"), Settings.targets.inversionHeight);
     case 4: return FString::Printf(TEXT("Launch 0-180 km/h in %.2f s   (historical benchmark: 1.56 s)"), Settings.targets.launchSeconds);
     case 5: return FString::Printf(TEXT("Airtime strength: %.0f%%"), Settings.style.airtime * 100);
-    case 6: return FString::Printf(TEXT("Signature outward roll: %.0f degrees"), Settings.style.signatureRollDegrees);
-    case 7: return FString::Printf(TEXT("Return composition: %s"), Settings.style.returnStyle < 0 ? TEXT("seed choice") : Settings.style.returnStyle == 0 ? TEXT("flowing crest") : TEXT("twin airtime"));
-    case 8: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: ochre escarpment") : TEXT("Landscape: flat basin");
+    case 6: return FString::Printf(TEXT("Finale outward roll: %.0f degrees"), Settings.style.signatureRollDegrees);
+    case 7: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: ochre escarpment") : TEXT("Landscape: flat basin");
     default: return FString();
     }
 }
@@ -263,7 +261,7 @@ void AVibeCoasterHUD::DrawHUD()
             }
             const float FooterY = Canvas->SizeY - 42.f * Scale;
             DrawRect(FLinearColor(.012f,.025f,.044f,.85f), X, FooterY-8*Scale, 920*Scale, 40*Scale);
-            DrawText(FString::Printf(TEXT("Circuit %.2f km  |  Gold: record hill  |  Coral: inversions  |  Green: airtime hills"), Design->track.length/1000.),
+            DrawText(FString::Printf(TEXT("Circuit %.2f km  |  Gold: floating crossing  |  Coral: inversions  |  Green: airtime hills"), Design->track.length/1000.),
                 FLinearColor::White, X+16*Scale, FooterY, GEngine->GetSmallFont(), Scale*1.15f);
         }
     }

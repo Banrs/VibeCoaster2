@@ -6,75 +6,113 @@
 #include <vector>
 
 namespace coaster {
-inline bool validIdentifier(std::string_view id,size_t maximum=64){
-    if(id.empty()||id.size()>maximum)return false;
-    for(unsigned char c:id)if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='-'||c=='_'))return false;
+inline bool validIdentifier(std::string_view id, size_t maximum = 64) {
+    if (id.empty() || id.size() > maximum)
+        return false;
+    for (unsigned char c : id)
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+              c == '-' || c == '_'))
+            return false;
     return true;
 }
 enum class RideRole {
-    Unspecified, Station, Departure, Opening, CliffApproach, CliffLip, CliffDrop,
-    DownhillLaunch, Camelback, Wave, Loop, Immelmann, Signature, Return, Brakes
+    Unspecified,
+    Station,
+    Departure,
+    Opening,
+    CliffApproach,
+    CliffLip,
+    CliffDrop,
+    DownhillLaunch,
+    Camelback,
+    Wave,
+    Loop,
+    Immelmann,
+    Signature,
+    Return,
+    Brakes
 };
-enum class TerrainAnchor { Station, Approach, Plateau, CliffFoot, WaveBench, LoopBasin, ImmelmannShoulder, Ravine };
+// Semantic landscape labels do not prescribe an act's geometry or order.
+// Station labels belong to station/brakes; Return+Approach closes to the station.
+enum class TerrainAnchor {
+    Station,
+    Approach,
+    Plateau,
+    CliffFoot,
+    WaveBench,
+    LoopBasin,
+    ImmelmannShoulder,
+    Ravine
+};
 
 // Recipe angles use degrees and distances use metres. Canonical authoring and
 // replay still use SI/radians. A zero operation speed/acceleration is resolved
 // from the requested ride target or the corresponding rated drive model.
 struct OperationParameters {
-    double lengthMeters{180},targetSpeedKmh{},gradeDegrees{},accelerationMps2{};
-    bool operator==(const OperationParameters&) const=default;
+    double lengthMeters{180}, targetSpeedKmh{}, gradeDegrees{}, accelerationMps2{};
+    bool operator==(const OperationParameters &) const = default;
 };
 struct HillParameters {
-    double riseMeters{110},negativeG{-.65},twistDegrees{50},pulloutG{3.8};
-    double releaseSeconds{1.2},recoverySeconds{1.5},profileScale{1};
-    bool operator==(const HillParameters&) const=default;
+    double riseMeters{110}, negativeG{-.65}, twistDegrees{50}, pulloutG{3.8};
+    double releaseSeconds{1.2}, recoverySeconds{1.5}, profileScale{1};
+    bool operator==(const HillParameters &) const = default;
 };
 struct CliffParameters {
-    double summitHeightMeters{285},lipSpeedKmh{32},dropDegrees{88},outwardBankDegrees{30},approachLengthMeters{480};
+    double summitHeightMeters{285}, lipSpeedKmh{32}, dropDegrees{88}, outwardBankDegrees{30},
+        approachLengthMeters{480};
     double approachHeadingDegrees{-65}; // Historical default for version-1 recipes that omit it.
-    bool operator==(const CliffParameters&) const=default;
+    bool operator==(const CliffParameters &) const = default;
 };
 struct TurnParameters {
-    double headingDegrees{180},riseMeters{65},bankDegrees{70},exitNormalG{3.8},lengthMeters{500};
-    bool operator==(const TurnParameters&) const=default;
+    double headingDegrees{180}, riseMeters{65}, bankDegrees{70}, exitNormalG{3.8},
+        lengthMeters{500};
+    bool operator==(const TurnParameters &) const = default;
 };
 struct InversionParameters {
     // Reference height at 65m/s for a loop or 53m/s for an Immelmann. Actual
     // scale follows entry energy; the native solve verifies the resulting port.
-    double referenceRiseMeters{100},yawDegrees{15},crestG{1},entryPitchDegrees{55},exitPitchDegrees{-15};
-    bool operator==(const InversionParameters&) const=default;
+    double referenceRiseMeters{100}, yawDegrees{15}, crestG{1}, entryPitchDegrees{55},
+        exitPitchDegrees{-15};
+    bool operator==(const InversionParameters &) const = default;
 };
 struct SweepParameters {
-    double lengthMeters{250},riseMeters{},headingDegrees{35},exitPitchDegrees{},negativeG{-.8},rollDegrees{};
-    bool operator==(const SweepParameters&) const=default;
+    double lengthMeters{250}, riseMeters{}, headingDegrees{35}, exitPitchDegrees{}, negativeG{-.8},
+        rollDegrees{};
+    bool operator==(const SweepParameters &) const = default;
 };
-// Profile v1 preserves the approved planar asymmetric body. Only its uniform
-// scale and localized low recovery are editable through this protected family.
+// Historical reference profile retained for version-1 recipe compatibility.
+// A new camelback can use HillParameters to author its own load and shape.
 struct CamelbackParameters {
-    double profileScale{1},tailCutSeconds{.75},releaseSeconds{.30},exitNormalG{1.9},minimumExitPitchDegrees{1.1459155902616465};
-    bool operator==(const CamelbackParameters&) const=default;
+    double profileScale{1}, tailCutSeconds{.75}, releaseSeconds{.30}, exitNormalG{1.9},
+        minimumExitPitchDegrees{1.1459155902616465};
+    bool operator==(const CamelbackParameters &) const = default;
 };
-using ElementParameters=std::variant<OperationParameters,HillParameters,CliffParameters,TurnParameters,InversionParameters,SweepParameters,CamelbackParameters>;
+using ElementParameters =
+    std::variant<OperationParameters, HillParameters, CliffParameters, TurnParameters,
+                 InversionParameters, SweepParameters, CamelbackParameters>;
 struct RecipeElement {
     std::string id;
     RideRole role{RideRole::Return};
     TerrainAnchor anchor{TerrainAnchor::Ravine};
     ElementParameters parameters{SweepParameters{}};
-    bool operator==(const RecipeElement&) const=default;
+    bool operator==(const RecipeElement &) const = default;
 };
 struct RideRecipe {
     unsigned version{1};
-    std::string name{"Escarpment Rift"};
+    std::string name{"Untitled ride"};
     std::vector<RecipeElement> elements;
-    bool operator==(const RideRecipe&) const=default;
+    bool operator==(const RideRecipe &) const = default;
 };
-const char* roleName(RideRole);
-const char* anchorName(TerrainAnchor);
-uint64_t elementSeed(uint64_t rideSeed,const std::string& elementId);
+// The sequence describes authored acts, not a mandatory list of attractions.
+// Station/departure and approach/brakes delimit the ride. Optional acts inherit
+// the live port; local hardware/reference families retain explicit prerequisites.
+const char *roleName(RideRole);
+const char *anchorName(TerrainAnchor);
+uint64_t elementSeed(uint64_t rideSeed, const std::string &elementId);
 RideRecipe defaultRideRecipe();
-bool validateRecipe(const RideRecipe&,std::string& error);
-std::string recipePayload(const RideRecipe&);
-bool parseRecipe(const std::string&,RideRecipe&,std::string& error);
-bool loadRecipe(const std::string& path,RideRecipe&,std::string& error);
-bool saveRecipe(const RideRecipe&,const std::string& path,std::string& error);
-}
+bool validateRecipe(const RideRecipe &, std::string &error);
+std::string recipePayload(const RideRecipe &);
+bool parseRecipe(const std::string &, RideRecipe &, std::string &error);
+bool loadRecipe(const std::string &path, RideRecipe &, std::string &error);
+bool saveRecipe(const RideRecipe &, const std::string &path, std::string &error);
+} // namespace coaster
