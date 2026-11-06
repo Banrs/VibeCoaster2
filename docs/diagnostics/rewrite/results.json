@@ -1,0 +1,274 @@
+{
+  "date": "2026-11-06",
+  "environment": "Linux, GCC 14.2, Release C++20",
+  "baselineCommit": "5dab7c03902b69aa4fc39df1bb849f579cc69098",
+  "source": "Final working tree accompanying this record; tests completed before commit. Generated reports retain the configured base buildCommit.",
+  "timingCaveat": "Observed runs, not controlled benchmarks. Final seed42/7 ran with concurrent component checks; seed99 had less contention.",
+  "baseline": {
+    "seed": 42,
+    "accepted": true,
+    "generationSeconds": 28.736268,
+    "lengthMeters": 8594.981343995993,
+    "durationSeconds": 181.81770833392272,
+    "launchTo180Seconds": 1.3970000016794955,
+    "maximumLateralG": 1.1723342236121346,
+    "minimumVerticalG": -1.4433292069273587,
+    "maximumVerticalG": 4.557225653110806,
+    "maximumVerticalRateGps": 16.551364645214814,
+    "clifftopActiveSeconds": 26.2473106632,
+    "returnSeconds": 24.1250077163,
+    "longestLevelCoastSeconds": 5.76666666674,
+    "feel": {
+      "performed": true,
+      "error": "",
+      "method": "Elapsed replay seconds with interpolated threshold crossings; below 0.25 g airtime, above 2 g loading; body roll above 3 deg/s. Station stopping and speeds below 5 m/s excluded; physical hardware contact excluded from quiet/rolling intervals.",
+      "movingSeconds": 169.747777795,
+      "freeRunningSeconds": 153.488636724,
+      "seats": [
+        {
+          "seat": "front",
+          "airtimeSeconds": 33.4148633316,
+          "negativeGSeconds": 18.894116363,
+          "loadedSeconds": 53.5184054601,
+          "lateralExposureSeconds": 10.364315037,
+          "longestQuietSeconds": 1.78987119869,
+          "forceBeats": 23,
+          "rollingSeconds": 75.3433143176,
+          "longestRollingSeconds": 5.29362975702,
+          "rollingFraction": 0.490872262114,
+          "totalRollRadians": 27.5325146419
+        },
+        {
+          "seat": "middle",
+          "airtimeSeconds": 33.1043029452,
+          "negativeGSeconds": 18.594955886,
+          "loadedSeconds": 53.6867978099,
+          "lateralExposureSeconds": 10.3353498572,
+          "longestQuietSeconds": 1.56982310461,
+          "forceBeats": 23,
+          "rollingSeconds": 75.2101236898,
+          "longestRollingSeconds": 5.30474458747,
+          "rollingFraction": 0.49000450649,
+          "totalRollRadians": 27.5325115554
+        },
+        {
+          "seat": "rear",
+          "airtimeSeconds": 32.7192762817,
+          "negativeGSeconds": 18.2806429283,
+          "loadedSeconds": 53.5559221998,
+          "lateralExposureSeconds": 10.3025825098,
+          "longestQuietSeconds": 1.34899102063,
+          "forceBeats": 23,
+          "rollingSeconds": 75.0775068041,
+          "longestRollingSeconds": 5.30950776054,
+          "rollingFraction": 0.489140488876,
+          "totalRollRadians": 27.532513237
+        }
+      ]
+    }
+  },
+  "rewritten": [
+    {
+      "seed": 42,
+      "accepted": true,
+      "generationSeconds": 84.633869,
+      "lengthMeters": 8477.240351941735,
+      "durationSeconds": 178.3000000005446,
+      "launchTo180Seconds": 1.3970000016794955,
+      "maximumLateralG": 1.3680979032170058,
+      "minimumVerticalG": -1.4433307428725026,
+      "maximumVerticalG": 4.55722644375748,
+      "maximumVerticalRateGps": 16.55137349856137,
+      "clifftopActiveSeconds": 20.2426401873,
+      "returnSeconds": 24.5056932675,
+      "longestLevelCoastSeconds": 6.10000000008,
+      "feel": {
+        "performed": true,
+        "error": "",
+        "method": "Elapsed replay seconds with interpolated threshold crossings; below 0.25 g airtime, above 2 g loading; body roll above 3 deg/s. Station stopping and speeds below 5 m/s excluded; physical hardware contact excluded from quiet/rolling intervals.",
+        "movingSeconds": 166.177715876,
+        "freeRunningSeconds": 149.567207918,
+        "seats": [
+          {
+            "seat": "front",
+            "airtimeSeconds": 32.892758509,
+            "negativeGSeconds": 18.5048723933,
+            "loadedSeconds": 43.42885407,
+            "lateralExposureSeconds": 11.2612696284,
+            "longestQuietSeconds": 1.83888691719,
+            "forceBeats": 21,
+            "rollingSeconds": 70.1924237859,
+            "longestRollingSeconds": 5.85036250178,
+            "rollingFraction": 0.469303564352,
+            "totalRollRadians": 25.3476056122
+          },
+          {
+            "seat": "middle",
+            "airtimeSeconds": 32.5872997761,
+            "negativeGSeconds": 18.2078360902,
+            "loadedSeconds": 43.49272096,
+            "lateralExposureSeconds": 11.2191790073,
+            "longestQuietSeconds": 1.61367573119,
+            "forceBeats": 21,
+            "rollingSeconds": 70.0259210786,
+            "longestRollingSeconds": 5.8625346106,
+            "rollingFraction": 0.468190334322,
+            "totalRollRadians": 25.3476047195
+          },
+          {
+            "seat": "rear",
+            "airtimeSeconds": 32.2089563077,
+            "negativeGSeconds": 17.893257214,
+            "loadedSeconds": 43.5561124057,
+            "lateralExposureSeconds": 11.2205525216,
+            "longestQuietSeconds": 1.38791491495,
+            "forceBeats": 21,
+            "rollingSeconds": 69.8730281224,
+            "longestRollingSeconds": 5.87736567699,
+            "rollingFraction": 0.46716809851,
+            "totalRollRadians": 25.346844434
+          }
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "accepted": true,
+      "generationSeconds": 85.52388,
+      "lengthMeters": 8489.164025966598,
+      "durationSeconds": 178.52604166721414,
+      "launchTo180Seconds": 1.3970000016794955,
+      "maximumLateralG": 1.367699423057173,
+      "minimumVerticalG": -1.4433300810920893,
+      "maximumVerticalG": 4.557226053576892,
+      "maximumVerticalRateGps": 16.551415584664483,
+      "clifftopActiveSeconds": 20.2426404991,
+      "returnSeconds": 24.5871967069,
+      "longestLevelCoastSeconds": 6.16666666675,
+      "feel": {
+        "performed": true,
+        "error": "",
+        "method": "Elapsed replay seconds with interpolated threshold crossings; below 0.25 g airtime, above 2 g loading; body roll above 3 deg/s. Station stopping and speeds below 5 m/s excluded; physical hardware contact excluded from quiet/rolling intervals.",
+        "movingSeconds": 166.398323859,
+        "freeRunningSeconds": 149.787533581,
+        "seats": [
+          {
+            "seat": "front",
+            "airtimeSeconds": 32.8779714485,
+            "negativeGSeconds": 18.4900763906,
+            "loadedSeconds": 43.4571465707,
+            "lateralExposureSeconds": 11.2981102243,
+            "longestQuietSeconds": 1.84354527627,
+            "forceBeats": 21,
+            "rollingSeconds": 70.3073470694,
+            "longestRollingSeconds": 5.85036305632,
+            "rollingFraction": 0.469380497752,
+            "totalRollRadians": 25.4124902136
+          },
+          {
+            "seat": "middle",
+            "airtimeSeconds": 32.5722506249,
+            "negativeGSeconds": 18.1926190047,
+            "loadedSeconds": 43.5299081805,
+            "lateralExposureSeconds": 11.2575893624,
+            "longestQuietSeconds": 1.61786341159,
+            "forceBeats": 21,
+            "rollingSeconds": 70.1492262252,
+            "longestRollingSeconds": 5.86253687906,
+            "rollingFraction": 0.468324863546,
+            "totalRollRadians": 25.4124880847
+          },
+          {
+            "seat": "rear",
+            "airtimeSeconds": 32.1940281627,
+            "negativeGSeconds": 17.8790282169,
+            "loadedSeconds": 43.5962169506,
+            "lateralExposureSeconds": 11.2613609548,
+            "longestQuietSeconds": 1.39159851449,
+            "forceBeats": 21,
+            "rollingSeconds": 70.0029527676,
+            "longestRollingSeconds": 5.87736807827,
+            "rollingFraction": 0.467348323949,
+            "totalRollRadians": 25.4117281539
+          }
+        ]
+      }
+    },
+    {
+      "seed": 99,
+      "accepted": true,
+      "generationSeconds": 76.620967,
+      "lengthMeters": 8479.74841398817,
+      "durationSeconds": 178.34791666721188,
+      "launchTo180Seconds": 1.3970000016794955,
+      "maximumLateralG": 1.3680133795067986,
+      "minimumVerticalG": -1.4433297765890647,
+      "maximumVerticalG": 4.557225972193688,
+      "maximumVerticalRateGps": 16.55152732145647,
+      "clifftopActiveSeconds": 20.2426409326,
+      "returnSeconds": 24.5228436743,
+      "longestLevelCoastSeconds": 6.11666666674,
+      "feel": {
+        "performed": true,
+        "error": "",
+        "method": "Elapsed replay seconds with interpolated threshold crossings; below 0.25 g airtime, above 2 g loading; body roll above 3 deg/s. Station stopping and speeds below 5 m/s excluded; physical hardware contact excluded from quiet/rolling intervals.",
+        "movingSeconds": 166.224389986,
+        "freeRunningSeconds": 149.613485251,
+        "seats": [
+          {
+            "seat": "front",
+            "airtimeSeconds": 32.8895425498,
+            "negativeGSeconds": 18.5016852866,
+            "loadedSeconds": 43.4362604918,
+            "lateralExposureSeconds": 11.2686098034,
+            "longestQuietSeconds": 1.83981220763,
+            "forceBeats": 21,
+            "rollingSeconds": 70.21672211,
+            "longestRollingSeconds": 5.85035930117,
+            "rollingFraction": 0.469320810169,
+            "totalRollRadians": 25.36152993
+          },
+          {
+            "seat": "middle",
+            "airtimeSeconds": 32.5840054951,
+            "negativeGSeconds": 18.2047154991,
+            "loadedSeconds": 43.5016584606,
+            "lateralExposureSeconds": 11.2272522357,
+            "longestQuietSeconds": 1.61468055425,
+            "forceBeats": 21,
+            "rollingSeconds": 70.0520935701,
+            "longestRollingSeconds": 5.8625320128,
+            "rollingFraction": 0.468220451203,
+            "totalRollRadians": 25.3615272839
+          },
+          {
+            "seat": "rear",
+            "airtimeSeconds": 32.2057233559,
+            "negativeGSeconds": 17.8911903347,
+            "loadedSeconds": 43.5656666303,
+            "lateralExposureSeconds": 11.2289459985,
+            "longestQuietSeconds": 1.38859063264,
+            "forceBeats": 21,
+            "rollingSeconds": 69.9006872737,
+            "longestRollingSeconds": 5.87736576002,
+            "rollingFraction": 0.467208468251,
+            "totalRollRadians": 25.360766861
+          }
+        ]
+      }
+    }
+  ],
+  "verification": {
+    "componentSuites": 20,
+    "componentSuitesPassed": 20,
+    "terrainProfileNote": "Initial suite exposed an obsolete no-progress-callback assumption. Assertion now directly checks no geometry or replay was constructed; focused rerun passed.",
+    "generatedSavedReloadedFeelSeeds": [
+      42,
+      7,
+      99
+    ],
+    "persistenceCancellationChecks": 30,
+    "legacyDefault3FreshReloadAccepted": true,
+    "unrealBuildOrPlayback": false
+  }
+}

@@ -329,9 +329,9 @@ void AVibeCoasterWorld::StartQueuedJob()
         if (Work.Kind == EWork::Generate)
         {
             const auto& R = Work.Request;
-            UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu version=%s seed=%llu terrain=%s comparisonMetadata=%s maxCandidates=%d step=%.17g"),
+            UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu version=%s seed=%llu terrain=%s comparisonMetadata=%s maxClosureIterations=%d step=%.17g"),
                 Work.Revision, UTF8_TO_TCHAR(coaster::generatorVersion), R.seed, UTF8_TO_TCHAR(R.terrain.name().c_str()),
-                R.targets.reference.processed ? TEXT("available") : TEXT("unconfigured"), R.maxCandidates, R.simulationStep);
+                R.targets.reference.processed ? TEXT("available") : TEXT("unconfigured"), R.maxClosureIterations, R.simulationStep);
             UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu targets: heightMeters=%.17g speedMps=%.17g inversionHeightMeters=%.17g launchSeconds=%.17g referenceExposure=%.17g referenceId=%s"),
                 Work.Revision, R.targets.height, R.targets.speed, R.targets.inversionHeight, R.targets.launchSeconds,
                 R.targets.referenceExposure, UTF8_TO_TCHAR(R.targets.referenceId.c_str()));
@@ -362,6 +362,8 @@ void AVibeCoasterWorld::StartQueuedJob()
             {
                 if (!coaster::loadDesign(Path, *Design, Error, Cancelled, Progress))
                 { Result.Message = TEXT("Load rejected; active ride retained: ") + FString(UTF8_TO_TCHAR(Error.c_str())); return Result; }
+                UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu loaded geometryVersion=%s runtimeVersion=%s path=%s"),
+                    Work.Revision, UTF8_TO_TCHAR(Design->generationVersion.c_str()), UTF8_TO_TCHAR(coaster::generatorVersion), *Work.Path);
             }
             else
             {
@@ -540,8 +542,9 @@ void AVibeCoasterWorld::CommitChunks()
     const double ReadySeconds = FPlatformTime::Seconds();
     UE_LOG(LogCoasterGeneration, Display, TEXT("CoasterTiming request=%llu stage=scene-commit elapsedSeconds=%.6f totalSeconds=%.6f"),
         Runtime->Revision, ReadySeconds - Runtime->CommitStarted, ReadySeconds - Runtime->RequestStarted);
-    UE_LOG(LogCoasterGeneration, Display, TEXT("CoasterTiming request=%llu stage=ready elapsedSeconds=%.6f totalSeconds=%.6f"),
-        Runtime->Revision, ReadySeconds - Runtime->RequestStarted, ReadySeconds - Runtime->RequestStarted);
+    UE_LOG(LogCoasterGeneration, Display, TEXT("CoasterTiming request=%llu stage=ready elapsedSeconds=%.6f totalSeconds=%.6f geometryVersion=%s runtimeVersion=%s"),
+        Runtime->Revision, ReadySeconds - Runtime->RequestStarted, ReadySeconds - Runtime->RequestStarted,
+        UTF8_TO_TCHAR(Runtime->Design->generationVersion.c_str()), UTF8_TO_TCHAR(coaster::generatorVersion));
     Runtime->Message = TEXT("Accepted ride ready. Space to ride.");
     Runtime->Message += FString::Printf(TEXT("\n%.0f s to final braking | %.0f s to a complete stop"),
         coaster::movingRideSeconds(*Runtime->Design), Runtime->Design->simulation.metrics.duration);

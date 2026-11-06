@@ -2,6 +2,12 @@
 
 This is a numerical assessment of selected acceleration provisions of **ASTM F2291-25**, not whole-standard certification or a biomechanical safety finding. The selected seating case is upright, Class 4/5, with lower-body containment, backrest and headrest. Upper-torso braking, prone and extended negative-Z allowances are not selected. Seat/restraint construction and applicability still require the ride analysis.
 
+As of the November 2026 rewrite, this implementation remains pinned to edition
+25; the publisher now lists [F2291-26b](https://store.astm.org/f2291-26b.html).
+Its changes have not been incorporated or assessed here. See the [rewrite
+research](references/generator-rewrite-research.md) for force-excursion and
+FVD/spline continuity decisions.
+
 ## Provenance and numerical limits
 
 The source is the [edition 25 document reproduction](https://studylib.net/doc/27870841/f2291-25). Figures 6–8 and 20 were visually checked in the reproduced original pages; HTML prose alone omits their plotted limits. Figures 6/7 are printed page 13, Figure 8 page 14, and Figure 20 page 20. No edition 26 values or historical project tolerance models are used.

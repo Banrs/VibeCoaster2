@@ -138,7 +138,7 @@ void energyBootstrap() {
     const auto originalKnots=partial.track.knots;
     const double originalLength=partial.track.length;
     RecipeCompileFailure failed("pending source",partial,{{"reached",70,5}},RecipePort{"pending",partial.track.length,5});
-    RecipeFeedback feedback;feedback.energyCorrection["retained"]=17;
+    RecipeEnergyEstimate feedback;feedback.energyCorrection["retained"]=17;
     const auto corrected=bootstrapRecipeEnergy(failed,feedback);
     check(corrected.corrected&&!corrected.cancelled&&corrected.report.valid()&&corrected.observations.size()==2,
         "Powered open prefix supplies reached and provisional pending source corrections");
@@ -165,7 +165,7 @@ void energyBootstrap() {
 
     auto noProgress=failed;noProgress.reachedPorts.clear();
     noProgress.pendingPort->speed=corrected.observations.back().estimatedSpeed;
-    RecipeFeedback untouched;untouched.energyCorrection["retained"]=17;
+    RecipeEnergyEstimate untouched;untouched.energyCorrection["retained"]=17;
     const auto stalled=bootstrapRecipeEnergy(noProgress,untouched);
     check(!stalled.corrected&&!stalled.report.valid()&&stalled.report.errors.back().code=="ENERGY_BOOTSTRAP_NO_PROGRESS"&&
         untouched.energyCorrection.size()==1&&untouched.energyCorrection.at("retained")==17,

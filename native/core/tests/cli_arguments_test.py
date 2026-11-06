@@ -96,7 +96,7 @@ class CliArguments(unittest.TestCase):
     def test_valid_integer_and_exponent_syntax_is_preserved(self):
         for text in ("0", "1", "+1", "2147483647", "-2147483648"):
             with self.subTest(text=text):
-                self.assertEqual(self.parsed("--candidates", text)["maxCandidates"], int(text))
+                self.assertEqual(self.parsed("--candidates", text)["maxClosureIterations"], int(text))
         for text in ("0.001", "1e-3", "+1.0e-3", " 0.001"):
             with self.subTest(text=text):
                 self.assertEqual(self.parsed("--step", text)["simulationStep"], 0.001)

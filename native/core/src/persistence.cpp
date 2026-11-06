@@ -103,7 +103,7 @@ std::string extensionTail(const Design& d,Cancel cancel){
 }
 std::string designPayload(const Design& d,Cancel cancel){
         std::ostringstream p;p.imbue(std::locale::classic());p<<std::setprecision(17);
-        const auto& r=d.request;p<<std::quoted(d.generationVersion)<<' '<<r.seed<<' '<<int(r.terrain.kind)<<' '<<r.maxCandidates<<' '<<r.simulationStep<<'\n';
+        const auto& r=d.request;p<<std::quoted(d.generationVersion)<<' '<<r.seed<<' '<<int(r.terrain.kind)<<' '<<r.maxClosureIterations<<' '<<r.simulationStep<<'\n';
         p<<r.targets.height<<' '<<r.targets.speed<<' '<<r.targets.inversionHeight<<' '<<r.targets.launchSeconds<<' '<<r.targets.requireIntensity<<' '<<std::isfinite(r.targets.referenceExposure)<<' '<<(std::isfinite(r.targets.referenceExposure)?r.targets.referenceExposure:0)<<' '<<std::quoted(r.targets.referenceId)<<'\n';
         const auto& l=r.limits;p<<l.minVerticalG<<' '<<l.maxVerticalG<<' '<<l.maxLateralG<<' '<<l.maxLongitudinalG<<' '<<l.maxJerkGps<<' '<<l.minClearance<<'\n';
         const auto& t=r.train;p<<t.cars<<' '<<t.carMass<<' '<<t.spacing<<' '<<t.seatHeight<<' '<<t.dragCdA<<' '<<t.rollingResistance<<' '<<t.airDensity<<'\n';
@@ -323,7 +323,7 @@ std::string reportJson(const Design& d){
      <<",\"maximumNormalResidualG\":"<<author.maximumNormalResidualG<<",\"maximumLateralResidualG\":"<<author.maximumLateralResidualG
      <<",\"maximumRollResidualRadians\":"<<author.maximumRollResidualRadians<<'}';
     o<<",\"stationEnabled\":"<<(d.station.enabled?"true":"false")<<",\"stationPartCount\":"<<d.station.boxes.size();
-    o<<",\"maxCandidates\":"<<d.request.maxCandidates<<",\"simulationStep\":";number(o,d.request.simulationStep);
+    o<<",\"maxClosureIterations\":"<<d.request.maxClosureIterations<<",\"simulationStep\":";number(o,d.request.simulationStep);
     const auto& c=d.convergence;
     o<<",\"convergence\":{\"performed\":"<<(c.performed?"true":"false")<<",\"passed\":"<<(c.passed?"true":"false")<<",\"coarseStep\":";number(o,c.coarseStep);o<<",\"fineStep\":";number(o,c.fineStep);
     o<<",\"maxSpeedRelativeError\":";number(o,c.maxSpeedRelativeError);o<<",\"maxForceRelativeError\":";number(o,c.maxForceRelativeError);o<<",\"metrics\":[";
@@ -435,7 +435,7 @@ static bool readDesign(const std::string& path,Design& out,std::string& error,Ca
         if(!(f>>magic>>schema>>bytes>>expected)||magic!="COASTER"||schema!=6||bytes>64*1024*1024){error="Invalid design header or unsupported schema";return false;}if(f.get()!='\n'){error="Invalid design header terminator";return false;}
         std::string payload(bytes,'\0');f.read(payload.data(),std::streamsize(bytes));if(size_t(f.gcount())!=bytes||f.peek()!=EOF||checksum(payload)!=expected){error="Design checksum/length mismatch";return false;}
         Design d;d.track.authoredGeometry=d.track.authoredFrame=true;std::istringstream p(payload);p.imbue(std::locale::classic());std::string version;int terrain=-1;auto& r=d.request;
-        p>>std::quoted(version)>>r.seed>>terrain>>r.maxCandidates>>r.simulationStep;
+        p>>std::quoted(version)>>r.seed>>terrain>>r.maxClosureIterations>>r.simulationStep;
         if(!supportedGeneratorVersion(version)){error="Unsupported generator version";return false;}
         if(terrain<0||terrain>int(TerrainKind::Highlands)){error="Unsupported saved terrain kind";return false;}r.terrain.kind=TerrainKind(terrain);d.generationVersion=version;
         bool hasReference=false;p>>r.targets.height>>r.targets.speed>>r.targets.inversionHeight>>r.targets.launchSeconds>>r.targets.requireIntensity>>hasReference>>r.targets.referenceExposure>>std::quoted(r.targets.referenceId);if(!hasReference)r.targets.referenceExposure=std::numeric_limits<double>::quiet_NaN();

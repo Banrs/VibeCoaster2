@@ -72,12 +72,11 @@ void AVibeCoasterController::ChangeRow(int32 Direction)
     case 2: Settings.targets.speed = FMath::Clamp(Settings.targets.speed + Direction * (10 / 3.6), 250 / 3.6, 390 / 3.6); break;
     case 3: Settings.targets.inversionHeight = FMath::Clamp(Settings.targets.inversionHeight + Direction * 5, 80., 140.); break;
     case 4: Settings.targets.launchSeconds = FMath::Clamp(Settings.targets.launchSeconds + Direction * .05, 1.1, 2.); break;
-    case 5: Settings.maxCandidates = FMath::Clamp(Settings.maxCandidates + Direction, 1, 32); break;
+    case 5: Settings.maxClosureIterations = FMath::Clamp(Settings.maxClosureIterations + Direction, 1, 64); break;
     case 6: Settings.style.airtime = FMath::Clamp(Settings.style.airtime + Direction * .05, .75, 1.2); break;
     case 7: Settings.style.signatureRollDegrees = FMath::Clamp(Settings.style.signatureRollDegrees + Direction * 5, 30., 60.); break;
     case 8: Settings.style.returnStyle = (Settings.style.returnStyle + Direction + 4) % 3 - 1; break;
-    case 9: Settings.style.automaticTrims = !Settings.style.automaticTrims; break;
-    case 10: Settings.terrain.kind = Settings.terrain.kind == coaster::TerrainKind::Flat ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat; break;
+    case 9: Settings.terrain.kind = Settings.terrain.kind == coaster::TerrainKind::Flat ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat; break;
     }
 }
 void AVibeCoasterController::RequestGeneration()
@@ -95,13 +94,42 @@ void AVibeCoasterController::RequestGeneration()
     }
     if (Ride) Ride->Generate(Settings);
 }
+void AVibeCoasterController::RequestStartup(const TCHAR* CommandLine)
+{
+    const bool LoadSaved = FParse::Param(CommandLine, TEXT("CoasterLoad"));
+    const bool GenerateFresh = FParse::Param(CommandLine, TEXT("CoasterGenerate"));
+    if (LoadSaved && GenerateFresh)
+    {
+        InputError = TEXT("Choose either -CoasterGenerate or -CoasterLoad.");
+        Menu = true;
+    }
+    else if (GenerateFresh)
+    {
+        // Parse the complete switch so an explicitly empty value cannot silently
+        // turn into seed 42. Seed validation is shared with the setup menu.
+        const TCHAR* Cursor = CommandLine;
+        FString Token;
+        while (FParse::Token(Cursor, Token, false))
+        {
+            if (Token.Equals(TEXT("-CoasterSeed"), ESearchCase::IgnoreCase)) SeedText.Empty();
+            else if (Token.StartsWith(TEXT("-CoasterSeed="), ESearchCase::IgnoreCase))
+            {
+                SeedText = Token.Mid(13);
+                SeedText.TrimQuotesInline();
+            }
+        }
+        RequestGeneration();
+        Menu = !InputError.IsEmpty();
+    }
+    else if (LoadSaved && Ride) { Menu = false; Ride->Load(); }
+}
 void AVibeCoasterController::PlayerTick(float DeltaSeconds)
 {
     Super::PlayerTick(DeltaSeconds);
     if (!Ride) for (TActorIterator<AVibeCoasterWorld> It(GetWorld()); It; ++It)
     {
         Ride = *It;
-        if (FParse::Param(FCommandLine::Get(), TEXT("CoasterLoad"))) { Menu = false; Ride->Load(); }
+        RequestStartup(FCommandLine::Get());
         break;
     }
 #if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
@@ -168,12 +196,11 @@ FString AVibeCoasterController::RowText(int32 Row) const
     case 2: return FString::Printf(TEXT("Top speed %.0f km/h"), Settings.targets.speed * 3.6);
     case 3: return FString::Printf(TEXT("Inversion height above ground >= %.0f m"), Settings.targets.inversionHeight);
     case 4: return FString::Printf(TEXT("Launch 0-180 km/h in %.2f s   (historical benchmark: 1.56 s)"), Settings.targets.launchSeconds);
-    case 5: return FString::Printf(TEXT("Candidate search budget: %d"), Settings.maxCandidates);
+    case 5: return FString::Printf(TEXT("Closure iterations: %d"), Settings.maxClosureIterations);
     case 6: return FString::Printf(TEXT("Airtime strength: %.0f%%"), Settings.style.airtime * 100);
     case 7: return FString::Printf(TEXT("Signature outward roll: %.0f degrees"), Settings.style.signatureRollDegrees);
     case 8: return FString::Printf(TEXT("Return composition: %s"), Settings.style.returnStyle < 0 ? TEXT("seed choice") : Settings.style.returnStyle == 0 ? TEXT("flowing crest") : TEXT("twin airtime"));
-    case 9: return Settings.style.automaticTrims ? TEXT("Trim brakes: automatic") : TEXT("Trim brakes: not installed");
-    case 10: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: ochre escarpment") : TEXT("Landscape: flat basin");
+    case 9: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: ochre escarpment") : TEXT("Landscape: flat basin");
     default: return FString();
     }
 }

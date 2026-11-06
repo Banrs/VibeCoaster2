@@ -59,26 +59,38 @@ bool FCoasterSeedInputContract::RunTest(const FString& Parameters)
     TestEqual(TEXT("Missing-reference guard remains explicit"), Controller->InputError,
         FString(TEXT("External reference comparison requested, but no verified reference metadata is configured.")));
     TestTrue(TEXT("Input validation never created a ride"), Controller->Ride == nullptr);
-    const TCHAR* Prefixes[]={TEXT("Seed:"),TEXT("Maximum track height"),TEXT("Top speed"),TEXT("Inversion height"),TEXT("Launch 0-180"),TEXT("Candidate search budget"),TEXT("Airtime strength"),TEXT("Signature outward roll"),TEXT("Return composition"),TEXT("Trim brakes"),TEXT("Landscape:")};
+    const TCHAR* Prefixes[]={TEXT("Seed:"),TEXT("Maximum track height"),TEXT("Top speed"),TEXT("Inversion height"),TEXT("Launch 0-180"),TEXT("Closure iterations"),TEXT("Airtime strength"),TEXT("Signature outward roll"),TEXT("Return composition"),TEXT("Landscape:")};
     for (int32 Row=0; Row<AVibeCoasterController::SetupRowCount; ++Row)
         TestTrue(TEXT("Main menu retains the correct row mapping"),Controller->RowText(Row).StartsWith(Prefixes[Row]));
     Controller->SelectedRow=1;const double Height=Controller->Settings.targets.height;Controller->ChangeRow(1);
     TestEqual(TEXT("Height row remains editable"),Controller->Settings.targets.height,Height+5.);
-    Controller->SelectedRow=5;Controller->Settings.maxCandidates=8;Controller->ChangeRow(1);
-    TestEqual(TEXT("Budget row changes the candidate budget"),Controller->Settings.maxCandidates,9);
+    Controller->SelectedRow=5;Controller->Settings.maxClosureIterations=8;Controller->ChangeRow(1);
+    TestEqual(TEXT("Closure row changes the solver iteration budget"),Controller->Settings.maxClosureIterations,9);
     Controller->SelectedRow=6;Controller->ChangeRow(1);
     TestEqual(TEXT("Airtime customization is exposed"),Controller->Settings.style.airtime,1.05);
     Controller->SelectedRow=7;Controller->ChangeRow(1);
     TestEqual(TEXT("Signature customization is exposed"),Controller->Settings.style.signatureRollDegrees,50.);
     Controller->SelectedRow=8;Controller->ChangeRow(1);
     TestEqual(TEXT("Return composition cycles from automatic"),Controller->Settings.style.returnStyle,0);
-    Controller->SelectedRow=9;Controller->ChangeRow(1);
-    TestFalse(TEXT("Automatic trim installation can be disabled"),Controller->Settings.style.automaticTrims);
-    Controller->SelectedRow=10;Controller->Settings.terrain.kind=coaster::TerrainKind::Highlands;Controller->ChangeRow(1);
+    Controller->SelectedRow=9;Controller->Settings.terrain.kind=coaster::TerrainKind::Highlands;Controller->ChangeRow(1);
     TestTrue(TEXT("Landscape can be changed to the flat comparison"),Controller->Settings.terrain.kind==coaster::TerrainKind::Flat);
     Controller->ChangeRow(-1);
     TestTrue(TEXT("Landscape selection restores highlands"),Controller->Settings.terrain.kind==coaster::TerrainKind::Highlands);
     TestTrue(TEXT("No hidden extra setup row"),Controller->RowText(AVibeCoasterController::SetupRowCount).IsEmpty());
+
+    Controller->Settings.targets.requireIntensity = false;
+    Controller->RequestStartup(TEXT("-CoasterGenerate -CoasterSeed=18446744073709551615"));
+    TestEqual(TEXT("Startup preserves the complete seed"),Controller->Settings.seed,uint64(MAX_uint64));
+    TestTrue(TEXT("Valid startup clears its input error"),Controller->InputError.IsEmpty());
+    for (const TCHAR* Command : {TEXT("-CoasterGenerate -CoasterSeed="), TEXT("-CoasterGenerate -CoasterSeed"),
+        TEXT("-CoasterGenerate -CoasterSeed=oops"), TEXT("-CoasterGenerate -CoasterSeed=18446744073709551616"),
+        TEXT("-CoasterGenerate -CoasterLoad")})
+    {
+        Controller->RequestStartup(Command);
+        TestFalse(TEXT("Invalid startup gives an explicit diagnosis"),Controller->InputError.IsEmpty());
+        TestTrue(TEXT("Invalid startup opens setup"),Controller->Menu);
+        TestEqual(TEXT("Invalid startup cannot replace the selected seed"),Controller->Settings.seed,uint64(MAX_uint64));
+    }
     return true;
 }
 #endif

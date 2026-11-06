@@ -14,7 +14,9 @@ native/unreal/Content/Collections/
 native/unreal/Content/Developers/
 native/unreal/Content/VT/
 .vs/
+*.lnk
 native/build-before-move/
+native/build-*/
 /dist/
 /UserData*/
 /native/archive/

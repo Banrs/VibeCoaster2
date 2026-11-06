@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       run-corpus:
-        description: Run the full eight-case representative corpus and integration suite
+        description: Run the three-seed ride-feel corpus and integration suite
         required: true
         default: false
         type: boolean
@@ -72,7 +72,7 @@ jobs:
           $plan = Join-Path $out 'baseline-42-plan.json'
           $trace = Join-Path $out 'baseline-42-trace.json'
           $save = Join-Path $out 'baseline-42.coaster'
-          & $cli generate --preset physics-proof --seed 42 --terrain highlands --trims auto `
+          & $cli generate --preset physics-proof --seed 42 --terrain highlands `
             --json $json --plan $plan --trace $trace --out $save `
             1> (Join-Path $out 'baseline-42.stdout.log') `
             2> (Join-Path $out 'baseline-42.progress.log')
@@ -82,21 +82,33 @@ jobs:
             throw 'Baseline did not pass the native acceptance and convergence gates'
           }
           Write-Host ("baseline-42 accepted={0} candidate={1} generationSeconds={2}" -f $report.accepted, $report.candidate, $report.generationSeconds)
+      - name: Check ride feel and fresh saved-design replay
+        run: |
+          $tests = if ($IsWindows) { 'native/build-ci/Release/ride_feel_tests.exe' } else { 'native/build-ci/ride_feel_tests' }
+          & $tests --design ride-checks/baseline-42.coaster
+          if ($LASTEXITCODE -ne 0) { throw 'Generated ride failed experience regression budgets' }
       - name: Run full integration suite at a checkpoint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run-corpus == true) || contains(github.event.head_commit.message, '[checkpoint]') }}
         run: >-
           ctest --test-dir native/build-ci -C Release
           --output-on-failure --parallel 1 --timeout 600
           -L integration --output-junit integration-tests.xml
-      - name: Run eight-case representative corpus at a checkpoint
+      - name: Run two additional ride-feel seeds at a checkpoint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run-corpus == true) || contains(github.event.head_commit.message, '[checkpoint]') }}
         shell: pwsh
         run: |
           $output = Join-Path $PWD 'corpus-checks'
-          if (Test-Path -LiteralPath $output) { throw 'Corpus evidence directory must be fresh' }
+          New-Item -ItemType Directory -Path $output | Out-Null
           $cli = Join-Path $PWD $env:COASTER_CLI
-          python native/core/tests/redesign_corpus.py $cli $output
-          if ($LASTEXITCODE -ne 0) { throw "Representative corpus failed with exit code $LASTEXITCODE" }
+          $tests = if ($IsWindows) { 'native/build-ci/Release/ride_feel_tests.exe' } else { 'native/build-ci/ride_feel_tests' }
+          foreach ($seed in @(7, 99)) {
+            $save = Join-Path $output "seed-$seed.coaster"
+            & $cli generate --seed $seed --terrain highlands --out $save --json (Join-Path $output "seed-$seed.json") `
+              1> (Join-Path $output "seed-$seed.stdout.log") 2> (Join-Path $output "seed-$seed.progress.log")
+            if ($LASTEXITCODE -ne 0) { throw "Seed $seed did not generate an accepted ride" }
+            & $tests --design $save
+            if ($LASTEXITCODE -ne 0) { throw "Seed $seed failed experience regression budgets" }
+          }
       - name: Upload native evidence
         if: always()
         uses: actions/upload-artifact@v4

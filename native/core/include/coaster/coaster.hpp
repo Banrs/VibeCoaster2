@@ -21,7 +21,7 @@
 namespace coaster {
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
 constexpr const char* generatorVersion=COASTER_GENERATOR_VERSION;
-inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.2"||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
+inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.3"||version=="2.0.0-default.2"||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
 
 enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
@@ -125,12 +125,12 @@ struct RideStyle {
     bool operator==(const RideStyle&) const=default;
     double airtime{1},signatureRollDegrees{45};
     int returnStyle{-1}; // -1 seed choice, 0 flowing crest, 1 twin airtime
-    bool automaticTrims{true};
+    bool automaticTrims{true}; // Historical save field; v3 resolves explicit recipe hardware.
 };
 struct GenerationRequest {
     bool operator==(const GenerationRequest&) const=default;
     uint64_t seed{42}; Terrain terrain; Targets targets; Limits limits; TrainConfig train;
-    int maxCandidates{8}; double simulationStep{1./960};
+    int maxClosureIterations{8}; double simulationStep{1./960};
     RideStyle style;
     RideRecipe recipe; // Empty selects the current default; accepted new rides retain the resolved recipe.
     TrackProfile trackProfile{TrackProfile::Legacy};

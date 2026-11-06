@@ -28,7 +28,7 @@ public:
     bool Menu = true, ShowTelemetry = false, ShowComparison = false;
     int32 ComparisonOffset = 0;
     int32 SelectedRow = 0;
-    static constexpr int32 SetupRowCount = 11;
+    static constexpr int32 SetupRowCount = 10;
     FString RowText(int32 Row) const;
 private:
     friend class FCoasterRuntimeVerification;
@@ -38,6 +38,7 @@ private:
 #endif
     void ChangeRow(int32 Direction);
     void RequestGeneration();
+    void RequestStartup(const TCHAR* CommandLine);
 };
 
 UCLASS()

@@ -184,7 +184,16 @@ int main(){try{
     builder.programme(polynomialMotion(builder.cursor,anglePolynomial(atEnd[0],{},100),anglePolynomial(atEnd[1],atEnd[1],100),100),Element::Return,"release");hybrid.track.rebuild();
     const auto sourceKnots=hybrid.track.knots;std::vector<Frame> hybridFrames;
     for(size_t i=0;i<hybrid.track.knots.size();++i){Frame f;f.distance=i<hybrid.track.spans.size()?hybrid.track.spans[i].start:hybrid.track.length;f.time=f.distance/35;f.speed=35;hybridFrames.push_back(f);}
+    auto differentRelease=hybrid;
+    differentRelease.splinePrograms.back().requestedRoll=.45;
     authorBanking(hybrid,hybridFrames);
+    authorBanking(differentRelease,hybridFrames);
+    for(size_t i=0;i<owned.first;++i){
+        const auto& a=hybrid.track.knots[i];const auto& b=differentRelease.track.knots[i];
+        close(a.up,b.up,1e-13);close(a.upFirst,b.upFirst,1e-13);
+        close(a.upSecond,b.upSecond,1e-13);close(a.upThird,b.upThird,1e-13);
+    }
+    check(true,"Changing a later roll phrase cannot re-bank an earlier interval across an immutable FVD source");
     for(size_t i=owned.first;i<=owned.second;++i){const auto q=sampleSpanKinematics(hybrid.track,i,0);const auto& expected=sourceKnots[i];
         close(q.sample.up,expected.up,1e-10);close(q.upS,expected.upFirst,1e-10);close(q.upSS,expected.upSecond,1e-10);close(q.upSSS,expected.upThird,1e-9);}
     for(size_t i=1;i<hybrid.track.spans.size();++i){const auto a=sampleSpanKinematics(hybrid.track,i-1,1),b=sampleSpanKinematics(hybrid.track,i,0);

@@ -89,7 +89,7 @@ int main(int argc,char** argv){try{
     require(!design.accepted()&&!design.convergence.passed,"Invalid finer replay becomes accepted");
     require(design.simulation.frames.size()==2&&design.simulation.frames.back().distance==5000,"Failed verification replaces coarse presentation trace");
     if(argc>1&&std::string(argv[1])=="--generation-cancel"){
-    GenerationRequest request;request.targets.requireIntensity=false;request.maxCandidates=1;
+    GenerationRequest request;request.targets.requireIntensity=false;request.maxClosureIterations=1;
     std::atomic<bool> replayStarted{false},overlap{false};std::atomic<int> polling{0};
     auto cancelled=generate(request,[&]{
         if(polling.fetch_add(1)!=0)overlap.store(true);
