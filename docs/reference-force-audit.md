@@ -1,4 +1,4 @@
-# Force reference audit and FVD transitions
+# Historical Force reference audit and FVD transitions
 
 Historical study from 24 September 2026. It proposed approximately 1.33 times Falcon’s Flight scale and 1.2 times its speed, with percentage force uplifts by element. Those targets are not the latest user direction; [HANDOFF.md](../HANDOFF.md) calls for natural forces and warns against forced intensity. Use this document for reference provenance and uncertainty, not as a current numeric mandate.
 
@@ -40,7 +40,7 @@ The native controls retain force/twist value, first time derivative and second t
 
 Twist is rotation about the moving tangent, not Euler horizon roll. Full angular motion includes track bending and changing speed. Gravity-referenced bank explicitly includes the tangent/yaw coupling. Time and distance derivatives are not interchangeable: `q_dot=v*q_s`, `q_ddot=a*q_s+v^2*q_ss`.
 
-The stronger camelback's recovery uses a monotone asymmetric easing of the quintic ramp. Its analytic value, rate and second derivative are sampled into native quintic Hermite controls. This retains derivative continuity while changing when the positive recovery load arrives. Its full finite-train replay must pass both peak and negative-history duration checks. Independent F2291 history/duration and numerical source-agreement checks remain unchanged. The separate project force/rate envelope uses the uniform 5% allowance authorized by the user.
+The stronger camelback's recovery uses a monotone asymmetric easing of the quintic ramp. Its analytic value, rate and second derivative are sampled into native quintic Hermite controls. This retains derivative continuity while changing when the positive recovery load arrives. Its full finite-train replay must pass both peak and negative-history duration checks. Independent F2291 history/duration and numerical source-agreement checks remain unchanged. That historical envelope is superseded by the forward compiler: force/rate preferences are diagnostic, without a fixed percentage allowance. See [current research](references/generator-rewrite-research.md).
 
 For a level coordinated approach, body normal load is `1/cos(bank)` and heading rate is `−g*tan(bank)/speed`. The bank graph, its derivatives and normal-force derivatives are authored together. The bounded solve chooses straight-entry, loaded-turn and straight-exit durations to reach the actual station port; it does not snap an endpoint or repair a failed force source with a spline.
 

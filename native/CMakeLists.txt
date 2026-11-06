@@ -12,6 +12,8 @@ add_library(coaster_core
   core/src/convergence.cpp
   core/src/generation.cpp
   core/src/authoring.cpp
+  core/src/authoring_energy.cpp
+  core/src/curve_compiler.cpp
   core/src/authorship.cpp
   core/src/motion_program.cpp
   core/src/banking.cpp
@@ -25,8 +27,11 @@ add_library(coaster_core
   core/src/station.cpp
   core/src/structures.cpp
   core/src/motion_audit.cpp
+  core/src/ride_feel.cpp
   core/src/recipe.cpp
   core/src/recipe_compiler.cpp
+  core/src/route_composer.cpp
+  core/src/route_closure.cpp
   core/src/launch_camelback.cpp
   core/src/acceleration.cpp
 )
@@ -54,7 +59,7 @@ if(MSVC)
 else()
   target_compile_options(coaster_core PRIVATE -Wall -Wextra -Wpedantic PUBLIC -ffp-contract=off)
 endif()
-add_executable(coaster_cli core/src/main.cpp)
+add_executable(coaster_cli cli/main.cpp cli/trace_export.cpp)
 target_link_libraries(coaster_cli PRIVATE coaster_core)
 add_executable(support_review tools/support_review.cpp)
 target_link_libraries(support_review PRIVATE coaster_core)
@@ -68,7 +73,7 @@ if(BUILD_TESTING)
   add_test(NAME core COMMAND coaster_tests)
   add_test(NAME core_persistence COMMAND coaster_tests --persistence)
 
-  foreach(suite launch_camelback inherited_port persistence_cancel motion_spline recipe acceleration reference support support_family support_system support_fabrication organic_generation terrain_profile dimensions clearance track_web track_profile station structures geometry frame_force terrain convergence drive_profile fvd)
+  foreach(suite ride_feel launch_camelback inherited_port persistence_cancel motion_spline recipe acceleration reference support support_family support_system support_fabrication organic_generation terrain_profile dimensions clearance track_web track_profile station structures geometry frame_force terrain convergence drive_profile fvd)
     add_executable(${suite}_tests core/tests/${suite}_tests.cpp)
     target_include_directories(${suite}_tests PRIVATE unreal/Source/VibeCoaster/Public)
     target_link_libraries(${suite}_tests PRIVATE coaster_core)

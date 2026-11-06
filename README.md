@@ -1,19 +1,64 @@
-# VibeCoaster2
+# VibeCoaster
 
-C++20 hybrid FVD/spline coaster authoring and Unreal 5.8 viewer. **Riftwake default.3** is the current source and playable baseline on `main`, including the latest source/evidence sync from the former `codex/legacy-authoring` branch. The rejected default.4 package and generated history were moved beside the legacy checkpoints at D:/Coding/Codex/vibecoasterlegacy.
+C++20 coaster generation, finite-train simulation and an Unreal 5.8 viewer.
+The new default, **Faultline**, starts in a ravine, climbs to one cliff reveal,
+then uses a floating camelback and an overbanked wall turn to head home. Its
+recipe is editable; inversions and the historical element sequence are optional.
 
-See [the branch consolidation record](docs/BRANCH_CONSOLIDATION.md) before integrating older branch work. `codex/fresh-rewrite` is a preserved alternative implementation, not a drop-in update to this baseline.
+The generator constructs one forward route. Each section inherits geometry,
+rider frame and finite-train energy. Adaptive polynomial spans retain C4
+centerline and C3 orientation continuity without a dense control-point grid.
+Local station closure finishes the draft; independent physics and clearance
+checks assess the completed ride. See [the design brief](docs/references/creative-redesign.md)
+and [measurements](docs/diagnostics/faultline/README.md). The three-seed Linux
+checkpoint generates accepted rides in 3.01–3.17 seconds; original main took
+28.74 seconds for seed 42 on this workspace.
 
-The current local state is still buggy. For online diagnosis, start with [the portable saves, review evidence and issue guide](docs/ONLINE_DIAGNOSIS.md), then read the open requirements in HANDOFF.md. Passing numerical checks do not mean the design issues are resolved.
+## Build and run
 
-The rollback followed feedback about constant roll, late LSM placement in section 1, and the clifftop. The next design task is specified in [HANDOFF.md](HANDOFF.md); use the [code map](docs/CODE_MAP.md) to find the relevant implementation paths.
+```sh
+cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
+cmake --build native/build --parallel 8
+native/build/coaster_cli generate --seed 42 --terrain highlands --out ride.coaster --json ride.json --trace ride-trace.json --plan ride-plan.json
+native/build/ride_feel_tests --design ride.coaster
+python3 native/tools/ride_review.py ride --out ride-review.html
+```
 
-Start with [HANDOFF.md](HANDOFF.md) for status and evidence. Play VibeCoaster2.lnk launches the current Unreal development game and loads the default.3 baseline from the separate UserData-GeometryReview profile; press Space to ride. The desktop VibeCoaster2 shortcut uses the same review build. dist/current.json retains the frozen standalone package.
+Visual Studio builds put executables under `native/build/Release`. Only complete
+accepted rides can be saved; loading freshly validates geometry, physics and
+clearance. Export editable intent with `coaster_cli recipe --out ride.vcrecipe`,
+then pass `--recipe ride.vcrecipe` to generation. Distances are metres and the
+launch target measures rest to 180 km/h. The default 1.4-second launch is intentional.
+For the default recipe, `--height` controls cliff relief above the station,
+`--speed-kmh` the floor boost, and `--turnaround-height` the nominal wall-turn
+rise. An explicit recipe owns its element dimensions.
+Brakes are planned with the recipe. Candidate and closure-iteration controls
+have been retired because generation has no whole-route search loop. Recipe
+approach lengths are preferred planning scales. Nominal force and rate values
+express ride character; actual signed duration, combined axes and load history
+are assessed separately, without a universal percentage allowance.
 
-Development source now includes [third-person and free-view controls](docs/camera-controls.md). Rejected train art has been removed; the new [editable train proposal](native/art/TRAIN_DESIGN.md) follows the retained [1.40 m gauge and maximum 2.40 m width](native/art/DIMENSIONS.md). Development still uses car-position markers. The updated Play shortcuts use the camera changes; the retained standalone package does not.
+## Inspect the ride
 
-Current ride-reference notes are in [docs/references](docs/references). Earlier checkpoint images and verification reports were moved beside the legacy checkpoints; their old acceptance wording does not override [HANDOFF.md](HANDOFF.md).
+Open `ride-review.html` in a browser for an offline replay of the generated
+geometry, terrain, structures and measured forces. Orbit the layout, scrub the
+timeline or ride in the front, middle and rear seats. The review uses sampled
+native output; the full-resolution native checks remain authoritative. CI
+includes this interactive artifact with each accepted baseline.
 
-Build the native core with `native/CMakeLists.txt`. Windows and macOS are the CI platforms. Package Unreal with `native/unreal/scripts/package.ps1`. Tests cover authored sources, frame and force derivatives, finite-train replay, persistence, clearance and numerical refinement; these checks do not establish manufacturer approval or whole-standard certification.
+Launch Unreal with `-CoasterGenerate -CoasterSeed=42`. Development shortcuts
+explicitly generate current source in an isolated profile. `-CoasterLoad` loads
+a historical save. See [camera controls](docs/camera-controls.md) for rider,
+orbit and free-flight inspection.
 
-Export a recipe with `coaster_cli recipe --out ride.vcrecipe`, then generate with `coaster_cli generate --recipe ride.vcrecipe --out ride.coaster`. Only fully accepted closed-circuit results can be saved. Loaded rides receive fresh validation.
+Reports include physical loads, energy, section pacing and ride-feel diagnostics.
+A few regressions cover meaningful airtime, contrasting force beats, inactive
+gaps and continuous roll. These complement independent physics checks; passing
+numbers do not establish visual quality or rider enjoyment. This is a coaster
+authoring game, not an engineering certification tool.
+
+Start with [HANDOFF.md](HANDOFF.md), [the code map](docs/CODE_MAP.md) and
+[design research](docs/references/generator-rewrite-research.md). Historical
+default.3 saves and art remain under `docs/diagnostics` and `native/art`.
+The earlier [branch consolidation](docs/BRANCH_CONSOLIDATION.md) is history,
+not a second active implementation.

@@ -18,7 +18,6 @@ struct FCoasterLoadingObservation
     bool Active = false, Cancelling = false;
     coaster::WorkPhase Phase = coaster::WorkPhase::Complete;
     double ElapsedSeconds = 0, Completed = 0, Total = 0;
-    int32 Candidate = 0;
     FString Title;
 };
 

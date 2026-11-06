@@ -36,7 +36,7 @@ int main(int argc,char** argv){try{
     require(compareSimulationConvergence(a,b,limits,assessment).valid(),"Unassessed longitudinal rate silently gated");
     limits.maxLongitudinalRateGps=10;
     require(!compareSimulationConvergence(a,b,limits,assessment).valid()&&assessment.metrics.size()==96,"Configured longitudinal rate not checked at every seat");
-    require(has(validateSimulationTargets(b,targets,limits),"LONGITUDINAL_FORCE_RATE"),"Configured fine rate gate omitted");
+    require(!validateSimulationTargets(b,targets,limits).warnings.empty(),"Large force-rate deviations must remain visible");
     limits={};b=a;b.metrics.seats[0].axes[2].mean10sMax=NAN;
     require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Missing required statistic accepted");
     b=a;b.completed=false;
@@ -50,25 +50,14 @@ int main(int argc,char** argv){try{
     targets.speed=80;
     auto slight=validateSimulationTargets(b,targets,limits);
     require(!has(slight,"LATERAL_FORCE")&&!slight.warnings.empty(),"Allowed force exceedance must remain visible");
-    b.metrics.maxLateralG=limits.maxLateralG*1.05;
-    require(!has(validateSimulationTargets(b,targets,limits),"LATERAL_FORCE"),"Exactly five percent is within the user allowance");
-    b.metrics.maxLateralG=std::nextafter(b.metrics.maxLateralG,INFINITY);
-    require(has(validateSimulationTargets(b,targets,limits),"LATERAL_FORCE"),"Even the next representable value above five percent must fail");
-    b=a;b.metrics.minVerticalG=limits.minVerticalG*1.05;
-    require(!has(validateSimulationTargets(b,targets,limits),"VERTICAL_FORCE"),"Negative magnitude uses the same five-percent boundary");
-    b.metrics.minVerticalG=std::nextafter(b.metrics.minVerticalG,-INFINITY);
-    require(has(validateSimulationTargets(b,targets,limits),"VERTICAL_FORCE"),"Negative magnitude beyond the allowance must fail");
-    b=a;b.metrics.maxJerkGps=21;
-    require(!has(validateSimulationTargets(b,targets,limits),"FORCE_TRANSITION"),"The same user allowance applies to the project force-rate cap");
-    b.metrics.maxJerkGps=21.001;
-    require(has(validateSimulationTargets(b,targets,limits),"FORCE_TRANSITION"),"Force rates above the allowance must fail");
-    b=a;b.metrics.seats[1].axes[1].maxRateGps=21;
-    require(!has(validateSimulationTargets(b,targets,limits),"LATERAL_FORCE_RATE"),"Lateral force rate uses the same allowance");
-    b.metrics.seats[1].axes[1].maxRateGps=21.001;
-    require(has(validateSimulationTargets(b,targets,limits),"LATERAL_FORCE_RATE"),"Lateral force rate beyond the allowance fails");
-    b=a;b.acceleration[0].performed=true;
+    b=a;b.metrics.maxLateralG=1.9;b.metrics.minVerticalG=-1.7;b.metrics.maxJerkGps=28;
+    const auto character=validateSimulationTargets(b,targets,limits);
+    require(character.valid()&&character.warnings.size()>=3,
+        "Force preferences must report deviations without a universal percentage ceiling");
+    b.acceleration[0].performed=true;
     b.acceleration[0].diagnostics.push_back({"7.1.4","sustained-duration","Z","+",0,1,2,4.01,4,4.01/4});
-    require(has(validateSimulationTargets(b,targets,limits),"F2291_25_sustained-duration"),"The user allowance never suppresses an independent F2291 finding");
+    require(has(validateSimulationTargets(b,targets,limits),"F2291_25_sustained-duration"),
+        "Experience preferences cannot suppress a duration/history failure");
     a=result();b=a;b.metrics.launchTo180=1.401;
     require(!compareSimulationConvergence(a,b,limits,assessment).valid(),"Launch event time must also converge independently of force extrema");
     require(assessment.maxSpeedRelativeError==0&&assessment.maxForceRelativeError==0,"Time errors cannot be mislabeled as speed or force errors");
@@ -89,7 +78,7 @@ int main(int argc,char** argv){try{
     require(!design.accepted()&&!design.convergence.passed,"Invalid finer replay becomes accepted");
     require(design.simulation.frames.size()==2&&design.simulation.frames.back().distance==5000,"Failed verification replaces coarse presentation trace");
     if(argc>1&&std::string(argv[1])=="--generation-cancel"){
-    GenerationRequest request;request.targets.requireIntensity=false;request.maxCandidates=1;
+    GenerationRequest request;request.targets.requireIntensity=false;
     std::atomic<bool> replayStarted{false},overlap{false};std::atomic<int> polling{0};
     auto cancelled=generate(request,[&]{
         if(polling.fetch_add(1)!=0)overlap.store(true);

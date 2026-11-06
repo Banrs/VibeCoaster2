@@ -21,7 +21,7 @@
 namespace coaster {
 constexpr double spineDepth=.55,spineRadius=.16,supportRadius=.18;
 constexpr const char* generatorVersion=COASTER_GENERATOR_VERSION;
-inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="2.0.0-default.2"||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
+inline bool supportedGeneratorVersion(const std::string& version){return version==generatorVersion||version=="3.0.0"||version=="2.0.0-default.3"||version=="2.0.0-default.2"||version=="2.0.0-default.1"||version=="2.0.0-rift.1"||version=="2.0.0-foundation.1"||version=="2.0.0-escarpment.1"||version=="2.0.0-highlands.1"||version=="2.0.0-motion.1";}
 
 enum class Element { Station, Launch, Hill, Turn, Inversion, Airtime, Brake, Return };
 struct AuthoredPoint { Vec3 position; double bank{}; Element element{Element::Return}; Vec3 upHint{}; };
@@ -87,9 +87,9 @@ struct Operation {
 // Merge exact adjacent, identical nonwrapping drive runs in authored order.
 void coalesceDriveProfiles(std::vector<Operation>&);
 struct Limits {
-    // User allowance applies to the game envelope, never to F2291 assessment.
-    static constexpr double allowanceFactor=1.05;
-    // Provisional game envelope, NOT a calibrated or certified rider standard.
+    // Preferred ride character, reported as deviations rather than percentage
+    // acceptance caps. Signed duration/axis/history assessments govern loads.
+    // minClearance remains a physical occupied-envelope requirement.
     double minVerticalG{-1.5},maxVerticalG{5.0},maxLateralG{1.5},maxLongitudinalG{4.5};
     double maxJerkGps{20},minClearance{0}; // Optional free gap outside the swept envelope.
     double maxLateralRateGps{20},maxLongitudinalRateGps{20};
@@ -111,8 +111,10 @@ struct ReferenceBenchmark {
     std::vector<ReferenceRecording> recordings;
 };
 struct Targets {
-    // SI units; launchSeconds measures acceleration from rest to 50 m/s.
-    double height{220},speed{300/3.6},inversionHeight{80},launchSeconds{1.4};
+    // SI units. Height is preferred relief above the station; inversionHeight
+    // is nominal turnaround scale. Explicit recipes own their geometry.
+    // launchSeconds measures acceleration from rest to 50 m/s.
+    double height{235},speed{285/3.6},inversionHeight{55},launchSeconds{1.4};
     bool requireIntensity{false}; // Optional calibrated reference comparison.
     double referenceExposure{std::numeric_limits<double>::quiet_NaN()};
     std::string referenceId;
@@ -123,14 +125,15 @@ struct Targets {
 };
 struct RideStyle {
     bool operator==(const RideStyle&) const=default;
-    double airtime{1},signatureRollDegrees{45};
+    double airtime{1},signatureRollDegrees{32};
     int returnStyle{-1}; // -1 seed choice, 0 flowing crest, 1 twin airtime
-    bool automaticTrims{true};
+    bool automaticTrims{true}; // Historical save field; v3 resolves explicit recipe hardware.
 };
 struct GenerationRequest {
     bool operator==(const GenerationRequest&) const=default;
     uint64_t seed{42}; Terrain terrain; Targets targets; Limits limits; TrainConfig train;
-    int maxCandidates{8}; double simulationStep{1./960};
+    // Reserved positional save field; forward generation has no candidate loop.
+    int maxClosureIterations{8}; double simulationStep{1./960};
     RideStyle style;
     RideRecipe recipe; // Empty selects the current default; accepted new rides retain the resolved recipe.
     TrackProfile trackProfile{TrackProfile::Legacy};

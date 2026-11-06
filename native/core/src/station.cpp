@@ -50,7 +50,10 @@ ValidationReport stationTrackDomain(const Track& track,const Terrain& terrain,co
             for(size_t k=0;k<a.c.size();++k)if(!finite(a.c[k])||norm(a.c[k]-b.c[k])!=0)throw std::runtime_error("Stale canonical span coefficients");
             for(size_t k=0;k<a.referenceUp.size();++k)if(!finite(a.referenceUp[k])||norm(a.referenceUp[k]-b.referenceUp[k])!=0||!std::isfinite(a.bank[k])||a.bank[k]!=b.bank[k])throw std::runtime_error("Stale canonical frame coefficients");
             double angle=std::atan2(norm(cross(unit(track.knots[i].up),unit(track.knots[i+1].up))),std::clamp(dot(unit(track.knots[i].up),unit(track.knots[i+1].up)),-1.,1.));
-            if(std::abs(track.knots[i+1].bank-track.knots[i].bank)/a.length>.12||angle/a.length>.12||angle>.2){std::ostringstream m;m<<"Unsupported canonical station frame rate at "<<a.start<<" m: span="<<a.length<<", upAngle="<<angle<<", bankChange="<<track.knots[i+1].bank-track.knots[i].bank;throw std::runtime_error(m.str());}
+            // Sparse canonical spans may turn through a large total angle.
+            // Their entire moving envelope is bounded by the polynomial sweep,
+            // so this domain check concerns angle per metre, not knot spacing.
+            if(std::abs(track.knots[i+1].bank-track.knots[i].bank)/a.length>.12||angle/a.length>.12){std::ostringstream m;m<<"Unsupported canonical station frame rate at "<<a.start<<" m: span="<<a.length<<", upAngle="<<angle<<", bankChange="<<track.knots[i+1].bank-track.knots[i].bank;throw std::runtime_error(m.str());}
         }
     }catch(const std::exception& e){out.fail("STATION_CONFIG",e.what());}
     return out;

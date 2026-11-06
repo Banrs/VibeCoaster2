@@ -1,6 +1,7 @@
 #include "../src/banking.hpp"
 #include "../src/motion_program.hpp"
 #include "../src/authoring.hpp"
+#include "../src/authoring_energy.hpp"
 #include "../src/simulation_internal.hpp"
 #include "coaster/fvd.hpp"
 #include <iostream>
@@ -52,53 +53,35 @@ int main(){try{
     circle.begin=exact(0);circle.end=exact(circle.length);derivatives(circle);
     for(int i=0;i<=100;++i){double s=circle.length*i/100;auto q=circle.direction(s),e=exact(s);close(q.tangent,e.tangent,1e-12);close(q.curvature,e.curvature,1e-12);close(q.third,e.third,1e-12);close(q.fourth,e.fourth,1e-12);close(circle.displacement(s),e.position,1e-10);}
 
-    // Identical authored upstream geometry in an open energy-calibration
-    // prefix and a real closed circuit. The prefix must leave the station at
-    // the same distance and inherit every finite-train drive observation.
-    Track whole;whole.authoredGeometry=whole.authoredFrame=true;
-    constexpr int wholeSamples=1600,prefixSamples=340;
-    for(int i=0;i<=wholeSamples;++i){const auto q=exact(2*pi*radius*i/wholeSamples);
-        whole.knots.push_back({q.position,q.tangent,q.curvature,{0,0,1},0,Element::Turn,q.third,q.fourth});}
-    whole.knots.back()=whole.knots.front();whole.rebuild();
-    auto prefixTrack=whole;prefixTrack.closed=false;prefixTrack.knots.resize(prefixSamples+1);prefixTrack.rebuild();
-    TrainConfig prefixTrain;const double frontTrainOffset=seatDistanceOffset(prefixTrain,0);
-    const std::vector<Operation> prefixDrives{{3,250,DriveKind::Launch,30,30000,3000000,.5}};
-    int prefixPolls=0;
-    const auto prefixMotion=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,[&]{++prefixPolls;return false;},MotionReplayMode::StationEnergyPrefix);
-    check(prefixMotion.prefixReachedEnd&&!prefixMotion.completed&&!prefixMotion.cancelled&&prefixMotion.report.valid(),
-        "A successful calibration prefix reports only prefix completion, never completed ride acceptance");
-    check(!prefixMotion.frames.empty()&&prefixMotion.frames.front().distance==frontTrainOffset+30,
-        "Open energy calibration uses the full circuit's station departure distance");
-    int wholePolls=0;
-    const auto upstream=simulateMotion(whole,prefixDrives,prefixTrain,1./960,[&]{return ++wholePolls>prefixPolls+2;});
-    check(upstream.cancelled&&!upstream.completed&&!upstream.prefixReachedEnd&&upstream.frames.size()+1>=prefixMotion.frames.size(),
-        "The comparison stops the full circuit after the common upstream range without inventing completion");
-    check(prefixMotion.frames.size()>100,"Prefix parity fixture includes a substantial powered and coasting history");
-    for(size_t i=0;i+1<prefixMotion.frames.size();++i){const auto& a=prefixMotion.frames[i];const auto& b=upstream.frames[i];
-        check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed&&a.acceleration==b.acceleration&&a.accelerationRate==b.accelerationRate,
-            "Station energy prefix and closed-circuit replay have bit-exact upstream motion and actuator derivatives");}
-    const auto isolatedMotion=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,{});
-    const auto isolatedForces=simulate(prefixTrack,prefixDrives,prefixTrain,1./960,{});
-    check(isolatedMotion.completed&&!isolatedMotion.prefixReachedEnd&&isolatedMotion.frames.front().distance==frontTrainOffset+1,
-        "Ordinary isolated open sections retain their original starting position and completed status");
+    // Motion-only authoring and independent seat replay share the physical
+    // open-section starting point and actuator history.
+    Track openTrack;openTrack.closed=false;openTrack.authoredGeometry=openTrack.authoredFrame=true;
+    for(int i=0;i<=340;++i){const auto q=exact(2*pi*radius*i/1600);
+        openTrack.knots.push_back({q.position,q.tangent,q.curvature,{0,0,1},0,Element::Turn,q.third,q.fourth});}
+    openTrack.rebuild();
+    TrainConfig train;const double frontTrainOffset=seatDistanceOffset(train,0);
+    const std::vector<Operation> drives{{3,250,DriveKind::Launch,30,30000,3000000,.5}};
+    const auto isolatedMotion=simulateMotion(openTrack,drives,train,1./960,{});
+    const auto isolatedForces=simulate(openTrack,drives,train,1./960,{});
+    check(isolatedMotion.completed&&isolatedMotion.frames.front().distance==frontTrainOffset+1,
+        "Isolated open sections start with the complete train on the track");
     check(isolatedForces.completed==isolatedMotion.completed&&isolatedForces.cancelled==isolatedMotion.cancelled&&isolatedForces.frames.size()==isolatedMotion.frames.size(),
-        "Named prefix support does not change ordinary full-force versus motion-only completion");
+        "Full-force and motion-only replay agree on completion");
     for(size_t i=0;i<isolatedMotion.frames.size();++i){const auto& a=isolatedMotion.frames[i];const auto& b=isolatedForces.frames[i];
-        check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed,"Ordinary open replay remains bit-exact with the public physical simulation");}
-    const auto prefixCancelled=simulateMotion(prefixTrack,prefixDrives,prefixTrain,1./960,[]{return true;},MotionReplayMode::StationEnergyPrefix);
-    check(prefixCancelled.cancelled&&!prefixCancelled.completed&&!prefixCancelled.prefixReachedEnd,
-        "Cancelled energy calibration cannot report a reached prefix or completed circuit");
-    const auto wrongDomain=simulateMotion(whole,prefixDrives,prefixTrain,1./960,{},MotionReplayMode::StationEnergyPrefix);
-    check(!wrongDomain.completed&&!wrongDomain.prefixReachedEnd&&!wrongDomain.report.valid()&&wrongDomain.frames.empty(),
-        "Energy-prefix mode rejects a closed circuit instead of changing its completion meaning");
-    auto terminalDrives=prefixDrives;terminalDrives.push_back({260,300,DriveKind::Station,0,30000,3000000,.5});
-    const auto wrongTerminal=simulateMotion(prefixTrack,terminalDrives,prefixTrain,1./960,{},MotionReplayMode::StationEnergyPrefix);
-    check(!wrongTerminal.prefixReachedEnd&&!wrongTerminal.report.valid(),"Energy prefix rejects terminal station operations");
-    Design diagnosticPrefix;diagnosticPrefix.track=prefixTrack;diagnosticPrefix.operations=prefixDrives;diagnosticPrefix.simulation.frames=prefixMotion.frames;
-    diagnosticPrefix.simulation.completed=prefixMotion.completed;
-    std::string prefixSaveError;
-    check(!diagnosticPrefix.accepted()&&!saveDesign(diagnosticPrefix,"",prefixSaveError)&&prefixSaveError.find("REJECTED_DESIGN")==0,
-        "A reached calibration prefix cannot pass design acceptance or persistence even with a complete upstream trace");
+        check(a.time==b.time&&a.distance==b.distance&&a.speed==b.speed,"Motion-only replay preserves the public simulation trajectory");}
+    const auto cancelledMotion=simulateMotion(openTrack,drives,train,1./960,[]{return true;});
+    check(cancelledMotion.cancelled&&!cancelledMotion.completed,"Cancelled motion replay cannot report completion");
+
+    // High-speed source boundaries used to become smaller than the temporal
+    // bisection resolution, leaving a zero-time step in an infinite loop.
+    AuthoringEnergy energy(train);
+    const std::vector<Operation> fastDrive{{3,3000,DriveKind::Launch,95,150000,15000000,.5}};
+    const auto level=[](double){return Vec3{1,0,0};};
+    for(double boundary:{500.123456789,500.123456801,800.234567891,800.234567903}) {
+        energy.advanceTo(boundary,level,fastDrive);
+        check(std::abs(energy.distance()-boundary)<1e-8&&energy.speed()>60,
+            "Incremental high-speed energy resolves arbitrarily close source boundaries");
+    }
     for(double degrees:{178.5,180.}){
         const double length=radius*degrees*pi/180;const auto start=exact(0),finish=exact(length);
         const auto reversal=solveMotion(start,finish,length,{30,0,0,0});
@@ -184,7 +167,16 @@ int main(){try{
     builder.programme(polynomialMotion(builder.cursor,anglePolynomial(atEnd[0],{},100),anglePolynomial(atEnd[1],atEnd[1],100),100),Element::Return,"release");hybrid.track.rebuild();
     const auto sourceKnots=hybrid.track.knots;std::vector<Frame> hybridFrames;
     for(size_t i=0;i<hybrid.track.knots.size();++i){Frame f;f.distance=i<hybrid.track.spans.size()?hybrid.track.spans[i].start:hybrid.track.length;f.time=f.distance/35;f.speed=35;hybridFrames.push_back(f);}
+    auto differentRelease=hybrid;
+    differentRelease.splinePrograms.back().requestedRoll=.45;
     authorBanking(hybrid,hybridFrames);
+    authorBanking(differentRelease,hybridFrames);
+    for(size_t i=0;i<owned.first;++i){
+        const auto& a=hybrid.track.knots[i];const auto& b=differentRelease.track.knots[i];
+        close(a.up,b.up,1e-13);close(a.upFirst,b.upFirst,1e-13);
+        close(a.upSecond,b.upSecond,1e-13);close(a.upThird,b.upThird,1e-13);
+    }
+    check(true,"Changing a later roll phrase cannot re-bank an earlier interval across an immutable FVD source");
     for(size_t i=owned.first;i<=owned.second;++i){const auto q=sampleSpanKinematics(hybrid.track,i,0);const auto& expected=sourceKnots[i];
         close(q.sample.up,expected.up,1e-10);close(q.upS,expected.upFirst,1e-10);close(q.upSS,expected.upSecond,1e-10);close(q.upSSS,expected.upThird,1e-9);}
     for(size_t i=1;i<hybrid.track.spans.size();++i){const auto a=sampleSpanKinematics(hybrid.track,i-1,1),b=sampleSpanKinematics(hybrid.track,i,0);

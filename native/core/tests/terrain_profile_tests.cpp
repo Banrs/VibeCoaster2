@@ -41,8 +41,8 @@ int main(){try{
         check(!request.terrain.valid(),"Removed or invalid terrain kind is refused");
         const auto report=validateRequest(request);
         check(!report.valid()&&report.errors.front().code=="TERRAIN_PROFILE","Unsupported surface fails at the request boundary");
-        int callbacks=0;const auto rejected=generate(request,{},[&](const WorkProgress&){++callbacks;});
-        check(!rejected.accepted()&&rejected.track.knots.empty()&&callbacks==0,"Removed terrain cannot construct or simulate a ride");
+        const auto rejected=generate(request);
+        check(!rejected.accepted()&&rejected.track.knots.empty()&&rejected.simulation.frames.empty(),"Removed terrain cannot construct or simulate a ride");
     }
     for(double value:{NAN,INFINITY,-INFINITY})
         check(!std::isfinite(flat.localSlopeBound(value,0,1))&&!std::isfinite(flat.localSlopeBound(0,value,1))&&!std::isfinite(flat.localSlopeBound(0,0,value)),"Nonfinite footprint queries fail closed");

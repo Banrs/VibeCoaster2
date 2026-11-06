@@ -2,6 +2,12 @@
 
 This is a numerical assessment of selected acceleration provisions of **ASTM F2291-25**, not whole-standard certification or a biomechanical safety finding. The selected seating case is upright, Class 4/5, with lower-body containment, backrest and headrest. Upper-torso braking, prone and extended negative-Z allowances are not selected. Seat/restraint construction and applicability still require the ride analysis.
 
+As of the November 2026 rewrite, this implementation remains pinned to edition
+25; the publisher now lists [F2291-26b](https://store.astm.org/f2291-26b.html).
+Its changes have not been incorporated or assessed here. See the [rewrite
+research](references/generator-rewrite-research.md) for force-excursion and
+FVD/spline continuity decisions.
+
 ## Provenance and numerical limits
 
 The source is the [edition 25 document reproduction](https://studylib.net/doc/27870841/f2291-25). Figures 6–8 and 20 were visually checked in the reproduced original pages; HTML prose alone omits their plotted limits. Figures 6/7 are printed page 13, Figure 8 page 14, and Figure 20 page 20. No edition 26 values or historical project tolerance models are used.
@@ -31,7 +37,7 @@ These are explicit numerical choices, not additional quotations or invented stan
 - X/Y reversal events must each be sustained. Timing is between opposite-sign peaks, using the last point of a preceding flat peak and the first point of the following flat peak. At exactly 200 ms the implementation conservatively applies the 50% signed peak limits because the two sentences of §7.1.6.1 leave equality ambiguous. Short intervening sign events do not become sustained reversals.
 - Negative-Z history activates only after a strictly longer-than-three-second negative interval. The six-second reduction begins at the following upward zero crossing. A zero plateau delays that crossing. Overlapping reduction windows form their union. As a conservative applicability interpretation, the +Z ellipse radius also becomes 5 during those windows.
 - For §7.1.7.2, qualifying history requires at least 200 ms at Z≤0. The first subsequent upward crossing of +2 must be at least 133 ms after the latest upward zero crossing. Brief returns to Z≤0 retain the qualifying history and update that departure; reaching +2 consumes it. This brief-return policy is explicit because Figure 20 does not illustrate that case. No +2 plateau is required.
-- Comparison tolerances are numerical roundoff only: `1e-10 s` for duration equality and `1e-12 × max(1, limit)` for acceleration comparisons. The user's 5% project force/rate allowance is never applied here.
+- Comparison tolerances are numerical roundoff only: `1e-10 s` for duration equality and `1e-12 × max(1, limit)` for acceleration comparisons. Preferred force/rate targets do not alter these comparisons.
 
 The raw-input and processed-input entry points are separate. `assessProcessedAccelerationF2291_25` supports independent boundary fixtures or already processed records; production calls `assessAccelerationF2291_25`. Cancellation leaves `performed=false`, `passed=false`, `cancelled=true`. Valid completed work sets `performed=true`; `passed` requires no failure or review-required diagnostics. Diagnostic ordering is deterministic by clause, rule, axis, sign, seat and interval.
 
@@ -41,7 +47,14 @@ Short single-axis excursions above the 200 ms intercept produce `impact-review-r
 
 `positive-tail-review-required` conservatively marks a continuous +Z exposure above 1 g lasting more than 40 s. This is a scope guard, not an extrapolated numerical standard curve; stationary 1 g is exempt. `duration-over-90s-review-required` marks other continuous signed dynamic exposures exceeding 90 s. Review cases prevent this scoped assessment from passing until the scope/applicability is resolved.
 
-The project's nominal Gz −1.5…+5, |Gy| 1.5, |Gx| 4.5, and component-rate 20 g/s checks remain separate. A uniform user-approved allowance of up to 5% applies to those project limits, with every exceedance of nominal reported; the F2291 curves, history, combined-axis and reversal checks are not relaxed. Filtered 100 ms onset is reported without treating it as that project rate limit. Filter startup, rider population, physical restraint suitability, angular accelerations, impacts, full ride analysis, measurement validation and the rest of F2291 are outside a blanket compliance claim.
+The configured vertical, lateral, longitudinal and force-rate values now describe
+preferred ride character. Exceedances are reported without a fixed percentage
+ceiling. Actual signed duration, history, combined-axis, reversal and impact
+assessments remain separate requirements for a completed ride. A preferred
+peak alone cannot determine whether an episode is appropriate. Filtered onset,
+raw peaks and analytic angular motion remain visible. This selected assessment
+is not a blanket human-safety or whole-standard compliance finding.
+
 
 ## Verification
 

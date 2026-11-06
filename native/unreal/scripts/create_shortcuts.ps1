@@ -2,6 +2,7 @@
 param([switch]$Desktop,[switch]$Development,[switch]$GeometryReview,[string]$UnrealRoot)
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).Path
+$LoadSavedRide = $true
 if ($Development -and $GeometryReview) { throw 'Choose Development or GeometryReview.' }
 if ($Development -or $GeometryReview) {
     if (-not $UnrealRoot) { throw 'Development shortcuts require -UnrealRoot.' }
@@ -20,10 +21,13 @@ if ($Development -or $GeometryReview) {
             Copy-Item -LiteralPath $Source -Destination $Save
         }
     } else {
-        $Profile = (Resolve-Path -LiteralPath (Join-Path $RepositoryRoot 'UserData-Development')).Path
+        $Profile = Join-Path $RepositoryRoot 'UserData-GeneratorDevelopment'
+        New-Item -ItemType Directory -Force -Path $Profile | Out-Null
+        $LoadSavedRide = $false
     }
-    $Arguments = '"' + $Project + '" -game -UserDir="' + $Profile + '" -CoasterLoad'
-    $Release = 'Current local game build'
+    $Startup = if ($LoadSavedRide) { '-CoasterLoad' } else { '-CoasterGenerate' }
+    $Arguments = '"' + $Project + '" -game -UserDir="' + $Profile + '" ' + $Startup
+    $Release = 'Current generator - fresh ride'
     if ($GeometryReview) {
         $Arguments += ' -windowed -ResX=1600 -ResY=900'
         $Release = 'Geometry review - third-person and free view'
@@ -41,7 +45,7 @@ if ($Development -or $GeometryReview) {
     $Arguments = '-UserDir="' + $Profile + '" -CoasterLoad'
     $Release = $Manifest.Release
 }
-if (-not (Test-Path -LiteralPath (Join-Path $Profile 'Saved/VibeCoaster2/Designs/Accepted.vcdesign') -PathType Leaf)) { throw 'The current playable profile has no accepted ride.' }
+if ($LoadSavedRide -and -not (Test-Path -LiteralPath (Join-Path $Profile 'Saved/VibeCoaster2/Designs/Accepted.vcdesign') -PathType Leaf)) { throw 'The current playable profile has no accepted ride.' }
 $Destinations = @((Join-Path $RepositoryRoot 'Play VibeCoaster2.lnk'))
 if ($Desktop) { $Destinations += Join-Path ([Environment]::GetFolderPath('Desktop')) 'VibeCoaster2.lnk' }
 $Shell = New-Object -ComObject WScript.Shell

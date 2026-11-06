@@ -2,7 +2,6 @@
 #include "coaster/trim_brake.hpp"
 #include "coaster/coaster.hpp"
 #include "../src/simulation_internal.hpp"
-#include "../src/trim_layout.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace coaster;
@@ -89,16 +88,6 @@ int main(){try{
         check(dot(piece.box.forward,pose.tangent)>1-1e-12&&dot(piece.box.up,pose.up)>1-1e-12,"Hardware uses the canonical physical track frame");
     }
     check(poweredMountBridgesTrack,"Powered hardware includes a continuous LSM-to-spine mounting box");
-    Design graded;graded.request.train=train;
-    std::vector<AuthoredPoint> incline;for(int i=0;i<=800;++i)incline.push_back({{double(i),0,20+i*.05},0,Element::Hill,{0,0,1}});
-    graded.track=compile(incline,false);graded.operations={op(0,180)};graded.sections={{"graded-coast",250,700,0,true}};
-    const auto nominal=simulate(graded.track,graded.operations,train);check(nominal.completed,"Graded trim placement fixture completes");
-    planTrimBrakes(graded,nominal.frames);check(graded.operations.size()==2,"Automatic trim layout finds a suitable inclined coast");
-    const auto protectedRun=simulate(graded.track,graded.operations,train);
-    check(protectedRun.completed&&protectedRun.trims.size()==1&&protectedRun.trims[0].deployment==0,"Nominal trim installation cannot conceal rejected dynamics");
-    check(std::abs(protectedRun.frames.back().speed-nominal.frames.back().speed)<1e-12,"Retracted trims leave the actual energy trajectory unchanged");
-    const auto inclinedHardware=buildOperationHardware(graded.track,graded.operations);
-    for(const auto& h:inclinedHardware)check(std::abs(h.box.forward.z-1/std::sqrt(401.))<1e-9,"LSM and brake hardware follow the real graded track");
     auto late=trim;late.trimSensorLead=1;const auto rejectedTrim=simulate(track,{op(0,120),late},train,1./960);
     check(!rejectedTrim.report.valid()&&rejectedTrim.report.errors.front().code=="TRIM_ARMING","Late brake actuation fails explicitly instead of teleporting the actuator into place");
     std::cout<<"PASS "<<checks<<" exact-drive coalescing and force continuity checks\n";return 0;

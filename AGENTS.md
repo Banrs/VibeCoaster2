@@ -1,9 +1,26 @@
-# VibeCoaster2 working entrypoint
+# VibeCoaster working entrypoint
 
-## Coding rules
+Read README.md, HANDOFF.md and docs/CODE_MAP.md. The Faultline default and forward compiler are the
+active source; default.3 handoffs and checkpoint receipts are historical.
 
-Read README.md, then HANDOFF.md, then docs/CODE_MAP.md. HANDOFF.md carries the latest user priorities and active default.3 state. Older plans, checkpoints and archive receipts are historical evidence, not instructions for the next design.
+Construct one forward draft: advance finite-train energy only across new track,
+compile source curves with error-controlled spans, then append local closure.
+Do not restore whole-route calibration, dense fixed sampling or hidden retries.
+Keep ride intent, construction and independent validation separate. Validation
+must not repair geometry, adjust forces or silently retry another ride. Inherit
+the complete geometry and frame state at boundaries; do not insert arbitrary
+upright/flat resets. Plan hardware with the route and evaluate actual replay.
 
-The live package is selected by dist/current.json and the Play shortcut. Rejected default.4 material and old local experiments are in D:\Coding\Codex\vibecoasterlegacy; the archive manifests are there. Keep active default.3 package, save and launch identities intact unless the task explicitly changes the playable version.
+Preserve the intentional rest-to-180-km/h launch in about 1.4 seconds, independent
+physics, occupied-envelope clearance and fresh saved-design checks. Nominal G
+and force-rate values are experience preferences, without a percentage cutoff;
+actual signed duration, combined axes and load history govern acceptance. Prefer a few
+substantive experience regressions over track snapshots or large matrices.
+Passing checks do not prove visual quality or reference fidelity. Inspect the
+actual generated offline review, not only metrics. Optional recipe acts must
+not quietly restore the historical mandatory inversion catalog.
 
-Start from the code map, not a graph dump. Graphify is optional for a specific symbol path in the focused native/core or Unreal Source index; neither covers Blender art. Check changing source directly. Keep edits surgical and verify the affected path. The cleanup rebuilt and validated the default.3 CLI save and passed four focused tests before/after its core trim. It did not rerun the full component suite or repackage Unreal.
+Build using native/CMakeLists.txt with at most eight compiler workers. New core
+translation units also need Unreal Private/Core*.cpp wrappers. Historical saves
+retain their recorded identity; new generation uses native/core/include/coaster/version.hpp.
+Do not mistake a loaded old profile for output of the current generator.

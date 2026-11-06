@@ -1,8 +1,8 @@
 # Geometry inspection cameras
 
-The repository and desktop Play shortcuts now launch the current development
-game with these controls, using the separate UserData-GeometryReview profile.
-The frozen standalone package remains recorded in dist/current.json.
+The current development game provides rider, train-follow and free cameras.
+Fresh generation uses the isolated `UserData-GeneratorDevelopment` profile.
+The frozen standalone package remains recorded in the local `dist/current.json`.
 
 From the repository root, launch the built editor game with:
 
@@ -10,8 +10,29 @@ From the repository root, launch the built editor game with:
 ./native/unreal/scripts/inspect_geometry.ps1
 ```
 
-This creates a separate `UserData-GeometryReview` profile from the verified
-baseline on first use. Later launches retain that review profile's save.
+This generates a new ride with the current generator every launch. Use `-Seed 123`
+to select a repeatable layout. F5 saves the accepted development ride; F9 explicitly
+reloads it. A failed generation reports its failure and never loads an older save.
+
+To compare the retained ride, pass `-Baseline`. That mode loads the separate
+`UserData-GeometryReview` save and bootstraps it from the verified frozen profile
+only when absent. Existing review saves are preserved. It requires the local
+package selector and baseline, which are not included in a clean source checkout.
+
+On Windows, recreate the Play shortcut for fresh generation with:
+
+```powershell
+./native/unreal/scripts/create_shortcuts.ps1 -Development -UnrealRoot 'D:/Games/Epic Games/UE_5.8'
+```
+
+Pass the Unreal root as a quoted path when it contains spaces. Use `-GeometryReview`
+instead of `-Development` for the historical review save. Checked-in shortcuts
+are machine-specific; creating a shortcut does not build the game module.
+
+Direct game startup accepts `-CoasterGenerate [-CoasterSeed=42]` or `-CoasterLoad`.
+Supplying both actions reports an input error. Starting without either opens the
+setup menu. Runtime logs identify both the generator build and loaded geometry
+version so comparisons cannot mistake a historical save for new generation.
 
 Hide setup with Tab and close comparison with C before using inspection controls.
 

@@ -1,5 +1,6 @@
 #include "coaster/coaster.hpp"
 #include "coaster/clearance.hpp"
+#include "coaster/ride_feel.hpp"
 #include "simulation_internal.hpp"
 #include <iomanip>
 #include <sstream>
@@ -97,7 +98,24 @@ void assessMotion(Design& d,Cancel cancel){
             if(kind>=seen.size()||seen[kind]||!std::isfinite(landmark.distance)||landmark.distance<0||landmark.distance>d.track.length){d.report.fail("LANDMARK_INTENT","Invalid, duplicate or out-of-range verification landmark");continue;}
             seen[kind]=true;
         }
-        if(!std::all_of(seen.begin(),seen.end(),[](bool value){return value;}))d.report.fail("LANDMARK_INTENT","Default recipe is missing a required verification landmark");
+        // Landmarks describe authored elements, not one historical layout.
+        // A custom recipe need not contain every element of the old default.
+        const auto require=[&](LandmarkKind kind){
+            if(!seen[size_t(kind)])d.report.fail("LANDMARK_INTENT",std::string("Authored recipe is missing landmark: ")+landmarkName(kind));
+        };
+        for(const auto& element:d.request.recipe.elements)switch(element.role){
+            case RideRole::Opening:require(LandmarkKind::OpeningCrest);require(LandmarkKind::OpeningRecovery);break;
+            case RideRole::CliffApproach:require(LandmarkKind::PlateauArrival);break;
+            case RideRole::CliffDrop:require(LandmarkKind::CliffDeparture);break;
+            case RideRole::DownhillLaunch:require(LandmarkKind::DownhillLaunchExit);break;
+            case RideRole::Camelback:require(LandmarkKind::CamelbackCrest);break;
+            case RideRole::Wave:require(LandmarkKind::WaveCrest);break;
+            case RideRole::Loop:require(LandmarkKind::LoopCrest);break;
+            case RideRole::Immelmann:require(LandmarkKind::ImmelmannCrest);break;
+            case RideRole::Signature:require(LandmarkKind::SignatureRelease);break;
+            case RideRole::Brakes:require(LandmarkKind::BrakeEntry);break;
+            default:break;
+        }
 
     }
     auto frontTime=[&](double distance){return frameAt(d.simulation.frames,distance-seatDistanceOffset(d.request.train,0)).time;};
@@ -243,6 +261,6 @@ std::string motionReportJson(const Design& d){
         if(!d.simulation.frames.empty()){o<<",\"frontTime\":";number(o,frameAt(d.simulation.frames,landmark.distance-seatDistanceOffset(d.request.train,0)).time);o<<",\"rearTime\":";number(o,frameAt(d.simulation.frames,landmark.distance-seatDistanceOffset(d.request.train,2)).time);}
         o<<'}';
     }
-    const auto& s=d.spatial;o<<"],\"spatialRefinement\":{\"method\":\"Half-spacing reconstruction of the frozen canonical motion, remapped operations and independent train replay/clearance\",\"performed\":"<<(s.performed?"true":"false")<<",\"passed\":"<<(s.passed?"true":"false")<<",\"maximumPositionError\":";number(o,s.maximumPositionError);o<<",\"maximumOrientationError\":";number(o,s.maximumOrientationError);o<<",\"maximumForceRelativeError\":";number(o,s.replay.maxForceRelativeError);o<<"}}";return o.str();
+    const auto& s=d.spatial;o<<"],\"spatialRefinement\":{\"method\":\"Half-spacing reconstruction of the frozen canonical motion, remapped operations and independent train replay/clearance\",\"performed\":"<<(s.performed?"true":"false")<<",\"passed\":"<<(s.passed?"true":"false")<<",\"maximumPositionError\":";number(o,s.maximumPositionError);o<<",\"maximumOrientationError\":";number(o,s.maximumOrientationError);o<<",\"maximumForceRelativeError\":";number(o,s.replay.maxForceRelativeError);o<<"},\"rideFeel\":"<<rideFeelJson(measureRideFeel(d))<<'}';return o.str();
 }
 }

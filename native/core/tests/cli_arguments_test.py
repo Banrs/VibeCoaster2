@@ -17,7 +17,7 @@ class CliArguments(unittest.TestCase):
     def invoke(self, *args):
         # Either invalid setting stops generation even when testing the other.
         return subprocess.run(
-            [str(Path(CLI).resolve()), "generate", "--candidates", "0",
+            [str(Path(CLI).resolve()), "generate", "--step", "0",
              "--launch-seconds", "0", *args],
             capture_output=True, text=True, encoding="utf-8", timeout=15,
         )
@@ -27,6 +27,7 @@ class CliArguments(unittest.TestCase):
         self.assertEqual(result.returncode, 1, (args, result.stdout, result.stderr))
         self.assertEqual(result.stdout, "")
         self.assertTrue(result.stderr.strip())
+        return result
 
     def parsed(self, *args):
         result = self.invoke(*args)
@@ -52,7 +53,7 @@ class CliArguments(unittest.TestCase):
 
     def test_validate_rejects_generation_options_before_loading(self):
         with tempfile.TemporaryDirectory() as folder:
-            for option, value in (("--seed", "99"), ("--candidates", "0"),
+            for option, value in (("--seed", "99"), ("--step", "0"),
                                   ("--terrain", "flat"), ("--reference-file", "missing.json")):
                 with self.subTest(option=option):
                     result = subprocess.run(
@@ -79,24 +80,24 @@ class CliArguments(unittest.TestCase):
                 self.assertEqual(self.parsed("--seed", text)["seed"], int(text))
 
     def test_numeric_suffixes_are_not_ignored(self):
-        for option in ("--candidates", "--step", "--launch-seconds",
-                       "--reference-exposure", "--lateral-rate-limit", "--longitudinal-rate-limit"):
+        for option in ("--step", "--launch-seconds",
+                       "--reference-exposure", "--lateral-rate-target", "--longitudinal-rate-target"):
             for text in ("1junk", "1.0junk", "1e2junk"):
                 with self.subTest(option=option, text=text):
                     self.invalid(option, text)
 
     def test_numeric_overflow_is_usage_error(self):
-        self.invalid("--candidates", "2147483648")
-        self.invalid("--candidates", "-2147483649")
         for option in ("--step", "--launch-seconds", "--reference-exposure",
-                       "--lateral-rate-limit", "--longitudinal-rate-limit"):
+                       "--lateral-rate-target", "--longitudinal-rate-target"):
             with self.subTest(option=option):
                 self.invalid(option, "1e10000")
 
-    def test_valid_integer_and_exponent_syntax_is_preserved(self):
-        for text in ("0", "1", "+1", "2147483647", "-2147483648"):
-            with self.subTest(text=text):
-                self.assertEqual(self.parsed("--candidates", text)["maxCandidates"], int(text))
+    def test_retired_search_options_are_explicit(self):
+        for option in ("--candidates", "--closure-iterations"):
+            with self.subTest(option=option):
+                self.assertIn("retired", self.invalid(option, "8").stderr)
+
+    def test_valid_exponent_syntax_is_preserved(self):
         for text in ("0.001", "1e-3", "+1.0e-3", " 0.001"):
             with self.subTest(text=text):
                 self.assertEqual(self.parsed("--step", text)["simulationStep"], 0.001)
@@ -105,10 +106,12 @@ class CliArguments(unittest.TestCase):
         self.assertEqual(self.parsed("--launch-seconds", "1.4e0")["targets"]["launchSeconds"], 1.4)
         reference = self.parsed("--reference-exposure", "3.7e1", "--reference-id", "SYNTHETIC_ARGUMENT_TEST_ONLY")
         self.assertEqual(reference["targets"]["referenceExposure"], 37)
-        for option, key in (("--lateral-rate-limit", "maxLateralRateGps"),
+        for option, key in (("--lateral-rate-target", "maxLateralRateGps"),
+                            ("--longitudinal-rate-target", "maxLongitudinalRateGps"),
+                            ("--lateral-rate-limit", "maxLateralRateGps"),
                             ("--longitudinal-rate-limit", "maxLongitudinalRateGps")):
             with self.subTest(option=option):
-                self.assertEqual(self.parsed(option, "1e3")["limits"][key], 1000)
+                self.assertEqual(self.parsed(option, "1e3")["experienceTargets"][key], 1000)
 
 
 if __name__ == "__main__":

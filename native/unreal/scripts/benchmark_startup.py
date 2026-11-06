@@ -30,20 +30,19 @@ def parse_progress(line):
     """Parse the machine-readable CoasterProgress log line emitted by Unreal."""
     phase = re.search(r"phase=(\d+)", line)
     phase_key = re.search(r"phaseKey=([^\s]+)", line)
-    phase_name = re.search(r"phaseName=(.*?)\s+candidate=", line)
-    candidate = re.search(r"candidate=(-?\d+)", line)
+    # Historical logs inserted a candidate field before completed work.
+    phase_name = re.search(r"phaseName=(.*?)\s+(?:candidate=-?\d+\s+)?completed=", line)
     completed = re.search(r"completed=([^\s]+)", line)
     total = re.search(r"total=([^\s]+)", line)
     elapsed = re.search(r"elapsedSeconds=([^\s]+)", line)
     request = re.search(r"request=(\d+)", line)
-    if not (phase and phase_name and candidate and completed and total and elapsed and request):
+    if not (phase and phase_name and completed and total and elapsed and request):
         return None
     return {
         "request": int(request[1]),
         "phase": int(phase[1]),
         "phase_key": phase_key[1] if phase_key else phase_name[1],
         "phase_name": phase_name[1],
-        "candidate": int(candidate[1]),
         "completed": _number(completed[1]),
         "total": _number(total[1]),
         "elapsed_seconds": _number(elapsed[1]),
@@ -56,15 +55,12 @@ def parse_timing(line):
     stage = re.search(r"stage=([^\s]+)", line)
     elapsed = re.search(r"elapsedSeconds=([^\s]+)", line)
     total = re.search(r"totalSeconds=([^\s]+)", line)
-    candidate = re.search(r"candidate=(-?\d+)", line)
     if not (request and stage and elapsed):
         return None
     result = {"request": int(request[1]), "stage": stage[1],
               "elapsed_seconds": _number(elapsed[1])}
     if total:
         result["total_seconds"] = _number(total[1])
-    if candidate:
-        result["candidate"] = int(candidate[1])
     return result
 
 
@@ -174,11 +170,9 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
         raise RuntimeError(f"Benchmark did not observe motion: {output}")
     result = json.loads((events_dir / "result.json").read_text(encoding="utf-8-sig"))
     report = json.loads((events_dir / "accepted-report.json").read_text(encoding="utf-8-sig"))
-    candidate = report.get("candidate")
     if (result.get("status") != "launch-benchmark-passed" or not report.get("accepted")
-            or not isinstance(candidate, int) or candidate < 0
             or not report.get("convergence", {}).get("passed")):
-        raise RuntimeError(f"Benchmark did not produce a valid accepted candidate: {output}")
+        raise RuntimeError(f"Benchmark did not produce a validated ride: {output}")
     requested_event = (events.get("generation-requested") or events.get("cross-process-load-requested")
                        or events.get("shortcut-startup-load-requested"))
     committed_event = events.get("accepted-commit")
@@ -203,11 +197,11 @@ def run(executable, output, terrain, seed, timeout, mode="generate", load_profil
         "request_to_ready_seconds": ready_seconds,
         "ready_to_motion_seconds": first_motion_observed - ready_observed,
         "geometry_sha1": committed_event["geometry_sha1"],
-        "version": events.get("begin", {}).get("geometry_version"),
+        "version": report.get("generatorVersion"),
+        "runtime_version": report.get("runtimeVersion"),
         "build_commit":events.get("begin",{}).get("build_commit"),
         "mode": mode,
         "terrain": terrain,
-        "candidate": candidate,
         "native_seconds": native_seconds,
         "native_phase_seconds": phase_seconds,
         "parsing_revalidation_seconds": parsing_seconds,
