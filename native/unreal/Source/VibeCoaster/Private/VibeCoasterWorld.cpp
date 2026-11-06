@@ -33,7 +33,6 @@ struct FJobState
 {
     EWork Kind = EWork::Generate;
     std::atomic<bool> Cancel{false};
-    std::atomic<int32> Candidate{0};
     std::atomic<int32> Phase{static_cast<int32>(coaster::WorkPhase::Authoring)};
     std::atomic<double> CompletedWork{0};
     std::atomic<double> TotalWork{0};
@@ -87,7 +86,6 @@ FString ProgressDetail(const FJobState& State)
 void PublishProgress(const TSharedPtr<FJobState, ESPMode::ThreadSafe>& State, uint64 Revision, double Started,
     const coaster::WorkProgress& Progress)
 {
-    State->Candidate.store(Progress.candidate);
     State->Phase.store(static_cast<int32>(Progress.phase));
     State->CompletedWork.store(Progress.completedWork);
     State->TotalWork.store(Progress.totalWork);
@@ -97,10 +95,10 @@ void PublishProgress(const TSharedPtr<FJobState, ESPMode::ThreadSafe>& State, ui
     }
     const FString Detail = ProgressDetail(*State);
     UE_LOG(LogCoasterGeneration, Display,
-        TEXT("CoasterProgress request=%llu phase=%d phaseKey=%s phaseName=%s candidate=%d completed=%.17g total=%.17g elapsedSeconds=%.6f detail=%s"),
+        TEXT("CoasterProgress request=%llu phase=%d phaseKey=%s phaseName=%s completed=%.17g total=%.17g elapsedSeconds=%.6f detail=%s"),
         Revision, static_cast<int32>(Progress.phase), UTF8_TO_TCHAR(coaster::phaseKey(Progress.phase)),
         UTF8_TO_TCHAR(coaster::phaseName(Progress.phase)),
-        Progress.candidate, Progress.completedWork, Progress.totalWork,
+        Progress.completedWork, Progress.totalWork,
         FPlatformTime::Seconds() - Started, *Detail);
 }
 }
@@ -329,9 +327,9 @@ void AVibeCoasterWorld::StartQueuedJob()
         if (Work.Kind == EWork::Generate)
         {
             const auto& R = Work.Request;
-            UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu version=%s seed=%llu terrain=%s comparisonMetadata=%s maxClosureIterations=%d step=%.17g"),
+            UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu version=%s seed=%llu terrain=%s comparisonMetadata=%s step=%.17g"),
                 Work.Revision, UTF8_TO_TCHAR(coaster::generatorVersion), R.seed, UTF8_TO_TCHAR(R.terrain.name().c_str()),
-                R.targets.reference.processed ? TEXT("available") : TEXT("unconfigured"), R.maxClosureIterations, R.simulationStep);
+                R.targets.reference.processed ? TEXT("available") : TEXT("unconfigured"), R.simulationStep);
             UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu targets: heightMeters=%.17g speedMps=%.17g inversionHeightMeters=%.17g launchSeconds=%.17g referenceExposure=%.17g referenceId=%s"),
                 Work.Revision, R.targets.height, R.targets.speed, R.targets.inversionHeight, R.targets.launchSeconds,
                 R.targets.referenceExposure, UTF8_TO_TCHAR(R.targets.referenceId.c_str()));
@@ -372,14 +370,14 @@ void AVibeCoasterWorld::StartQueuedJob()
                 IFileManager::Get().MakeDirectory(*FPaths::GetPath(ReportPath), true);
                 const std::string Json = coaster::reportJson(*Design);
                 const bool Written = FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(Json.c_str())), *ReportPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-                UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu finished: accepted=%d cancelled=%d candidate=%d elapsedSeconds=%.3f errors=%llu report=%s"),
+                UE_LOG(LogCoasterGeneration, Display, TEXT("request=%llu finished: accepted=%d cancelled=%d elapsedSeconds=%.3f errors=%llu report=%s"),
                     Work.Revision, Design->accepted() ? 1 : 0, Cancelled() || Design->simulation.cancelled ? 1 : 0,
-                    Design->candidate, FPlatformTime::Seconds() - Started,
+                    FPlatformTime::Seconds() - Started,
                     static_cast<uint64>(Design->report.errors.size() + Design->simulation.report.errors.size()), *ReportPath);
                 if (!Written) UE_LOG(LogCoasterGeneration, Warning, TEXT("request=%llu could not write generation report: %s"), Work.Revision, *ReportPath);
             }
-            UE_LOG(LogCoasterGeneration, Display, TEXT("CoasterTiming request=%llu stage=native-complete kind=%s elapsedSeconds=%.6f candidate=%d"),
-                Work.Revision, *WorkKindName(Work.Kind), FPlatformTime::Seconds() - Started, Design->candidate);
+            UE_LOG(LogCoasterGeneration, Display, TEXT("CoasterTiming request=%llu stage=native-complete kind=%s elapsedSeconds=%.6f"),
+                Work.Revision, *WorkKindName(Work.Kind), FPlatformTime::Seconds() - Started);
             if (Cancelled()) return Result;
             if (!Design->accepted()) { Result.Message = Failure(*Design); return Result; }
             if (Design->simulation.frames.empty()) { Result.Message = TEXT("Accepted design has no trace; no ride committed."); return Result; }
@@ -692,7 +690,7 @@ FCoasterLoadingObservation AVibeCoasterWorld::Loading() const
         const auto& State = *Runtime->JobState;
         View.Title = State.Kind == EWork::Load ? TEXT("Opening your ride") : State.Kind == EWork::Save ? TEXT("Saving your ride") : TEXT("Creating your ride");
         View.Cancelling = State.Cancel.load(); View.Phase = static_cast<coaster::WorkPhase>(State.Phase.load());
-        View.Completed = State.CompletedWork.load(); View.Total = State.TotalWork.load(); View.Candidate = State.Candidate.load();
+        View.Completed = State.CompletedWork.load(); View.Total = State.TotalWork.load();
     }
     return View;
 }
@@ -718,9 +716,9 @@ FString AVibeCoasterWorld::Status() const
             Work = FString::Printf(TEXT("work %.0f (total not reported)"), Completed);
         const FString Detail = ProgressDetail(State);
         const FString DetailLine = Detail.IsEmpty() ? FString() : TEXT("\n") + Detail;
-        return FString::Printf(TEXT("%s\n%s | %.1f s | candidate %d | %s%s\nEsc cancels; active accepted ride is preserved."),
+        return FString::Printf(TEXT("%s\n%s | %.1f s | %s%s\nEsc cancels; active accepted ride is preserved."),
             *WorkKindName(State.Kind), UTF8_TO_TCHAR(coaster::phaseName(Phase)),
-            FPlatformTime::Seconds() - Runtime->RequestStarted, State.Candidate.load(), *Work, *DetailLine);
+            FPlatformTime::Seconds() - Runtime->RequestStarted, *Work, *DetailLine);
     }
     return Runtime->Message;
 }

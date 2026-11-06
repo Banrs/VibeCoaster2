@@ -1,5 +1,6 @@
 #include "banking.hpp"
 #include "authoring.hpp"
+#include "curve_compiler.hpp"
 #include <stdexcept>
 
 namespace coaster {
@@ -73,14 +74,15 @@ double ease(double u) {
     return u * u * u * u * (35 + u * (-84 + u * (70 - 20 * u)));
 }
 
-double basis(double x) {
+double basis(double x, int derivative = 0) {
     if (std::abs(x) >= 3)
         return 0;
     constexpr double choose[]{1, -6, 15, -20, 15, -6, 1};
     double result = 0;
     for (int i = 0; i < 7; ++i)
-        result += choose[i] * std::pow(std::max(0., x + 3 - i), 5);
-    return result / 120;
+        result += choose[i] * std::pow(std::max(0., x + 3 - i), 5 - derivative);
+    constexpr double factorial[]{120, 24, 6, 2};
+    return result / factorial[derivative];
 }
 
 using FrameJet = std::array<Vec3, 4>;
@@ -136,6 +138,73 @@ void copyFrame(Knot &destination, const Knot &source) {
     destination.bank = 0;
 }
 
+struct TimedMotion {
+    double time;
+    ReplayMotion motion;
+};
+TimedMotion motionAtDistance(const std::vector<Frame> &frames, double distance) {
+    auto right =
+        std::lower_bound(frames.begin(), frames.end(), distance,
+                         [](const Frame &frame, double at) { return frame.distance < at; });
+    if (right == frames.begin() || right == frames.end()) {
+        const auto &frame = right == frames.end() ? frames.back() : *right;
+        return {frame.time, {distance, frame.speed, frame.acceleration, frame.accelerationRate}};
+    }
+    const auto &left = *(right - 1);
+    double lo = left.time, hi = right->time;
+    double time = lo + (hi - lo) * (distance - left.distance) / (right->distance - left.distance);
+    ReplayMotion value;
+    for (int i = 0; i < 16; ++i) {
+        value = interpolateMotion(left, *right, time);
+        const double error = value.distance - distance;
+        if (std::abs(error) < 1e-9)
+            break;
+        if (error > 0)
+            hi = time;
+        else
+            lo = time;
+        const double next = time - error / std::max(.01, value.speed);
+        time = next > lo && next < hi ? next : (lo + hi) * .5;
+    }
+    return {time, value};
+}
+
+Vec3 transportAcross(const Span &span, Vec3 up) {
+    auto derivative = [&](double u, Vec3 value) {
+        const auto geometry = sampleSpanGeometry(span, u);
+        Vec3 velocity = span.c.back() * double(span.c.size() - 1);
+        for (int i = int(span.c.size()) - 2; i >= 1; --i)
+            velocity = velocity * u + span.c[size_t(i)] * double(i);
+        return geometry.tangent * (-dot(geometry.curvature, value) * norm(velocity));
+    };
+    const int steps = std::max(1, int(std::ceil(span.length / 2)));
+    const double step = 1. / steps;
+    for (int i = 0; i < steps; ++i) {
+        const double u = double(i) / steps;
+        const auto a = derivative(u, up), b = derivative(u + step * .5, up + a * (step * .5));
+        const auto c = derivative(u + step * .5, up + b * (step * .5)),
+                   d = derivative(u + step, up + c * step);
+        up = up + (a + b * 2 + c * 2 + d) * (step / 6);
+    }
+    const auto tangent = sampleSpanGeometry(span, 1).tangent;
+    return unit(up - tangent * dot(up, tangent));
+}
+
+void setTransportFrame(Knot &knot, Vec3 up) {
+    const double projection = dot(knot.curvature, up);
+    const Vec3 first = knot.tangent * (-projection);
+    const double firstProjection = dot(knot.third, up) + dot(knot.curvature, first);
+    const Vec3 second = knot.curvature * (-projection) - knot.tangent * firstProjection;
+    const double secondProjection =
+        dot(knot.fourth, up) + 2 * dot(knot.third, first) + dot(knot.curvature, second);
+    knot.up = up;
+    knot.upFirst = first;
+    knot.upSecond = second;
+    knot.upThird = knot.third * (-projection) - knot.curvature * (2 * firstProjection) -
+                   knot.tangent * secondProjection;
+    knot.bank = 0;
+}
+
 struct FrameInterval {
     size_t first{}, last{};
     bool inheritFirst{}, inheritLast{};
@@ -157,29 +226,23 @@ void compileInterval(Design &d, const std::vector<Frame> &frames,
     local.knots.assign(d.track.knots.begin() + interval.first,
                        d.track.knots.begin() + interval.last + 1);
     const auto firstPort = local.knots.front(), lastPort = local.knots.back();
-    local.rebuild();
-
+    std::vector<TimedMotion> motion(count);
     std::vector<Vec3> reference(count);
     std::vector<double> distance(count), time(count), target(count), load(count),
         uprightAngle(count);
     std::vector<bool> hardware(count);
     Vec3 up = local.knots.front().up;
-    double previousSpeed = 0;
+    const double initialTime = motionAtDistance(frames, routeDistance[interval.first]).time;
     const double trainMargin = (d.request.train.cars - 1) * d.request.train.spacing + 1.5;
     for (size_t i = 0; i < count; ++i) {
         const auto &knot = local.knots[i];
         distance[i] = routeDistance[interval.first + i] - routeDistance[interval.first];
         const double routeAt = routeDistance[interval.first + i];
-        const double speed = replayValueAt(frames, routeAt);
-        if (i) {
-            const Vec3 axis = cross(local.knots[i - 1].tangent, knot.tangent);
-            if (norm(axis) > 1e-12)
-                up = rotate(up, unit(axis),
-                            std::atan2(norm(axis), dot(local.knots[i - 1].tangent, knot.tangent)));
-            time[i] = time[i - 1] +
-                      (distance[i] - distance[i - 1]) / std::max(5., (speed + previousSpeed) * .5);
-        }
-        previousSpeed = speed;
+        motion[i] = motionAtDistance(frames, routeAt);
+        const double speed = motion[i].motion.speed;
+        time[i] = motion[i].time - initialTime;
+        if (i)
+            up = transportAcross(d.track.spans[interval.first + i - 1], up);
         reference[i] = up = unit(up - knot.tangent * dot(up, knot.tangent));
         Vec3 upright = unit(Vec3{0, 0, 1} - knot.tangent * knot.tangent.z);
         if (norm(upright) < .5)
@@ -298,17 +361,28 @@ void compileInterval(Design &d, const std::vector<Frame> &frames,
     for (size_t i = 0; i < count; ++i) {
         const double x = time[i] / step;
         const int center = int(std::floor(x));
-        double angle = 0;
-        for (int j = center - 2; j <= center + 3; ++j)
-            angle += controlAngle[size_t(std::clamp(j, 0, int(controls) - 1))] * basis(x - j);
-        local.knots[i].up = rotate(reference[i], local.knots[i].tangent, angle);
-        local.knots[i].bank = 0;
+        std::array<double, 4> angle{};
+        for (int derivative = 0; derivative < 4; ++derivative) {
+            for (int j = center - 2; j <= center + 3; ++j)
+                angle[size_t(derivative)] +=
+                    controlAngle[size_t(std::clamp(j, 0, int(controls) - 1))] *
+                    basis(x - j, derivative);
+            angle[size_t(derivative)] /= std::pow(step, derivative);
+        }
+        const auto &dynamics = motion[i].motion;
+        const double speed = std::max(5., dynamics.speed), acceleration = dynamics.acceleration,
+                     jerk = dynamics.jerk;
+        // Exact chain rule from the time-domain bank field to arc derivatives.
+        // These are independent of canonical knot spacing.
+        const detail::AngleJet spatial{
+            angle[0], angle[1] / speed,
+            angle[2] / (speed * speed) - angle[1] * acceleration / std::pow(speed, 3),
+            angle[3] / std::pow(speed, 3) - 3 * angle[2] * acceleration / std::pow(speed, 4) +
+                angle[1] * (3 * acceleration * acceleration / std::pow(speed, 5) -
+                            jerk / std::pow(speed, 4))};
+        setTransportFrame(local.knots[i], reference[i]);
+        rotateFrame(local.knots[i], spatial);
     }
-    if (local.closed)
-        local.knots.back() = local.knots.front();
-    local.authoredFrame = false;
-    local.rebuild();
-    captureCanonicalDerivatives(local);
 
     // Boundary jets are interpolation constraints of this interval, not a
     // restoration pass over somebody else's frame. Blend their residual with

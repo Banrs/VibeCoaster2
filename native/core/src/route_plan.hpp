@@ -5,13 +5,6 @@
 namespace coaster {
 // The route is an ordered plan, not a search candidate. Element IDs carry source,
 // hardware and measured-section identity through compilation and replay.
-struct RouteEnergy {
-    double downhillSpeedCorrection{};
-    std::unordered_map<std::string, double> portSquaredSpeedCorrection;
-};
-struct RoutePlacement {
-    double climbHeading{}, signatureHeading{};
-};
 struct ShelfWaypoint {
     double headingDegrees, heightOffset, lengthMeters, pitchCurvature, yawCurvature;
 };
@@ -40,6 +33,5 @@ struct RoutePlan {
         hand = (elementSeed(input.seed, "landscape-hand") & 1) ? 1. : -1.;
     }
 };
-Design composeRoute(const GenerationRequest &, const RouteEnergy &, const RoutePlacement &,
-                    std::vector<RecipePort> &, Cancel, RecipeCompileMode);
+Design composeRoute(const GenerationRequest &, std::vector<RecipePort> &, Cancel, Progress = {});
 } // namespace coaster

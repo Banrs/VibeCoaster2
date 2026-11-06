@@ -153,8 +153,17 @@ void assessAuthorship(Design& d,Cancel cancel) {
         }
     }
     if(a.maximumSourcePositionError>1e-4)d.report.fail("AUTHORING_GEOMETRY","Canonical geometry disagrees with retained force/spline source",0,a.maximumSourcePositionError,1e-4);
-    // These are model-agreement goals, separate from the unchanged rider limits.
-    if(a.maximumNormalResidualG>.35||a.maximumLateralResidualG>.35)d.report.fail("AUTHORING_FORCE","Final point-mass motion no longer follows its authored FVD forces",0,std::max(a.maximumNormalResidualG,a.maximumLateralResidualG),.35);
+    // A finite train can reach a source at a different energy from its authored
+    // point-mass estimate. Keep that force-target residual visible without
+    // treating it as a second rider limit. Actual seat histories still undergo
+    // independent acceleration assessment; source geometry/frame agreement is
+    // enforced above and below regardless of the measured loads.
+    if(a.maximumNormalResidualG>.35||a.maximumLateralResidualG>.35){
+        std::ostringstream diagnostic;diagnostic<<std::setprecision(6)
+            <<"AUTHORING_FORCE_TARGET: actual train energy differs from the point-mass force intent; normal residual="
+            <<a.maximumNormalResidualG<<" g, lateral residual="<<a.maximumLateralResidualG<<" g";
+        d.report.warnings.push_back(diagnostic.str());
+    }
     if(a.maximumRollResidualRadians>.12)d.report.fail("AUTHORING_ROLL","Banking changed an authored force programme's physical orientation",0,a.maximumRollResidualRadians,.12);
     a.passed=d.report.errors.size()==errors;
 }

@@ -144,7 +144,7 @@ accelerometer extrema in the retained audit are provisional comparison data,
 not exact targets or manufacturer limits. Numerical passes do not replace
 rider and third-person inspection of the resulting design.
 
-## Minor excursions and C3 continuity: 6 November clarification
+## Experience targets and C3 continuity: 6 November clarification
 
 The user permits small force-target excursions for a better-feeling, plausible
 2030s design. Treat this as an authoring choice within a reported simulation
@@ -156,28 +156,26 @@ also distinguish sustained/transient exposure, posture, restraint and rotational
 loads. Its crew/equipment assumptions make its numerical limits unsuitable as
 drop-in amusement-ride comfort limits.
 
-The existing `Limits::allowanceFactor` already provides a useful initial
-**game-design excursion budget**, separate from the scoped acceleration
-assessment:
+**Rewrite policy:** remove the fixed percentage acceptance cap. Nominal
+vertical, lateral, longitudinal and component-rate values are configurable
+experience targets, not universal human limits. Exceeding one should produce
+a style diagnostic with the element, seat, sign, time, duration and peak.
+Do not multiply all targets by a larger universal number. Choose the force
+history for each intended sensation, retaining both its intensity and recovery.
+Keep the intentional launch.
 
-| Quantity | Nominal target | Existing 5% allowance |
-| --- | --- | --- |
-| Vertical specific acceleration | −1.5…+5 g | −1.575…+5.25 g |
-| Lateral magnitude | 1.5 g | 1.575 g |
-| Longitudinal magnitude | 4.5 g | 4.725 g |
-| Each configured force-component rate | 20 g/s | 21 g/s |
-
-These are product parameters, not universal human limits. Use the allowance
-for an intentional short beat and report its location, sign, duration and seat;
-do not raise every authored load to its outer edge. Keep the intentional launch.
 Preserve the existing [duration/axis assessment](../acceleration-standard.md):
 `acceleration.cpp` separately filters the complete seat histories and checks
 signed duration curves, paired axes, reversals and negative-G history.
-Its rules are not multiplied by the game allowance. A short positive peak may
-fit the normal duration curve yet fail after prolonged negative-G exposure.
-Likewise, a small excess of the game's negative-G target is not automatically
-acceptable for a sustained pulse. An impact-review diagnostic is not permission
-to hide a high peak inside a very short interval.
+Those findings, including impacts requiring assessment, remain hard acceptance
+failures. For example, the adopted normal positive-Z curve permits a larger
+short pulse than a two-second pulse, while its negative-history rule further
+reduces subsequent positive loading. The same peak can consequently have
+different outcomes depending on its duration and preceding motion. Separate
+raw-path checks must still reject nonfinite states, geometric discontinuities,
+unreachable motion and unresolved numerical error; a filtered trace must not
+conceal numerical spikes. High-frequency variation and excessive rates remain
+visible experience diagnostics even when the scoped assessment passes.
 
 The assessor is explicitly pinned to selected **F2291-25** provisions and its
 documented seating case. The publisher now lists
@@ -216,3 +214,34 @@ Implement this continuity in the shared geometry/orientation/drive model and
 use the existing full-seat replay to measure the result. C3 removes jumps;
 it does not bound their magnitude. No larger regression matrix is needed to
 make that architectural improvement.
+
+## Direct force integration for the new compiler
+
+A fast common kernel can integrate the heartline state directly, without
+nonlinear geometry fitting. With unit tangent `T`, orthonormal rider up/side
+axes `U,L`, gravity vector `g`, gravity magnitude `g0`, and authored normal and
+lateral specific loads `n,l` in g units, use:
+
+```text
+positionDot = v T
+speedDot    = dot(g,T) + driveAcceleration - resistance
+tangentDot  = (g - T dot(g,T) + g0 (n U + l L)) / v
+omega       = cross(T,tangentDot) + rollRate T
+```
+
+Integrate the complete frame with `omega`, preserving orthonormality. Explicit
+drive intervals supply propulsion; stalls are reported rather than cured with
+a hidden minimum speed. C2 load, roll-rate and drive profiles provide smooth
+state derivatives on regular moving spans. Finite-train replay then measures
+the actual front/middle/rear loads rather than assuming the authored heartline
+targets hold identically for every seat.
+
+Geometry/spline mode supplies its curvature to that same state model and
+derives the corresponding force, while FVD mode derives curvature from force
+and current speed. At a mode switch, convert derivative data and preserve the
+whole state. Plan corridors and feature order first; use an explicit Hermite
+bridge with inherited endpoint derivatives for a constrained approach or
+closure. Its coefficients require a fixed linear calculation, not a search over
+the whole ride. This supplies predictable forward generation while keeping one
+path for physics, meshes and persistence. These equations are our point-mass
+authoring model; they are not a reproduction of a manufacturer's design system.

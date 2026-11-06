@@ -87,9 +87,9 @@ struct Operation {
 // Merge exact adjacent, identical nonwrapping drive runs in authored order.
 void coalesceDriveProfiles(std::vector<Operation>&);
 struct Limits {
-    // User allowance applies to the game envelope, never to F2291 assessment.
-    static constexpr double allowanceFactor=1.05;
-    // Provisional game envelope, NOT a calibrated or certified rider standard.
+    // Preferred ride character, reported as deviations rather than percentage
+    // acceptance caps. Signed duration/axis/history assessments govern loads.
+    // minClearance remains a physical occupied-envelope requirement.
     double minVerticalG{-1.5},maxVerticalG{5.0},maxLateralG{1.5},maxLongitudinalG{4.5};
     double maxJerkGps{20},minClearance{0}; // Optional free gap outside the swept envelope.
     double maxLateralRateGps{20},maxLongitudinalRateGps{20};
@@ -130,6 +130,7 @@ struct RideStyle {
 struct GenerationRequest {
     bool operator==(const GenerationRequest&) const=default;
     uint64_t seed{42}; Terrain terrain; Targets targets; Limits limits; TrainConfig train;
+    // Reserved positional save field; forward generation has no candidate loop.
     int maxClosureIterations{8}; double simulationStep{1./960};
     RideStyle style;
     RideRecipe recipe; // Empty selects the current default; accepted new rides retain the resolved recipe.

@@ -1,5 +1,7 @@
 #include "route_plan.hpp"
 #include "launch_camelback.hpp"
+#include "authoring_energy.hpp"
+#include "route_closure.hpp"
 #include <iomanip>
 #include <sstream>
 
@@ -23,7 +25,9 @@ double seeded(uint64_t seed, double low, double high) {
     return low + (high - low) * double(seed >> 11) * 0x1.0p-53;
 }
 double accelerationFor(const GenerationRequest &req) {
-    double low = 0, high = req.limits.maxLongitudinalG * gravity - .02;
+    // Size the actuator from the requested departure, not a preferred G ceiling.
+    double low = 0, high = std::max(req.limits.maxLongitudinalG * gravity - .02,
+                                    100. / req.targets.launchSeconds);
     for (int i = 0; i < 32; ++i) {
         const double mid = (low + high) * .5;
         if (plannedDepartureSeconds(mid, req.train, req.limits) > req.targets.launchSeconds - .003)
@@ -39,14 +43,13 @@ struct CompiledElement {
     std::string id;
 };
 
-class RouteComposer {
+class RouteDraft {
     RoutePlan plan;
     Design d;
     const GenerationRequest &req;
-    RouteEnergy energy;
-    RoutePlacement placement;
+    AuthoringEnergy energy;
+    Progress progress;
     Cancel cancel;
-    bool energyPrefix;
     std::vector<RecipePort> &ports;
     MotionBuilder motion;
     MotionJet &cursor;
@@ -56,25 +59,20 @@ class RouteComposer {
     std::vector<std::pair<LandmarkKind, size_t>> landmarks;
     std::vector<double> sourceSpeeds;
     size_t brakeBegin = 0;
-    Vec3 plateauArrival{}, plateauCenter{}, cliffTop{}, cliffFoot{}, waveBase{}, loopBase{},
-        immelExit{}, outbankBay{}, camelbackBase{}, returnRavine{};
+    Vec3 plateauArrival{}, cliffTop{}, cliffFoot{}, waveBase{}, loopBase{}, immelExit{},
+        returnRavine{};
     double cliffYaw = 0, brakeCapacity = 7, brakeAlignment = 0;
     Vec3 openingRecovery{};
     std::array<Vec3, 2> openingCrests{}, openingValleys{};
-    struct PendingPort {
-        std::string id;
-        size_t knot{};
-        double speed{};
-    };
-    std::optional<PendingPort> pendingPort;
     struct SourceOptions {
-        double begin{}, blend{};
-        bool worldCoordinates{}, allowConnector{false}, calibrate{true};
+        double begin{};
+        bool worldCoordinates{}, recordPort{true};
     };
     static Design initialize(const RoutePlan &plan) {
         Design design;
         design.request = plan.request;
         design.track.profile = plan.request.trackProfile;
+        design.track.closed = false;
         (void)trackSection(design.track.profile);
         design.topology = "route/" + plan.request.recipe.name;
         return design;
@@ -83,23 +81,41 @@ class RouteComposer {
         return std::atan2(cursor.tangent.y, cursor.tangent.x);
     }
 
+    Vec3 planningTangent(double distance) const {
+        const double end = motion.length();
+        if (distance <= end)
+            return motion.sampleGeometry(distance).tangent;
+        // Only the unbuilt front half of the train is forecast. The retained
+        // energy cursor stops before it; emitted geometry always replaces it.
+        const double h = distance - end;
+        return unit(cursor.tangent + cursor.curvature * h + cursor.third * (h * h * .5) +
+                    cursor.fourth * (h * h * h / 6));
+    }
+    void refreshEnergy() {
+        refreshOperations(false);
+        const double knownEnd = motion.length() - halfTrain - 1;
+        if (knownEnd > energy.distance())
+            energy.advanceTo(
+                knownEnd, [this](double s) { return planningTangent(s); }, d.operations, cancel);
+        if (motion.length() > energy.distance())
+            motion.nominalSpeed = energy.forecastTo(
+                motion.length(), [this](double s) { return planningTangent(s); }, d.operations,
+                cancel);
+    }
     double speedFor(const std::string &id) {
-        const auto found = energy.portSquaredSpeedCorrection.find(id);
-        // This floor seeds source construction only; replay never clamps speed.
-        // A complete finite-train replay must reach and match every source port.
-        const double speed = std::sqrt(std::max(
-            25., motion.nominalSpeed * motion.nominalSpeed +
-                     (found == energy.portSquaredSpeedCorrection.end() ? 0 : found->second)));
-        pendingPort = PendingPort{id, d.track.knots.size() - 1, speed};
-        return speed;
+        if (progress)
+            progress({WorkPhase::Motion, 0, 0, 0, "Advancing source energy for " + id});
+        refreshEnergy();
+        if (progress)
+            progress({WorkPhase::Authoring, 0, 0, 0,
+                      "Source " + id + " entry speed " + std::to_string(motion.nominalSpeed)});
+        if (!(motion.nominalSpeed > .5))
+            throw std::runtime_error("Source entry has no physical forward energy: " + id);
+        return motion.nominalSpeed;
     }
 
-    void finalizeKnownPrefix(bool station) {
+    void refreshOperations(bool station) {
         d.operations.clear();
-        d.sections.clear();
-        d.landmarks.clear();
-        ports.clear();
-        d.track.rebuild();
         const size_t last = d.track.knots.size() - 1;
         auto at = [&](size_t index) {
             return index >= d.track.spans.size() ? d.track.length : d.track.spans[index].start;
@@ -126,6 +142,17 @@ class RouteComposer {
                                     std::min(6., brakeCapacity * 6 / 7), 1.5});
         for (auto &operation : d.operations)
             operation.exitFadeMeters = std::max(1., operation.targetSpeed * operation.rampSeconds);
+    }
+    void finalize() {
+        d.track.rebuild();
+        refreshOperations(true);
+        d.sections.clear();
+        d.landmarks.clear();
+        ports.clear();
+        const size_t last = d.track.knots.size() - 1;
+        auto at = [&](size_t index) {
+            return index >= d.track.spans.size() ? d.track.length : d.track.spans[index].start;
+        };
         for (const auto &element : compiled)
             for (size_t i = element.moduleBegin; i < element.moduleEnd; ++i) {
                 const auto &m = motion.modules[i];
@@ -136,8 +163,7 @@ class RouteComposer {
         for (const auto &[kind, knot] : landmarks)
             if (knot <= last)
                 d.landmarks.push_back({kind, at(knot)});
-        if (station)
-            d.landmarks.push_back({LandmarkKind::BrakeEntry, at(brakeBegin)});
+        d.landmarks.push_back({LandmarkKind::BrakeEntry, at(brakeBegin)});
         for (size_t i = 0; i < sourcePorts.size(); ++i)
             if (sourcePorts[i].second <= last)
                 ports.push_back({sourcePorts[i].first, at(sourcePorts[i].second), sourceSpeeds[i]});
@@ -156,6 +182,38 @@ class RouteComposer {
             polynomialMotion(cursor, detail::anglePolynomial(incoming[0], endPitch, length),
                              detail::anglePolynomial(incoming[1], endYaw, length), length);
         return motion.programme(hint, kind, name.c_str(), bank);
+    }
+
+    MotionBuilder::Range heightSweep(MotionJet end, double length, Element kind,
+                                     const std::string &name, double bank = 0) {
+        const auto start = cursor;
+        const auto first = detail::directionAngles(start), last = detail::directionAngles(end);
+        const double half = length * .5;
+        const auto yaw = detail::anglePolynomial(first[1], last[1], length);
+        const auto middleYaw = detail::angleAt(yaw, half, length);
+        auto shaped = [&](double pitch) {
+            const AngleJet middle{pitch, 0, 0, 0};
+            auto a = polynomialMotion(start, detail::anglePolynomial(first[0], middle, half),
+                                      detail::anglePolynomial(first[1], middleYaw, half), half);
+            auto b = polynomialMotion(a.end, detail::anglePolynomial(middle, last[0], half),
+                                      detail::anglePolynomial(middleYaw, last[1], half), half);
+            return std::pair{a, b};
+        };
+        double low = -.9, high = .9;
+        if (shaped(low).second.end.position.z > end.position.z ||
+            shaped(high).second.end.position.z < end.position.z)
+            throw std::runtime_error(name + ": requested shelf height exceeds its pitch corridor");
+        for (int i = 0; i < 45; ++i) {
+            const double mid = (low + high) * .5;
+            if (shaped(mid).second.end.position.z < end.position.z)
+                low = mid;
+            else
+                high = mid;
+        }
+        const auto programmes = shaped((low + high) * .5);
+        const auto begin = motion.programme(programmes.first, kind, (name + "-entry").c_str());
+        const auto finish = motion.programme(programmes.second, kind, name.c_str(), bank);
+        return {begin.first, finish.second};
     }
 
     MotionBuilder::Range terrainCurve(MotionJet end, double length, Element kind,
@@ -225,6 +283,8 @@ class RouteComposer {
 
     void source(const FvdHillResult &result, Element kind, const RecipeElement &element,
                 SourceOptions options) {
+        if (progress)
+            progress({WorkPhase::Authoring, 0, 0, 0, "Emitting source " + element.id});
         const double begin = options.begin;
         if (!result.section.report.valid() || !result.section.assessment.passed)
             throw std::runtime_error(
@@ -240,20 +300,13 @@ class RouteComposer {
         if (norm(first.tangent - cursor.tangent) + norm(first.curvature - cursor.curvature) +
                 norm(first.third - cursor.third) + norm(first.fourth - cursor.fourth) >
             1e-7) {
-            if (!options.allowConnector)
-                throw std::runtime_error(
-                    element.id +
-                    ": inherited FVD source must meet the live geometry without a repair spline");
-            const auto desired = detail::directionAngles(first);
-            const double length =
-                options.blend > 0 ? options.blend : std::max(40., motion.nominalSpeed * 2.1);
-            freeDirection(desired[0], desired[1], length, kind, element.id + "-entry");
+            throw std::runtime_error(element.id + ": source must inherit the live geometry jet");
         }
         const Vec3 origin = cursor.position - first.position;
         const size_t firstKnot = d.track.knots.size() - 1;
         const auto range = motion.force(result.section, result.authoring, kind, element.id.c_str(),
                                         origin, yaw, begin);
-        if (options.calibrate)
+        if (options.recordPort)
             sourcePorts.push_back({element.id, firstKnot});
         const auto &samples = result.section.samples;
         const auto at =
@@ -270,10 +323,9 @@ class RouteComposer {
                               (begin - before.distance) / (at->distance - before.distance));
             }
         }
-        if (options.calibrate)
+        if (options.recordPort)
             sourceSpeeds.push_back(sourceSpeed);
         motion.nominalSpeed = samples.back().speed;
-        pendingPort.reset();
         size_t apex = range.first;
         for (size_t k = range.first + 1; k <= range.second; ++k)
             if (d.track.knots[k].position.z > d.track.knots[apex].position.z)
@@ -294,7 +346,7 @@ class RouteComposer {
         // while every boundary keeps its complete live geometric derivatives.
         size_t start = range.first, turning = range.first;
         int previous = 0, index = 0;
-        for (size_t k = range.first; k < range.second; ++k) {
+        for (size_t k = range.first; k <= range.second; ++k) {
             const double dz = d.track.knots[k].tangent.z;
             const int sign = dz > .008 ? 1 : dz < -.008 ? -1 : 0;
             if (previous > 0 ? d.track.knots[k].position.z > d.track.knots[turning].position.z
@@ -320,7 +372,7 @@ class RouteComposer {
         source(result, kind, element, SourceOptions{});
     }
     void groundLandscape(Vec3 crest, double yaw, double summit) {
-        plateauCenter = crest + rotated(Vec3{-80, 150, 0}, yaw);
+        const Vec3 plateauCenter = crest + rotated(Vec3{-80, 150, 0}, yaw);
         if (req.terrain.kind != TerrainKind::Highlands)
             return;
         auto &t = d.request.terrain;
@@ -417,28 +469,22 @@ class RouteComposer {
 
         const auto &p = std::get<CliffParameters>(element.parameters);
         const double summit = datum + p.summitHeightMeters;
-        // Layout correction belongs to the climb setup. Every subsequent shelf
-        // turn and signature keeps the shape and yaw requested by its author.
-        const double layoutHeading = -.17488042842542166 + placement.climbHeading;
+        // The ascent starts with one deliberate bearing change; all following
+        // source geometry inherits this live direction.
+        const double layoutHeading = -12 * pi / 180;
         freeDirection({20 * pi / 180, 0, 0, 0}, {heading() + layoutHeading, 0, 0, 0},
                       std::max(120., motion.nominalSpeed * 2.0), Element::Turn,
                       element.id + "-recovery");
-        const auto ascentStart = cursor;
         motion.driveGraded(summit - 55, 32 * pi / 180, 58, 16, (element.id + "-ascent").c_str());
-        const auto ascentEnd = cursor;
         motion.pitchToHeight(summit, {0, motion.crestCurvature(55, 180, -.5), 0, 0}, Element::Hill,
                              (element.id + "-arrival").c_str());
         plateauArrival = cursor.position;
         const double arrivalYaw = heading();
         groundLandscape(plateauArrival, arrivalYaw, summit);
         landmarks.push_back({LandmarkKind::PlateauArrival, d.track.knots.size() - 1});
-        if (req.terrain.kind == TerrainKind::Highlands) {
-            auto &t = d.request.terrain;
-            t.ramps.push_back({ascentStart.position.x, ascentStart.position.y, ascentEnd.position.x,
-                               ascentEnd.position.y, std::max(0., ascentStart.position.z - datum),
-                               std::max(0., ascentEnd.position.z - datum), std::tan(20 * pi / 180),
-                               std::tan(32 * pi / 180), 190});
-        }
+        // The powered ascent is a viaduct over the valley into the mesa's
+        // rear slope. An independent raised ribbon here would extend through
+        // the cliff face and bury the lower launch corridor.
         // An active shelf journey: outward reveal, inland counterturn,
         // second edge crest and two low turns into the dive approach.
         // Each direction programme owns its pitch/yaw jets. No overlap
@@ -451,13 +497,8 @@ class RouteComposer {
                                              point.yawCurvature / lengthScale, 0, 0});
             end.position = {cursor.position.x, cursor.position.y, summit + point.heightOffset};
             const double outward = (n == 1 || n == 3) ? p.outwardBankDegrees * pi / 180 : 0;
-            const auto program = solveHeightMotion(
-                cursor, end, point.lengthMeters * lengthScale,
-                {motion.nominalSpeed, gravity * req.train.rollingResistance, motion.drag, outward,
-                 req.limits.maxVerticalG - .6, req.limits.minVerticalG + .55},
-                cancel);
-            motion.programme(program, Element::Turn,
-                             (element.id + "-shelf-" + std::to_string(n + 1)).c_str(), outward);
+            heightSweep(end, point.lengthMeters * lengthScale, Element::Turn,
+                        element.id + "-shelf-" + std::to_string(n + 1), outward);
             if (req.terrain.kind == TerrainKind::Highlands && n % 2 == 0) {
                 // Three shallow dry gullies cross the natural low points;
                 // the mesa remains connected beneath the intervening hills.
@@ -468,7 +509,6 @@ class RouteComposer {
                 t.ravines.push_back({a.x, a.y, b.x, b.y, depth, depth, 150, 150});
             }
         }
-        outbankBay = plateauArrival + rotated(Vec3{180, 70, 0}, arrivalYaw);
     }
 
     void authorCliffLip(const RecipeElement &element) {
@@ -504,7 +544,11 @@ class RouteComposer {
         intent.pulloutRampSeconds = 1.5;
         intent.exitRampSeconds = 1.2;
         lossFor(intent);
-        source(designFvdDive(intent, cancel), Element::Hill, element);
+        if (progress)
+            progress({WorkPhase::Authoring, 0, 0, 0,
+                      "Solving dive: drop " + std::to_string(intent.drop)});
+        const auto dive = designFvdDive(intent, cancel);
+        source(dive, Element::Hill, element);
         cliffFoot = cursor.position;
         if (req.terrain.kind == TerrainKind::Highlands) {
             auto &t = d.request.terrain;
@@ -524,9 +568,7 @@ class RouteComposer {
     void authorDownhillLaunch(const RecipeElement &element) {
 
         const auto &p = std::get<OperationParameters>(element.parameters);
-        const double target =
-            (p.targetSpeedKmh > 0 ? p.targetSpeedKmh / 3.6 : req.targets.speed + .15) +
-            energy.downhillSpeedCorrection;
+        const double target = (p.targetSpeedKmh > 0 ? p.targetSpeedKmh / 3.6 : req.targets.speed);
         const double acceleration = p.accelerationMps2 > 0 ? p.accelerationMps2 : 16;
         const double net = acceleration - gravity * cursor.tangent.z -
                            gravity * req.train.rollingResistance - motion.drag * target * target;
@@ -540,7 +582,6 @@ class RouteComposer {
         landmarks.push_back({LandmarkKind::DownhillLaunchExit, d.track.knots.size() - 1});
         if (cursor.position.z < datum)
             throw std::runtime_error("Inclined launch exhausted the authored cliff-foot relief");
-        camelbackBase = cursor.position;
         if (req.terrain.kind == TerrainKind::Highlands) {
             auto &t = d.request.terrain;
             t.ramps.push_back({cliffFoot.x, cliffFoot.y, cursor.position.x, cursor.position.y,
@@ -562,7 +603,7 @@ class RouteComposer {
             designLaunchCamelback(speedFor(entry.id), std::asin(cursor.tangent.z), p,
                                   gravity * req.train.rollingResistance, motion.drag, cancel);
         const size_t pulloutBegin = d.track.knots.size() - 1;
-        source(paired.pullout, Element::Hill, entry, {.allowConnector = false});
+        source(paired.pullout, Element::Hill, entry, {});
         if (req.terrain.kind == TerrainKind::Highlands) {
             const auto low = std::min_element(
                 d.track.knots.begin() + pulloutBegin, d.track.knots.end(),
@@ -577,11 +618,10 @@ class RouteComposer {
         }
         // Retain the reference from its loaded ascent shoulder. The pullout
         // shares that source's pitch, curvature, force and energy jets.
-        // One calibration variable owns the whole connected element.
-        source(
-            {std::move(paired.camelback.authoring), std::move(paired.camelback.section)},
-            Element::Hill, element,
-            {.begin = paired.retainedBeginDistance, .allowConnector = false, .calibrate = false});
+        // Both pieces share one physical entry and the same evolving energy.
+        source({std::move(paired.camelback.authoring), std::move(paired.camelback.section)},
+               Element::Hill, element,
+               {.begin = paired.retainedBeginDistance, .recordPort = false});
     }
 
     void authorWave(const RecipeElement &element) {
@@ -604,8 +644,7 @@ class RouteComposer {
         intent.bankAngle = p.bankDegrees * pi / 180;
         intent.exitNormalG = p.exitNormalG;
         lossFor(intent);
-        source(designFvdWave(intent, cancel), Element::Turn, element,
-               {.worldCoordinates = true, .allowConnector = false});
+        source(designFvdWave(intent, cancel), Element::Turn, element, {.worldCoordinates = true});
     }
 
     void authorLoop(const RecipeElement &element) {
@@ -628,7 +667,7 @@ class RouteComposer {
         intent.entry = motion.fvdEntry(intent.entrySpeed);
         lossFor(intent);
         source(designFvdLoop(intent, cancel), Element::Inversion, element,
-               {.worldCoordinates = true, .allowConnector = false});
+               {.worldCoordinates = true});
         // A low rollover spaces the following half-loop without steering
         // either inversion sideways or inserting a level straight.
         const Vec3 valley = cursor.position;
@@ -684,16 +723,26 @@ class RouteComposer {
                                     motion.drag);
         const auto inversion = designFvdImmelmann(intent, cancel);
         source({inversion.authoring, inversion.section}, Element::Inversion, element,
-               {.worldCoordinates = true, .allowConnector = false});
+               {.worldCoordinates = true});
         immelExit = cursor.position;
     }
 
     void authorSignature(const RecipeElement &element) {
 
         const auto &p = std::get<SweepParameters>(element.parameters);
-        // The flexible approach steers the complete signature as one piece;
-        // it never changes either wing's authored forces or bank sequence.
-        const double turn = .4185097923961214 + placement.signatureHeading;
+        // Aim the descending signature across the valley toward a staging
+        // corridor west of the station. Its average bearing includes half of
+        // the authored wing sweep; the final hill then retains room to turn
+        // into the eastbound brake run without circling behind the station.
+        const auto &brakes = std::get<OperationParameters>(req.recipe.elements.back().parameters);
+        const double returnRadius =
+            motion.nominalSpeed * motion.nominalSpeed / (gravity * std::sqrt(3.2 * 3.2 - 1));
+        const Vec3 staging{-brakes.lengthMeters - 2 * halfTrain - 3 - 3 * returnRadius,
+                           -2 * returnRadius, datum};
+        const double bearing =
+            std::atan2(staging.y - cursor.position.y, staging.x - cursor.position.x);
+        const double desiredHeading = bearing - .5 * p.headingDegrees * pi / 180;
+        const double turn = std::remainder(desiredHeading - heading(), 2 * pi);
         // A placement bearing must bring its physical turn radius with it.
         // The septic yaw transition peaks at 2.1875 times its mean rate.
         const double turnLength = 2.1875 * std::abs(turn) * motion.nominalSpeed *
@@ -716,8 +765,7 @@ class RouteComposer {
                 signatureYaw + p.headingDegrees * pi / 180 * (wing == 0 ? .18 : .68);
             auto top = detail::planarJet(
                 {cursor.position.x, cursor.position.y, base + rise}, crestYaw, 0,
-                motion.crestCurvature(rise, 160 * scale,
-                                      std::max(-1.1, p.negativeG * req.style.airtime)));
+                motion.crestCurvature(rise, 160 * scale, p.negativeG * req.style.airtime));
             const double bank = (wing == 0 ? 1 : -1) * p.rollDegrees *
                                 (req.style.signatureRollDegrees / 45) * pi / 180;
             terrainCurve(top, 160 * scale, Element::Airtime,
@@ -774,7 +822,7 @@ class RouteComposer {
                     intent.entrySpeed = speedFor(element.id);
                     intent.height = p.riseMeters * p.profileScale;
                     intent.positiveG = p.pulloutG;
-                    intent.airtimeG = std::max(-1.32, p.negativeG * req.style.airtime);
+                    intent.airtimeG = p.negativeG * req.style.airtime;
                     intent.rampSeconds = p.releaseSeconds;
                     intent.exitRampSeconds = p.recoverySeconds;
                     intent.twistAngle =
@@ -790,7 +838,7 @@ class RouteComposer {
                     intent.entry = motion.fvdEntry(intent.entrySpeed);
                     const size_t hillBegin = d.track.knots.size() - 1;
                     source(designFvdHill(intent, cancel), Element::Airtime, element,
-                           {.worldCoordinates = true, .allowConnector = false});
+                           {.worldCoordinates = true});
                     if (terminal && req.terrain.kind == TerrainKind::Highlands) {
                         const auto crest =
                             std::max_element(d.track.knots.begin() + hillBegin, d.track.knots.end(),
@@ -893,15 +941,8 @@ class RouteComposer {
                                                              approach.x, approach.y, 16, 8, 100,
                                                              150});
                     const size_t begin = d.track.knots.size() - 1;
-                    FvdApproachRequest intent;
-                    intent.entry = motion.fvdEntry(speedFor(element.id));
-                    intent.endPosition = approach;
-                    intent.endHeading = 0;
-                    intent.normalG = recipeApproachNormalG;
-                    intent.bankRampSeconds = recipeApproachBankRampSeconds;
-                    lossFor(intent);
-                    source(designFvdApproach(intent, cancel), Element::Turn, element,
-                           {.worldCoordinates = true, .allowConnector = false});
+                    motion.nominalSpeed = speedFor(element.id);
+                    closeRouteApproach(motion, approach, 0, element.id.c_str(), cancel);
                     for (size_t k = begin; k < d.track.knots.size(); ++k)
                         if (d.track.knots[k].position.z < datum - .05)
                             throw std::runtime_error("Low return corridor left its basin floor; no "
@@ -923,22 +964,22 @@ class RouteComposer {
     }
 
     void authorElement(const RecipeElement &element) {
-        using Author = void (RouteComposer::*)(const RecipeElement &);
+        using Author = void (RouteDraft::*)(const RecipeElement &);
         static constexpr std::pair<RideRole, Author> authors[]{
-            {RideRole::Station, &RouteComposer::authorStation},
-            {RideRole::Departure, &RouteComposer::authorDeparture},
-            {RideRole::Opening, &RouteComposer::authorOpening},
-            {RideRole::CliffApproach, &RouteComposer::authorCliffApproach},
-            {RideRole::CliffLip, &RouteComposer::authorCliffLip},
-            {RideRole::CliffDrop, &RouteComposer::authorCliffDrop},
-            {RideRole::DownhillLaunch, &RouteComposer::authorDownhillLaunch},
-            {RideRole::Camelback, &RouteComposer::authorCamelback},
-            {RideRole::Wave, &RouteComposer::authorWave},
-            {RideRole::Loop, &RouteComposer::authorLoop},
-            {RideRole::Immelmann, &RouteComposer::authorImmelmann},
-            {RideRole::Signature, &RouteComposer::authorSignature},
-            {RideRole::Return, &RouteComposer::authorReturn},
-            {RideRole::Brakes, &RouteComposer::authorBrakes},
+            {RideRole::Station, &RouteDraft::authorStation},
+            {RideRole::Departure, &RouteDraft::authorDeparture},
+            {RideRole::Opening, &RouteDraft::authorOpening},
+            {RideRole::CliffApproach, &RouteDraft::authorCliffApproach},
+            {RideRole::CliffLip, &RouteDraft::authorCliffLip},
+            {RideRole::CliffDrop, &RouteDraft::authorCliffDrop},
+            {RideRole::DownhillLaunch, &RouteDraft::authorDownhillLaunch},
+            {RideRole::Camelback, &RouteDraft::authorCamelback},
+            {RideRole::Wave, &RouteDraft::authorWave},
+            {RideRole::Loop, &RouteDraft::authorLoop},
+            {RideRole::Immelmann, &RouteDraft::authorImmelmann},
+            {RideRole::Signature, &RouteDraft::authorSignature},
+            {RideRole::Return, &RouteDraft::authorReturn},
+            {RideRole::Brakes, &RouteDraft::authorBrakes},
         };
         const auto found =
             std::find_if(std::begin(authors), std::end(authors),
@@ -949,85 +990,36 @@ class RouteComposer {
     }
 
   public:
-    RouteComposer(const GenerationRequest &input, const RouteEnergy &calibration,
-                  const RoutePlacement &location, std::vector<RecipePort> &reached, Cancel stop,
-                  RecipeCompileMode mode)
-        : plan(input), d(initialize(plan)), req(d.request), energy(calibration),
-          placement(location), cancel(std::move(stop)),
-          energyPrefix(mode == RecipeCompileMode::EnergyCalibrationPrefix), ports(reached),
-          motion(d, cancel), cursor(motion.cursor), datum(motion.datum),
+    RouteDraft(const GenerationRequest &input, std::vector<RecipePort> &reached, Cancel stop,
+               Progress callback)
+        : plan(input), d(initialize(plan)), req(d.request), energy(req.train),
+          progress(std::move(callback)), cancel(std::move(stop)), ports(reached), motion(d, cancel),
+          cursor(motion.cursor), datum(motion.datum),
           halfTrain((req.train.cars - 1) * req.train.spacing * .5), hand(plan.hand) {
-        if (mode != RecipeCompileMode::ClosedCircuit &&
-            mode != RecipeCompileMode::EnergyCalibrationPrefix)
-            throw std::invalid_argument("Unknown recipe compile mode");
         ports.clear();
     }
     Design compose() && {
         for (const auto &element : req.recipe.elements) {
-            if (energyPrefix && element.role == RideRole::Return &&
-                element.anchor == TerrainAnchor::Approach)
-                break;
-            if (energyPrefix && element.role == RideRole::Brakes)
-                break;
             if (cancel && cancel())
                 throw std::runtime_error("CANCELLED");
             const size_t moduleBegin = motion.modules.size();
-            pendingPort.reset();
+            if (progress)
+                progress({WorkPhase::Authoring, 0, 0, 0, "Authoring " + element.id});
             try {
                 authorElement(element);
+                if (element.role != RideRole::Brakes)
+                    refreshEnergy();
             } catch (const std::exception &failure) {
-                // Keep only the known geometry up to the requested source port.
-                // A partly appended failed element must never enter the energy probe.
-                if (pendingPort && pendingPort->knot + 1 < d.track.knots.size())
-                    d.track.knots.resize(pendingPort->knot + 1);
                 d.track.closed = false;
-                compiled.push_back({moduleBegin, motion.modules.size(), element.role, element.id});
-                std::optional<RecipePort> pending;
-                if (d.track.knots.size() >= 4) {
-                    const size_t last = d.track.knots.size() - 1;
-                    std::erase_if(d.forcePrograms,
-                                  [&](const auto &item) { return item.firstKnot >= last; });
-                    for (auto &item : d.forcePrograms)
-                        if (item.sourceDistances.size() > last - item.firstKnot + 1)
-                            item.sourceDistances.resize(last - item.firstKnot + 1);
-                    std::erase_if(d.splinePrograms,
-                                  [&](const auto &item) { return item.lastKnot > last; });
-                    try {
-                        finalizeKnownPrefix(false);
-                        if (pendingPort)
-                            pending =
-                                RecipePort{pendingPort->id, d.track.length, pendingPort->speed};
-                    } catch (const std::exception &recovery) {
-                        ports.clear();
-                        d.report.fail("AUTHORING_PARTIAL_RECOVERY",
-                                      std::string("Could not finalize the failed prefix: ") +
-                                          recovery.what());
-                    }
-                }
-                d.report.fail("AUTHORING_PARTIAL", "Unaccepted authored prefix; any continuation "
-                                                   "used for energy bootstrapping is provisional");
-                std::ostringstream diagnostic;
-                diagnostic << std::setprecision(12)
-                           << "{\"schemaVersion\":4,\"generationOnly\":true,\"partial\":true,"
-                              "\"failedElement\":"
-                           << std::quoted(element.id);
-                diagnostic << ",\"layoutCorrectionRadians\":[" << placement.climbHeading << ','
-                           << placement.signatureHeading << ']';
-                if (pending)
-                    diagnostic << ",\"pendingPort\":{\"id\":" << std::quoted(pending->id)
-                               << ",\"distance\":" << pending->distance
-                               << ",\"plannedSpeed\":" << pending->speed << '}';
-                diagnostic << '}';
-                d.planningDiagnostics = diagnostic.str();
-                throw RecipeCompileFailure(element.id + ": " + failure.what(), std::move(d), ports,
-                                           std::move(pending));
+                d.report.fail("AUTHORING", element.id + ": " + failure.what());
+                throw RecipeCompileFailure(element.id + ": " + failure.what(), std::move(d), ports);
             }
             compiled.push_back({moduleBegin, motion.modules.size(), element.role, element.id});
         }
-        if (!energyPrefix && (norm(cursor.position - d.track.knots.front().position) > 1e-7 ||
-                              norm(cursor.tangent - d.track.knots.front().tangent) > 1e-7 ||
-                              norm(cursor.curvature) > 1e-7 || norm(cursor.third) > 1e-7 ||
-                              norm(cursor.fourth) > 1e-7)) {
+        if ((norm(cursor.position - d.track.knots.front().position) > 1e-7 ||
+             norm(cursor.tangent - d.track.knots.front().tangent) > 1e-7 ||
+             norm(cursor.curvature) > 1e-7 || norm(cursor.third) > 1e-7 ||
+             norm(cursor.fourth) > 1e-7)) {
             std::ostringstream message;
             message << std::setprecision(17)
                     << "Recipe station closure failed its complete endpoint jet: position="
@@ -1037,9 +1029,8 @@ class RouteComposer {
                     << " third=" << norm(cursor.third) << " fourth=" << norm(cursor.fourth);
             throw std::runtime_error(message.str());
         }
-        if (!energyPrefix)
-            d.track.knots.back() = d.track.knots.front();
-        d.track.closed = !energyPrefix;
+        d.track.knots.back() = d.track.knots.front();
+        d.track.closed = true;
         for (auto &k : d.track.knots) {
             k.position.y *= hand;
             k.tangent.y *= hand;
@@ -1079,22 +1070,13 @@ class RouteComposer {
             program.hand = hand;
         if (!terrain.valid())
             throw std::runtime_error("Resolved semantic terrain is outside its bounded domain");
-        finalizeKnownPrefix(!energyPrefix);
-        if (energyPrefix) {
-            const auto approach = std::find_if(
-                req.recipe.elements.begin(), req.recipe.elements.end(), [](const auto &e) {
-                    return e.role == RideRole::Return && e.anchor == TerrainAnchor::Approach;
-                });
-            if (approach != req.recipe.elements.end())
-                ports.push_back({approach->id, d.track.length, motion.nominalSpeed});
-        }
+        finalize();
         d.topology = "route/" + d.request.recipe.name;
         std::ostringstream diagnostics;
         diagnostics << std::setprecision(12)
                     << "{\"schemaVersion\":4,\"generationOnly\":true,\"recipeVersion\":"
                     << req.recipe.version << ",\"seed\":" << req.seed << ",\"hand\":" << hand
-                    << ",\"layoutCorrectionRadians\":[" << placement.climbHeading << ','
-                    << placement.signatureHeading << "],\"ports\":[";
+                    << ",\"ports\":[";
         for (size_t i = 0; i < ports.size(); ++i) {
             if (i)
                 diagnostics << ',';
@@ -1118,17 +1100,12 @@ class RouteComposer {
         }
         diagnostics << "]}";
         d.planningDiagnostics = diagnostics.str();
-        if (energyPrefix)
-            d.report.fail("ENERGY_CALIBRATION_PREFIX",
-                          "Open authoring prefix is for energy calibration only; closed-circuit "
-                          "validation is required");
         return std::move(d);
     }
 };
 } // namespace
-Design composeRoute(const GenerationRequest &input, const RouteEnergy &energy,
-                    const RoutePlacement &placement, std::vector<RecipePort> &ports, Cancel cancel,
-                    RecipeCompileMode mode) {
-    return RouteComposer(input, energy, placement, ports, std::move(cancel), mode).compose();
+Design composeRoute(const GenerationRequest &input, std::vector<RecipePort> &ports, Cancel cancel,
+                    Progress progress) {
+    return RouteDraft(input, ports, std::move(cancel), std::move(progress)).compose();
 }
 } // namespace coaster

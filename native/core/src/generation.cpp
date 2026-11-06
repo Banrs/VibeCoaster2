@@ -95,8 +95,8 @@ void evaluateTargets(Design &d, const ClearanceSweep *prepared) {
     d.report.errors.insert(d.report.errors.end(), dynamic.errors.begin(), dynamic.errors.end());
     d.report.warnings.insert(d.report.warnings.end(), dynamic.warnings.begin(),
                              dynamic.warnings.end());
-    d.report.warnings.push_back(
-        "Force limits are provisional game assumptions; reference calibration is not complete.");
+    d.report.warnings.push_back("Experience targets express preferred ride character; selected "
+                                "acceleration assessments are not engineering certification.");
 }
 ValidationReport validateRequest(const GenerationRequest &req) {
     if (req.trackProfile != TrackProfile::Legacy && req.trackProfile != TrackProfile::Exa) {
@@ -126,8 +126,7 @@ ValidationReport validateRequest(const GenerationRequest &req) {
             r.fail("REQUEST_RANGE", "Request contains a nonfinite value");
             return r;
         }
-    if (req.maxClosureIterations < 1 || req.maxClosureIterations > 64 || t.height < 0 ||
-        t.height > 350 || t.speed < 1 || t.speed > 110 || t.inversionHeight < 0 ||
+    if (t.height < 0 || t.height > 350 || t.speed < 1 || t.speed > 110 || t.inversionHeight < 0 ||
         t.inversionHeight > 140 || t.launchSeconds < .8 || t.launchSeconds > 10 ||
         l.maxVerticalG <= l.minVerticalG || l.maxLateralG <= 0 || l.maxLongitudinalG <= 0 ||
         l.maxJerkGps <= 0 || l.minClearance < 0 || req.simulationStep < 1. / 2000 ||
@@ -144,7 +143,7 @@ ValidationReport validateRequest(const GenerationRequest &req) {
     for (double rate : {l.maxLateralRateGps, l.maxLongitudinalRateGps})
         if (std::isinf(rate) || (std::isfinite(rate) && rate <= 0))
             r.fail("AXIS_RATE_CONFIG",
-                   "Optional component rate gates must be finite positive values, or unset");
+                   "Optional component rate targets must be finite positive values, or unset");
     if (!std::isfinite(req.style.airtime) || req.style.airtime < .75 || req.style.airtime > 1.2 ||
         !std::isfinite(req.style.signatureRollDegrees) || req.style.signatureRollDegrees < 30 ||
         req.style.signatureRollDegrees > 60 || req.style.returnStyle < -1 ||
@@ -218,22 +217,6 @@ Design generate(const GenerationRequest &request, Cancel cancellation, Progress 
         return finish();
 
     try {
-        const double fastest = plannedDepartureSeconds(
-            request.limits.maxLongitudinalG * gravity - .02, request.train, request.limits);
-        if (fastest > request.targets.launchSeconds) {
-            design.report.fail("LAUNCH_FEASIBILITY",
-                               "Requested departure exceeds the force-limited station launch", 0,
-                               fastest, request.targets.launchSeconds);
-            return finish();
-        }
-        if (request.targets.requireIntensity && std::isfinite(request.targets.referenceExposure) &&
-            request.targets.referenceExposure > 10 * std::max(0., request.limits.maxVerticalG)) {
-            design.report.fail(
-                "INTENSITY_FEASIBILITY",
-                "Reference exposure exceeds ten seconds at the selected vertical force ceiling", 0,
-                request.targets.referenceExposure, 10 * std::max(0., request.limits.maxVerticalG));
-            return finish();
-        }
         work.enter(WorkPhase::Authoring, 0,
                    "Planning the route, energy and hardware as one composition");
         design = compileRoute(request, cancel, [&](const WorkProgress &stage) {

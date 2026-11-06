@@ -74,7 +74,7 @@ def render(base, seat_index=0):
     text(40, 1880, 'Native-rate maxima across front / middle / rear seats', "title")
     for i, seat in enumerate(native):
         text(40, 1915 + i * 29, f'{("Front", "Middle", "Rear")[i]}: inertial jerk {seat["maxInertialJerkMps3"]:.3f} m/s³ · angular jerk {seat["maxAngularJerkRadps3"]:.3f} rad/s³ · Gz/Gy/Gx rates ' + ' / '.join(f'{axis["maxRateGps"]:.3f}' for axis in seat['axes']) + ' g/s')
-    text(40, 2080, 'Force and rate limits are provisional game assumptions. These charts do not establish rider comfort, reference cadence equivalence or engineering certification.')
+    text(40, 2080, 'Force and rate preferences describe ride character; duration and axis assessments are separate. These charts do not establish rider comfort, reference cadence equivalence or engineering certification.')
     svg.append('</svg>')
     Path(str(base) + '-motion' + ('', '-middle', '-rear')[seat_index] + '.svg').write_text('\n'.join(svg), encoding='utf-8')
 

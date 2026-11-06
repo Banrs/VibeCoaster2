@@ -7,9 +7,10 @@
 | Public native boundary | `native/core/include/coaster/coaster.hpp` | Canonical track, design, train, operations and validation API shared by CLI and Unreal. |
 | Orchestration | `native/core/src/generation.cpp` | Request checks, compilation, frozen-route structures and independent acceptance. |
 | Route plan and composition | `route_plan.hpp`, `route_composer.cpp` | Resolved typed intent, source ports, per-role phrases, terrain and hardware corridors. |
-| Physical solves | `recipe_compiler.cpp` | Bounded finite-train energy fitting and station closure; finalizes frames before validation. |
+| Forward construction | `recipe_compiler.cpp`, `authoring_energy.cpp`, `route_closure.cpp` | Persistent finite-train energy, one finished-route motion replay for banking, direct local station closure. |
+| Curve compilation | `curve_compiler.cpp`, `track.cpp` | Source-error-controlled canonical spans, incremental geometry, shared representation for all consumers. |
 | Geometry primitives | `authoring.cpp`, `motion_program.cpp`, `fvd.cpp` | Inherited geometry jets, direction splines and force-authored elements. |
-| Physical frame | `banking.cpp` | Source-owned bank intervals; immutable FVD and hardware boundaries. |
+| Physical frame | `banking.cpp` | Source-owned bank intervals; analytic time-to-distance derivatives and transport; immutable FVD and hardware boundaries. |
 | Acceptance | `acceptance_replay.hpp` | Independent coarse/fine train replay, authored-source checks and spatial refinement. |
 | Experience | `ride_feel.cpp`, `motion_audit.cpp` | Front/middle/rear elapsed-time experience, continuity, pacing and recipe semantics. |
 | Simulation | `simulation.cpp`, `acceleration.cpp` | Finite-train motion, forces, energy, acceleration histories. |

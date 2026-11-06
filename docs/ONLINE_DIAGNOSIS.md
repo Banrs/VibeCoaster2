@@ -1,4 +1,4 @@
-# Current local snapshot for online diagnosis
+# Historical local snapshot for online diagnosis
 
 1 October 2026. Published on `main` at `66000ec`, from the former
 `codex/legacy-authoring` branch. See [branch consolidation](BRANCH_CONSOLIDATION.md)

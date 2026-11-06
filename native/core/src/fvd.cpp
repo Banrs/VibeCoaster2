@@ -1,4 +1,5 @@
 #include "coaster/fvd.hpp"
+#include "fvd_internal.hpp"
 #include <sstream>
 #include <stdexcept>
 
@@ -259,6 +260,30 @@ State advance(const State& start,const FvdRequest& r,double time,double dt){
 FvdSample sample(const State& state,const FvdRequest& r,double time){
     return {time,state.s,state.v,state.p,state.t,state.u,derivative(state,control(r,time),r).k,state.work,state.drivenWork};
 }
+template<class Observe> State integrateSource(const FvdRequest& request,const Cancel& cancel,const Observe& observe){
+    poll(cancel);validate(request);
+    State state{request.position,unit(request.forward),unit(request.up),request.speed,0};
+    state.u=unit(state.u-state.t*dot(state.t,state.u));
+    observe(state,0.);
+    // Preserve exactly the same integration grid for endpoint authoring and
+    // final construction, including force and physical twist boundaries.
+    std::vector<double> boundaries;for(const auto& c:request.controls)boundaries.push_back(c.time);
+    for(const auto& phase:request.twists){boundaries.push_back(phase.begin);boundaries.push_back(phase.end);}
+    std::sort(boundaries.begin(),boundaries.end());boundaries.erase(std::unique(boundaries.begin(),boundaries.end()),boundaries.end());
+    size_t samples=1;
+    for(size_t section=1;section<boundaries.size();++section){
+        const double begin=boundaries[section-1],duration=boundaries[section]-begin;
+        const size_t count=std::max<size_t>(3,size_t(std::ceil(duration/request.step)));
+        require(count<=request.maxSamples-samples,"FVD_BUDGET","FVD control boundaries exceed sample budget");
+        const double dt=duration/double(count);
+        for(size_t j=0;j<count;++j){
+            poll(cancel);state=advance(state,request,begin+double(j)*dt,dt);
+            observe(state,j+1==count?boundaries[section]:begin+double(j+1)*dt);
+        }
+        samples+=count;
+    }
+    return state;
+}
 void assess(FvdResult& result,const FvdRequest& r,const Cancel& cancel){
     auto& a=result.assessment;
     const double initialEnergy=.5*r.speed*r.speed+gravity*r.position.z;
@@ -389,28 +414,14 @@ void requireInheritedPort(const FvdResult& result,const std::optional<FvdEntry>&
         "FVD_ENTRY","Compiled signature did not retain its inherited geometry and frame jets");
 }
 }
+FvdSample integrateFvdEndpoint(const FvdRequest& request,Cancel cancel){
+    const auto state=integrateSource(request,cancel,[](const State&,double){});
+    return sample(state,request,request.controls.back().time);
+}
 FvdResult designFvdSection(const FvdRequest& request,Cancel cancel){
     FvdResult result;result.track.closed=false;
     try{
-        poll(cancel);validate(request);
-        State state{request.position,unit(request.forward),unit(request.up),request.speed,0};
-        state.u=unit(state.u-state.t*dot(state.t,state.u));
-        result.samples.push_back(sample(state,request,0));
-        // Uniform dt avoids pathological tiny terminal spans. Preserve both
-        // force and twist boundaries, where higher derivatives can change.
-        std::vector<double> boundaries;for(const auto& c:request.controls)boundaries.push_back(c.time);
-        for(const auto& phase:request.twists){boundaries.push_back(phase.begin);boundaries.push_back(phase.end);}
-        std::sort(boundaries.begin(),boundaries.end());boundaries.erase(std::unique(boundaries.begin(),boundaries.end()),boundaries.end());
-        for(size_t section=1;section<boundaries.size();++section){
-            const double begin=boundaries[section-1],duration=boundaries[section]-begin;
-            const size_t count=std::max<size_t>(3,size_t(std::ceil(duration/request.step)));
-            require(count<=request.maxSamples-result.samples.size(),"FVD_BUDGET","FVD control boundaries exceed sample budget");
-            const double dt=duration/double(count);
-            for(size_t j=0;j<count;++j){
-                poll(cancel);state=advance(state,request,begin+double(j)*dt,dt);
-                result.samples.push_back(sample(state,request,j+1==count?boundaries[section]:begin+double(j+1)*dt));
-            }
-        }
+        integrateSource(request,cancel,[&](const State& state,double time){result.samples.push_back(sample(state,request,time));});
         result.integrated=true;
         result.track.knots.reserve(result.samples.size());
         for(const auto& q:result.samples){poll(cancel);result.track.knots.push_back(authoredKnot(q,request));}

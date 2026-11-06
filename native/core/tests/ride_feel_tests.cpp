@@ -115,10 +115,16 @@ void rideCharacter(const Design &d) {
     std::cout << rideFeelJson(feel) << '\n';
     require(feel.performed && feel.freeRunningSeconds > 10,
             "The generated ride must have a real unpowered course");
-    require(d.simulation.metrics.launchTo180 >= 1.3 && d.simulation.metrics.launchTo180 <= 1.4,
-            "Keep the deliberate 0-180 km/h launch character");
+    require(d.simulation.metrics.launchTo180 > 0 &&
+                d.simulation.metrics.launchTo180 <= d.request.targets.launchSeconds + .01,
+            "The launch must meet the requested 0-180 km/h timing");
+    // A long level return can keep turning/banking and evade the quiet-frame
+    // metric. This broad budget catches prolonged backhaul while allowing a
+    // sustained loaded turn; it does not prescribe total ride duration.
+    require(d.motion.longestLevelCoastSeconds <= 15,
+            "A sustained level return must not replace purposeful terrain-following elements");
     // Broad product budgets catch a dead or constantly rotating ride without
-    // freezing a particular layout. Native force/rate gates remain separate.
+    // freezing a particular layout. Independent acceleration assessment remains separate.
     for (const auto &seat : feel.seats) {
         require(seat.airtimeSeconds >= .75 && seat.loadedSeconds >= 2 && seat.forceBeats >= 4,
                 "Every seating position needs sustained airtime and contrasting force beats");

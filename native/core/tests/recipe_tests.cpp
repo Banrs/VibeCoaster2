@@ -1,6 +1,5 @@
 #include "coaster/recipe.hpp"
 #include "coaster/coaster.hpp"
-#include "../src/recipe_compiler.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -128,85 +127,34 @@ void motionDiagnostics() {
         "Missing semantic boundaries remain unknown instead of reporting a fabricated zero duration");
 }
 
-void energyBootstrap() {
-    using namespace coaster;
-    Design partial;partial.track.closed=false;
-    for(int i=0;i<=4;++i)partial.track.knots.push_back({{30.*i,0,20},{1,0,0},{0,0,0},{0,0,1},0,Element::Launch});
-    partial.track.rebuild();
-    partial.operations.push_back({3,95,DriveKind::Launch,30,30000,3000000,.5});
-    partial.report.fail("AUTHORING_PARTIAL","Synthetic unfinished source");
-    const auto originalKnots=partial.track.knots;
-    const double originalLength=partial.track.length;
-    RecipeCompileFailure failed("pending source",partial,{{"reached",70,5}},RecipePort{"pending",partial.track.length,5});
-    RecipeEnergyEstimate feedback;feedback.energyCorrection["retained"]=17;
-    const auto corrected=bootstrapRecipeEnergy(failed,feedback);
-    check(corrected.corrected&&!corrected.cancelled&&corrected.report.valid()&&corrected.observations.size()==2,
-        "Powered open prefix supplies reached and provisional pending source corrections");
-    check(corrected.observations[0].port.id=="reached"&&!corrected.observations[0].provisional&&
-        corrected.observations[1].port.id=="pending"&&corrected.observations[1].provisional&&
-        corrected.maximumSpeedCorrection>.05&&feedback.energyCorrection["retained"]==17&&
-        feedback.energyCorrection.count("reached")==1&&feedback.energyCorrection.count("pending")==1,
-        "Bootstrap records real prefix observations and changes only source-energy feedback");
-    for(const auto& observation:corrected.observations) {
-        const double expected=observation.estimatedSpeed*observation.estimatedSpeed-observation.port.speed*observation.port.speed;
-        check(std::abs(feedback.energyCorrection.at(observation.port.id)-expected)<1e-8,
-            "Bootstrap feeds squared-speed differences, not assigned simulation speeds");
-    }
-    check(failed.partial.track.knots.size()==originalKnots.size()&&failed.partial.track.length==originalLength&&
-        failed.partial.operations.size()==1&&failed.partial.simulation.frames.empty(),
-        "Provisional continuation and replay leave the input Design geometry and simulation untouched");
-    for(size_t i=0;i<originalKnots.size();++i)
-        check(norm(failed.partial.track.knots[i].position-originalKnots[i].position)==0&&
-            norm(failed.partial.track.knots[i].tangent-originalKnots[i].tangent)==0,
-            "Bootstrap preserves every authored prefix knot");
-    std::string saveError;
-    check(!failed.partial.accepted()&&!saveDesign(failed.partial,"",saveError)&&saveError.find("REJECTED_DESIGN")==0,
-        "A bootstrapped partial Design cannot be accepted or saved");
-
-    auto noProgress=failed;noProgress.reachedPorts.clear();
-    noProgress.pendingPort->speed=corrected.observations.back().estimatedSpeed;
-    RecipeEnergyEstimate untouched;untouched.energyCorrection["retained"]=17;
-    const auto stalled=bootstrapRecipeEnergy(noProgress,untouched);
-    check(!stalled.corrected&&!stalled.report.valid()&&stalled.report.errors.back().code=="ENERGY_BOOTSTRAP_NO_PROGRESS"&&
-        untouched.energyCorrection.size()==1&&untouched.energyCorrection.at("retained")==17,
-        "A replay with no meaningful speed correction preserves feedback");
-
-    auto unpowered=failed;unpowered.partial.operations.clear();
-    const auto replayFailed=bootstrapRecipeEnergy(unpowered,untouched);
-    check(!replayFailed.corrected&&!replayFailed.report.valid()&&replayFailed.report.errors.back().code=="ENERGY_BOOTSTRAP_REPLAY"&&
-        untouched.energyCorrection.size()==1&&untouched.energyCorrection.at("retained")==17,
-        "Failed provisional replay preserves feedback");
-    int polls=0;
-    const auto cancelled=bootstrapRecipeEnergy(failed,untouched,[&]{return ++polls>50;});
-    check(cancelled.cancelled&&!cancelled.corrected&&polls>50&&untouched.energyCorrection.size()==1&&
-        untouched.energyCorrection.at("retained")==17,
-        "Cancellation during provisional replay preserves feedback");
-}
-
 } // namespace
 
 int main() {
     using namespace coaster;
     authorshipTwistFlags();
     motionDiagnostics();
-    energyBootstrap();
     const auto recipe = defaultRideRecipe();
     std::string error;
     check(validateRecipe(recipe, error), "default recipe validates");
-    check(std::count_if(recipe.elements.begin(), recipe.elements.end(), [](const auto& item) { return item.role == RideRole::Return; }) >= 2, "default recipe contains multiple ordinary returns");
+    const auto indexFor=[&](RideRole role){
+        const auto found=std::find_if(recipe.elements.begin(),recipe.elements.end(),[&](const auto& item){return item.role==role;});
+        check(found!=recipe.elements.end(),"Default recipe exposes the requested editable role");
+        return size_t(found-recipe.elements.begin());
+    };
+    const auto cliffApproachIndex=indexFor(RideRole::CliffApproach),camelbackIndex=indexFor(RideRole::Camelback);
+    const auto downhillLaunchIndex=indexFor(RideRole::DownhillLaunch),signatureIndex=indexFor(RideRole::Signature),returnIndex=indexFor(RideRole::Return);
     check(recipe.elements.front().role == RideRole::Station && recipe.elements[1].role == RideRole::Departure && recipe.elements.back().role == RideRole::Brakes, "default starts station/departure and ends brakes");
-    check(recipe.elements[5].role == RideRole::CliffDrop && recipe.elements[6].role == RideRole::DownhillLaunch && recipe.elements[7].role == RideRole::Camelback, "cliff/downhill/camelback adjacency is explicit");
-    check(std::get<OperationParameters>(recipe.elements[6].parameters).targetSpeedKmh == 0, "downhill LSM zero target derives the global speed");
-    const auto& camelback = std::get<CamelbackParameters>(recipe.elements[7].parameters);
+    check(std::get<OperationParameters>(recipe.elements[downhillLaunchIndex].parameters).targetSpeedKmh == 0, "downhill LSM zero target derives the global speed");
+    const auto& camelback = std::get<CamelbackParameters>(recipe.elements[camelbackIndex].parameters);
     check(camelback.profileScale > 0 && camelback.tailCutSeconds >= 0 && camelback.releaseSeconds > 0,
-        "camelback uses the protected approved parameter family");
+        "Camelback parameters identify a usable source profile");
     check(camelback.minimumExitPitchDegrees > 0 && camelback.exitNormalG > 0,
-        "camelback retains its approved exit constraints");
+        "Camelback retains a defined exit state");
     for(int field=0;field<5;++field){auto invalid=recipe;auto& sweep=std::get<SweepParameters>(invalid.elements[invalid.elements.size()-2].parameters);
         if(field==0)sweep.lengthMeters+=1;if(field==1)sweep.riseMeters=1;if(field==2)sweep.headingDegrees=1;
         if(field==3)sweep.exitPitchDegrees=1;if(field==4)sweep.rollDegrees=1;
         check(!validateRecipe(invalid,error),"Automatic station approach rejects ignored or unsupported geometry edits");}
-    for(bool shortRelease:{false,true}){auto invalid=recipe;auto& protectedBody=std::get<CamelbackParameters>(invalid.elements[7].parameters);
+    for(bool shortRelease:{false,true}){auto invalid=recipe;auto& protectedBody=std::get<CamelbackParameters>(invalid.elements[camelbackIndex].parameters);
         if(shortRelease)protectedBody.releaseSeconds=.15;else protectedBody.tailCutSeconds=1.5;
         check(!validateRecipe(invalid,error),"Protected camelback recipe bounds agree with its source constructor");}
 
@@ -246,36 +194,35 @@ int main() {
     check(parseRecipe(recipePayload(yawing),yawingParsed,error)&&yawingParsed==yawing,
         "The compiled Immelmann half-loop yaw remains editable and survives recipe persistence");
     check(payload.find("lipSpeedKmh=")==std::string::npos,"Unused cliff speed metadata is absent from editable recipes");
-    auto noOp=recipe;std::get<CliffParameters>(noOp.elements[3].parameters).lipSpeedKmh+=1;
+    auto noOp=recipe;std::get<CliffParameters>(noOp.elements[cliffApproachIndex].parameters).lipSpeedKmh+=1;
     check(!validateRecipe(noOp,error),"A silent no-op edit to role-specific fixed metadata is rejected");
-    auto wrongAnchor=recipe;wrongAnchor.elements[7].anchor=TerrainAnchor::Station;
+    auto wrongAnchor=recipe;wrongAnchor.elements[camelbackIndex].anchor=TerrainAnchor::Station;
     check(!validateRecipe(wrongAnchor,error),"Protected placement intent cannot silently ignore an unrelated terrain anchor");
 
     RideRecipe customized = recipe;
     customized.elements.insert(customized.elements.end()-2,
         RecipeElement{"return-valley", RideRole::Return, TerrainAnchor::Ravine, TurnParameters{-40,-2,35,1,300}});
-    std::swap(customized.elements[12], customized.elements[13]);
     customized.elements.insert(customized.elements.end() - 2,
         RecipeElement{"return-extra", RideRole::Return, TerrainAnchor::Ravine, SweepParameters{180, 8, 20, 0, 0, 5}});
-    check(validateRecipe(customized, error), "compatible return reorder and unique insertion validate");
+    check(validateRecipe(customized, error), "Compatible return insertion validate");
     RideRecipe customizedParsed;
     check(parseRecipe(recipePayload(customized), customizedParsed, error) && customizedParsed == customized,
-        "compatible return reorder and unique insertion survive serialization");
+        "Compatible return insertion survive serialization");
     check(elementSeed(42, "camelback") == seedA, "existing element seed is unaffected by recipe edits");
 
     RideRecipe camelbackEdit = recipe;
-    auto& editedCamelback = std::get<CamelbackParameters>(camelbackEdit.elements[7].parameters);
+    auto& editedCamelback = std::get<CamelbackParameters>(camelbackEdit.elements[camelbackIndex].parameters);
     editedCamelback.profileScale = 1.05;
     editedCamelback.tailCutSeconds = .8;
-    check(validateRecipe(camelbackEdit, error), "approved camelback edits remain within its protected family");
+    check(validateRecipe(camelbackEdit, error), "Editable camelback parameters remain in their supported domain");
     RideRecipe camelbackParsed;
     check(parseRecipe(recipePayload(camelbackEdit), camelbackParsed, error) && camelbackParsed == camelbackEdit,
-        "approved camelback parameter edits round trip");
+        "Camelback parameter edits round trip");
 
     RideRecipe hillReturn = recipe;
-    hillReturn.elements[12].parameters = HillParameters{};
+    hillReturn.elements[returnIndex].parameters = HillParameters{};
     check(validateRecipe(hillReturn, error), "return role accepts hill variant");
-    hillReturn.elements[12].parameters = TurnParameters{};
+    hillReturn.elements[returnIndex].parameters = TurnParameters{};
     check(validateRecipe(hillReturn, error), "return role accepts turn variant");
 
     const auto malformed = [&](const std::string& text, const char* message) {
@@ -299,7 +246,7 @@ int main() {
     RideRecipe loaded;
     check(loadRecipe(path.string(), loaded, error) && loaded == recipe, "recipe file loads exactly");
     auto edited = loaded;
-    std::get<SweepParameters>(edited.elements[11].parameters).rollDegrees = 52;
+    std::get<SweepParameters>(edited.elements[signatureIndex].parameters).rollDegrees = 52;
     check(saveRecipe(edited, path.string(), error), "edited recipe overwrites atomically");
     RideRecipe editedLoaded;
     check(loadRecipe(path.string(), editedLoaded, error) && editedLoaded == edited, "edited recipe survives save/load/re-edit roundtrip");

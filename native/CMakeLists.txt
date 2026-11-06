@@ -12,6 +12,8 @@ add_library(coaster_core
   core/src/convergence.cpp
   core/src/generation.cpp
   core/src/authoring.cpp
+  core/src/authoring_energy.cpp
+  core/src/curve_compiler.cpp
   core/src/authorship.cpp
   core/src/motion_program.cpp
   core/src/banking.cpp
@@ -29,6 +31,7 @@ add_library(coaster_core
   core/src/recipe.cpp
   core/src/recipe_compiler.cpp
   core/src/route_composer.cpp
+  core/src/route_closure.cpp
   core/src/launch_camelback.cpp
   core/src/acceleration.cpp
 )

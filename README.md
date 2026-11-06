@@ -1,9 +1,12 @@
 # VibeCoaster
 
 C++20 coaster generation, finite-train simulation and an Unreal 5.8 viewer.
-Version 3 replaces acceptance-driven generator repairs with explicit route
-compilation. Geometry, physical frames and hardware are finalized before
-independent validation. Failed validation reports a failed design.
+Version 3 builds a single route forward. Each section inherits geometry, rider
+frame and finite-train energy; the compiler appends a station approach to that
+same draft. Adaptive polynomial spans represent the authored curves without a
+dense control-point grid. Independent validation measures the finished ride.
+Observed native generation is 7.5–7.8 seconds for the three-seed checkpoint,
+down from 28.7 seconds on the original main; see [measurements](docs/diagnostics/rewrite/README.md).
 
 ## Build and run
 
@@ -19,10 +22,11 @@ accepted rides can be saved; loading freshly validates geometry, physics and
 clearance. Export editable intent with `coaster_cli recipe --out ride.vcrecipe`,
 then pass `--recipe ride.vcrecipe` to generation. Distances are metres and the
 launch target measures rest to 180 km/h. The default 1.4-second launch is intentional.
-`--closure-iterations` controls the bounded placement solve (`--candidates` is a
-legacy spelling). Brakes are planned with the recipe; the old `--trims` toggle
-has been removed. Recipe approach lengths are preferred planning scales, not
-rigid constraints that override feasible geometry.
+Brakes are planned with the recipe. Candidate and closure-iteration controls
+have been retired because generation has no whole-route search loop. Recipe
+approach lengths are preferred planning scales. Nominal force and rate values
+express ride character; actual signed duration, combined axes and load history
+are assessed separately, without a universal percentage allowance.
 
 ## Inspect the ride
 

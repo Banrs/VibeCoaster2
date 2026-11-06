@@ -72,11 +72,10 @@ void AVibeCoasterController::ChangeRow(int32 Direction)
     case 2: Settings.targets.speed = FMath::Clamp(Settings.targets.speed + Direction * (10 / 3.6), 250 / 3.6, 390 / 3.6); break;
     case 3: Settings.targets.inversionHeight = FMath::Clamp(Settings.targets.inversionHeight + Direction * 5, 80., 140.); break;
     case 4: Settings.targets.launchSeconds = FMath::Clamp(Settings.targets.launchSeconds + Direction * .05, 1.1, 2.); break;
-    case 5: Settings.maxClosureIterations = FMath::Clamp(Settings.maxClosureIterations + Direction, 1, 64); break;
-    case 6: Settings.style.airtime = FMath::Clamp(Settings.style.airtime + Direction * .05, .75, 1.2); break;
-    case 7: Settings.style.signatureRollDegrees = FMath::Clamp(Settings.style.signatureRollDegrees + Direction * 5, 30., 60.); break;
-    case 8: Settings.style.returnStyle = (Settings.style.returnStyle + Direction + 4) % 3 - 1; break;
-    case 9: Settings.terrain.kind = Settings.terrain.kind == coaster::TerrainKind::Flat ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat; break;
+    case 5: Settings.style.airtime = FMath::Clamp(Settings.style.airtime + Direction * .05, .75, 1.2); break;
+    case 6: Settings.style.signatureRollDegrees = FMath::Clamp(Settings.style.signatureRollDegrees + Direction * 5, 30., 60.); break;
+    case 7: Settings.style.returnStyle = (Settings.style.returnStyle + Direction + 4) % 3 - 1; break;
+    case 8: Settings.terrain.kind = Settings.terrain.kind == coaster::TerrainKind::Flat ? coaster::TerrainKind::Highlands : coaster::TerrainKind::Flat; break;
     }
 }
 void AVibeCoasterController::RequestGeneration()
@@ -196,11 +195,10 @@ FString AVibeCoasterController::RowText(int32 Row) const
     case 2: return FString::Printf(TEXT("Top speed %.0f km/h"), Settings.targets.speed * 3.6);
     case 3: return FString::Printf(TEXT("Inversion height above ground >= %.0f m"), Settings.targets.inversionHeight);
     case 4: return FString::Printf(TEXT("Launch 0-180 km/h in %.2f s   (historical benchmark: 1.56 s)"), Settings.targets.launchSeconds);
-    case 5: return FString::Printf(TEXT("Closure iterations: %d"), Settings.maxClosureIterations);
-    case 6: return FString::Printf(TEXT("Airtime strength: %.0f%%"), Settings.style.airtime * 100);
-    case 7: return FString::Printf(TEXT("Signature outward roll: %.0f degrees"), Settings.style.signatureRollDegrees);
-    case 8: return FString::Printf(TEXT("Return composition: %s"), Settings.style.returnStyle < 0 ? TEXT("seed choice") : Settings.style.returnStyle == 0 ? TEXT("flowing crest") : TEXT("twin airtime"));
-    case 9: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: ochre escarpment") : TEXT("Landscape: flat basin");
+    case 5: return FString::Printf(TEXT("Airtime strength: %.0f%%"), Settings.style.airtime * 100);
+    case 6: return FString::Printf(TEXT("Signature outward roll: %.0f degrees"), Settings.style.signatureRollDegrees);
+    case 7: return FString::Printf(TEXT("Return composition: %s"), Settings.style.returnStyle < 0 ? TEXT("seed choice") : Settings.style.returnStyle == 0 ? TEXT("flowing crest") : TEXT("twin airtime"));
+    case 8: return Settings.terrain.kind == coaster::TerrainKind::Highlands ? TEXT("Landscape: ochre escarpment") : TEXT("Landscape: flat basin");
     default: return FString();
     }
 }
@@ -321,8 +319,7 @@ void AVibeCoasterHUD::DrawHUD()
             DrawRect(Accent,X,Top,4*Scale,160*Scale);
             Line(Loading.Cancelling ? TEXT("Cancelling...") : Loading.Title,Accent);
             Line(FString(UTF8_TO_TCHAR(coaster::phaseName(Loading.Phase))));
-            Line(FString::Printf(TEXT("%.1f seconds elapsed%s"),Loading.ElapsedSeconds,
-                Loading.Candidate > 0 ? *FString::Printf(TEXT("  |  design attempt %d"),Loading.Candidate+1) : TEXT("")));
+            Line(FString::Printf(TEXT("%.1f seconds elapsed"),Loading.ElapsedSeconds));
             const float BarY = Y + 4*Scale;
             DrawRect(FLinearColor(.08f,.14f,.19f),BarX,BarY,BarWidth,6*Scale);
             if (Loading.Total > 0)

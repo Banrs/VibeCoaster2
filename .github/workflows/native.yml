@@ -72,7 +72,7 @@ jobs:
           $plan = Join-Path $out 'baseline-42-plan.json'
           $trace = Join-Path $out 'baseline-42-trace.json'
           $save = Join-Path $out 'baseline-42.coaster'
-          & $cli generate --preset physics-proof --seed 42 --terrain highlands `
+          & $cli generate --preset default --seed 42 --terrain highlands `
             --json $json --plan $plan --trace $trace --out $save `
             1> (Join-Path $out 'baseline-42.stdout.log') `
             2> (Join-Path $out 'baseline-42.progress.log')
@@ -81,7 +81,7 @@ jobs:
           if (-not $report.accepted -or -not $report.convergence.passed -or -not $report.motionAudit.passed) {
             throw 'Baseline did not pass the native acceptance and convergence gates'
           }
-          Write-Host ("baseline-42 accepted={0} candidate={1} generationSeconds={2}" -f $report.accepted, $report.candidate, $report.generationSeconds)
+          Write-Host ("baseline-42 accepted={0} generationSeconds={1}" -f $report.accepted, $report.generationSeconds)
       - name: Check ride feel and fresh saved-design replay
         run: |
           $tests = if ($IsWindows) { 'native/build-ci/Release/ride_feel_tests.exe' } else { 'native/build-ci/ride_feel_tests' }
